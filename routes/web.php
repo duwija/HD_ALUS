@@ -203,6 +203,7 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
             'financial-styling' => 'FINANCIAL_REPORTS_STYLING_SUMMARY.md',
             'wa-provider' => 'WA_PROVIDER_GUIDE.md',
             'add-payment-gateway' => 'CARA_TAMBAH_PAYMENT_GATEWAY.md',
+            'github-sync' => 'GITHUB_SYNC_GUIDE.md',
         ];
         
         $titles = [
@@ -222,6 +223,7 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
             'financial-styling' => 'Financial Report Styling',
             'wa-provider'       => 'WhatsApp Provider Guide',
             'add-payment-gateway' => 'Cara Tambah Payment Gateway',
+            'github-sync'       => 'GitHub Sync Guide',
         ];
 
         if (!isset($docFiles[$doc])) {

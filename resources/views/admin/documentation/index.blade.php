@@ -242,6 +242,31 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- GitHub Sync -->
+                        <div class="col-md-6 col-lg-4 mb-4">
+                            <div class="card h-100 border-info">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="fas fa-code-branch text-info"></i> GitHub Sync
+                                    </h5>
+                                    <p class="card-text">
+                                        Kelola repository GitHub langsung dari admin panel. Pull kode terbaru atau push perubahan dengan mudah.
+                                    </p>
+                                    <ul class="list-unstyled small">
+                                        <li><i class="fas fa-check text-success"></i> Pull dari GitHub</li>
+                                        <li><i class="fas fa-check text-success"></i> Push ke GitHub</li>
+                                        <li><i class="fas fa-check text-success"></i> Lihat Status Perubahan File</li>
+                                    </ul>
+                                </div>
+                                <div class="card-footer bg-transparent">
+                                    <a href="{{ route('admin.documentation.show', 'github-sync') }}" 
+                                       class="btn btn-info btn-sm btn-block">
+                                        <i class="fas fa-eye"></i> View Guide
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Additional Resources -->
