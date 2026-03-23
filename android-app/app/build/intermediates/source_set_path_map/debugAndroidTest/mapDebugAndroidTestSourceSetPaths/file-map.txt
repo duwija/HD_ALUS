@@ -1,0 +1,4 @@
+com.kencana.billing.test.app-androidTest-0 C:\Users\duwij\OneDrive\Documents\android-app\app\build\generated\res\resValues\androidTest\debug
+com.kencana.billing.test.app-mergeDebugAndroidTestResources-1 C:\Users\duwij\OneDrive\Documents\android-app\app\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\merged.dir
+com.kencana.billing.test.app-mergeDebugAndroidTestResources-2 C:\Users\duwij\OneDrive\Documents\android-app\app\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\stripped.dir
+com.kencana.billing.test.app-debugAndroidTest-3 C:\Users\duwij\OneDrive\Documents\android-app\app\build\intermediates\merged_res\debugAndroidTest\mergeDebugAndroidTestResources

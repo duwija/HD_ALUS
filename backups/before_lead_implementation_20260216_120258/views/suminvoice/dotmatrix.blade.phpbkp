@@ -1,0 +1,300 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Invoice</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <style>
+        body{
+            font-family:'Arial';
+            color:#000;
+            
+
+            margin:1;
+
+        }
+        .container{
+         color:#000;
+         width:175px;
+         font-size: 5px;
+         background-color:#fff;
+     }
+     table{
+         /* border:1px solid #333;*/
+         border-collapse:collapse;
+         /* margin:0 auto;*/
+         width:95%;
+     }
+     td, tr, th{
+      font-size: 11px;
+  }
+</style>
+{{-- <style>
+    body{
+        font-family:"Arial Black";
+        color:#333;
+        text-align:left;
+        font-size:10px;
+        margin:2;
+    }
+    .container{
+        margin:0 auto;
+        margin-top:15px;
+        padding:40px;
+        width:700px;
+        height:auto;
+        background-color:#fff;
+    }
+    caption{
+        font-size:28px;
+        margin-bottom:10px;
+    }
+    table{
+     /* border:1px solid #333;*/
+     border-collapse:collapse;
+     /* margin:0 auto;*/
+     width:100%;
+ }
+ td, tr, th{
+    padding:5px;
+/*            border:1px solid #333;*/
+/*width:185px;*/
+}
+th{
+    background-color: #f0f0f0;
+}
+h4, p{
+    margin:0px;
+}
+</style> --}}
+<script>
+  window.onload(window.print());
+</script>
+</head>
+<body style="font-size: 5px">
+
+    <div class="container" >
+
+      <table style="border: none">
+        <tr style="border: none">
+
+
+          <td align="center">
+
+             <img width="50px" src="https://billing.alus.co.id/favicon.png">
+             <p>
+                <strong style="font-size: 11px">PT ADI SOLUSINDO TEKNOLOGI  <br>
+                    {{-- Jl. Ir Soekarno, Pejeng<br> --}}
+                    {{-- 0361-9201919 --}} 
+                    {{-- NPWP : 95.733.946.8-907.000<br>
+                </p> --}}
+            </strong>
+        </td>
+    </tr>
+
+
+</table> 
+
+
+
+<div {{-- style=" background-image: url('/dashboard/dist/img/unpaid.png');background-repeat:no-repeat;background-position: center; background-size: 300px; " --}}>
+   <table style="border: none; font-weight:200px  ">
+
+      <tr style="border: none">
+         <td colspan="2" align="center">
+            <p> <strong>INVOICE</strong>  </p>
+        </td>
+    </tr>
+    <tr>
+      <td>
+
+
+
+
+          Date : {{ $suminvoice_number->date }}<br>
+          No. Invoice : #{{ $suminvoice_number->number }}
+          <br>
+          <a>Bill To: </a>
+          {{ $customer->customer_id }}<br> 
+          {{ $customer->name}} <br>
+          {{-- {{ $customer->phone }} <br> --}}
+          {{ $customer->address }}<br>
+          {{-- {{ $customer->npwp }} --}}
+
+
+      </td>
+  </tr>
+  <tr>
+    <td align="center"> <?php 
+    if ( $suminvoice_number->payment_status == 1)
+    {
+        echo ' <strong><a  style="font-size: 12; color: #000">PAID </a> </stong><br><a  style="font-size: 10; color: #000">Sudah Terbayar </a><br></td>';
+    }
+    else
+    {
+       echo ' <strong><a style="font-size: 12; color: #000">UNPAID </a></strong><br><a style="font-size: 10; color: #000">Belum Terbayar </a><br>';
+   }
+
+   ?>               
+
+   <td>
+   </tr>  
+
+</table>   
+<table >
+
+
+    <tbody>
+        <tr >
+
+            <th style="border: 1px solid #333">Description</th>
+            {{--  <th style="border: 1px solid #333">price</th> --}}
+            <th style="border: 1px solid #333">Qty</th>
+            <th style="border: 1px solid #333">Total</th>
+        </tr>
+        @php $subtotal=0; 
+        // $tempcode=$invoice->tempcode;
+
+
+        @endphp
+        @foreach( $invoice as $invoice)
+        @php 
+        $subtotal = $subtotal + $invoice->amount * $invoice->qty ;
+
+        $strmonth = substr( $invoice->periode, -6, 2);
+        $stryear = substr( $invoice->periode, -4, 4);
+
+
+        $month_num = $strmonth;
+
+
+        $month_name = date("F", mktime(0, 0, 0, $month_num, 10)); 
+        if ( $invoice->monthly_fee == 1 )
+        {
+          $description = $invoice->description.' - '.$month_name.' '.$stryear;
+      }
+      else
+      {
+          $description = $invoice->description;
+      }
+
+      @endphp
+      <tr style="border: 1px solid #333" >
+
+        {{--   <td>{{ $invoice->created_at }}</td> --}}
+        <td style="border: 1px solid #333">{{ $description }}</td>
+
+        {{-- <td style="border: 1px solid #333">{{ number_format($invoice->amount, 0, ',', '.') }}</td> --}}
+        {{--  <td>{{ $invoice->periode }}</td> --}}
+        <input type="hidden" name="invoice_item[]" value={{ $invoice->id }}>
+        {{--  @if($invoice->payment_status == 0)
+
+        <td style="color:white; background-color: blue" >{{ 'Un Invoice' }}</td>
+        <td>
+            <input type="hidden" name="invoice_item[]" value={{ $invoice->id }}>
+        </td>
+        @elseif($invoice->payment_status == 3)
+        <td style="color:white; background-color: green" >{{ 'Invoiced' }}</td>
+        @endif --}}
+        <td align="center" style="border: 1px solid #333">{{ $invoice->qty }}</td>
+        <td style="border: 1px solid #333" >
+         {{ number_format($invoice->qty * $invoice->amount, 0, ',', '.') }}
+
+
+     </td>
+
+
+ </tr>
+
+ @endforeach
+ <tr>
+   <td colspan="3" style="border: 1px solid #333; text-align: right;">  Subtotal Rp. {{ number_format($subtotal, 0, ',', '.') }} </td>
+
+
+</tr>
+@php 
+
+
+if ($suminvoice_number->tax == null){
+    $taxfee =0;
+}
+else
+{
+    $taxfee = $suminvoice_number->tax;
+}
+
+$tax = $subtotal * $taxfee/100;
+
+$total = $subtotal + $tax;
+
+@endphp
+
+<tr>
+
+  <td colspan="3" style="border: 1px solid #333; text-align: right;"> Ppn  ({{$taxfee}}%) Rp. 
+
+      {{ number_format($tax, 0, ',', '.') }}
+
+
+      {{-- <input type="text" name="subtotal" id="subtotal" value={{$subtotal}} >--}}
+      <input type="hidden" name="tax" id="tax" value={{$taxfee}} ></td> 
+      {{--   <input type="text" name="tempcode" id="tempcode" value={{ $tempcode }}> --}}
+
+  </tr>
+  <tr>
+
+   <td colspan="3" style="border: 1px solid #333; text-align: right;">  Total  Rp. {{ number_format($total, 0, ',', '.') }}</td>
+
+</tr>
+</tbody>
+<tfoot>
+    {{-- <tr>
+        <th colspan="3">Total</th>
+        <td>Rp {{ number_format($invoice->total_price) }}</td>
+    </tr> --}}
+</tfoot>
+</table>
+</div>
+<table style="border: 1px">
+    <tr style="border: none">
+      <td align="left" colspan="0">
+
+      </td>
+      <br>
+      <td align="center">
+
+
+       @php
+       if ($suminvoice_number->payment_date == null )
+       {
+          $date = $suminvoice_number->date;
+      }
+      else
+      {
+          $date = $suminvoice_number->payment_date;
+      }
+
+
+      @endphp
+
+      <p> Gianyar, {{ $date }}<br><br>
+
+        {!! QrCode::size(80)->generate(url('suminvoice/'.$suminvoice_number->tempcode.'/viewinvoice')); !!}<br><br>
+        {{-- {{url('suminvoice/'.$suminvoice_number->tempcode.'/viewinvoice')}} --}}
+    </p>
+</td>
+</tr>
+
+
+</table> 
+</div>
+
+
+
+
+
+
+
+</body>
+</html>

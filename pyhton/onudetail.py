@@ -5,6 +5,7 @@ import datetime
 import logging
 import socket
 import re
+import os
 ip = sys.argv[1]
 login = sys.argv[2]
 password = sys.argv[3]
@@ -95,10 +96,11 @@ commands = [
 f"show run interface gpon-onu_{onu_num}",
 f"show onu running config gpon-onu_{onu_num}",
 f"show gpon onu detail-info gpon-onu_{onu_num}",
+f"show gpon remote-onu interface eth gpon-onu_{onu_num}",
 "end"
 ]
 
 # Define the log path
-log_path = '/var/www/html/billing.alus.co.id/storage/logs'
+log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'storage', 'logs'))
 # Call the telnet_olt function with the defined variables
 telnet_olt(ip, port, login, password, commands, log_path)

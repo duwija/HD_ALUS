@@ -32,30 +32,70 @@ class FileController extends Controller
     }
     public function delete($filename)
     {
-        $file = public_path('backup/' . $filename);
-        if (File::exists($file)) {
-            File::delete($file);
-            return redirect()->back()->with('success', 'File deleted successfully!');
-        } else {
-            abort(404, 'File not found');
+        try {
+            // Get tenant-specific backup path (check multiple config keys)
+            $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
+            $file = public_path("tenants/{$rescode}/backup/" . $filename);
+            
+            if (File::exists($file)) {
+                File::delete($file);
+                return redirect()->back()->with('success', 'File deleted successfully!');
+            } else {
+                return redirect()->back()->with('error', 'File not found!');
+            }
+        } catch (\Exception $e) {
+            \Log::error('Delete file error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to delete file: ' . $e->getMessage());
         }
     }
+    
     public function download($filename)
     {
-        $file = public_path('backup/' . $filename);
-        if (File::exists($file)) {
-            return response()->download($file, $filename);
-        } else {
-            abort(404, 'File not found');
+        try {
+            // Get tenant-specific backup path (check multiple config keys)
+            $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
+            $file = public_path("tenants/{$rescode}/backup/" . $filename);
+            
+            if (File::exists($file)) {
+                return response()->download($file, $filename);
+            } else {
+                abort(404, 'File not found');
+            }
+        } catch (\Exception $e) {
+            \Log::error('Download file error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to download file: ' . $e->getMessage());
         }
     }
     public function backup()
     {
-        $files = File::files(public_path('backup')); // assuming files are in public/files directory
-        usort($files, function($a, $b) {
-            return filemtime($b) - filemtime($a);
-        });
-        return view('file.index', compact('files'));
+        try {
+            // Get tenant-specific backup path (check multiple config keys)
+            $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
+            $backupPath = public_path("tenants/{$rescode}/backup");
+            
+            // Check if directory exists, if not create it recursively
+            if (!File::exists($backupPath)) {
+                File::makeDirectory($backupPath, 0755, true, true);
+                
+                // Fix ownership to apache:apache (PHP-FPM user) if running as root
+                if (function_exists('posix_getuid') && posix_getuid() === 0) {
+                    @chown($backupPath, 'apache');
+                    @chgrp($backupPath, 'apache');
+                }
+            }
+            
+            // Just get files and show them - remove is_readable check that's causing issues
+            $files = File::files($backupPath);
+            
+            usort($files, function($a, $b) {
+                return filemtime($b) - filemtime($a);
+            });
+            
+            return view('file.index', compact('files'));
+        } catch (\Exception $e) {
+            \Log::error('Backup directory error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to access backup directory: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -66,42 +106,64 @@ class FileController extends Controller
      */
     public function store(Request $request)
     {
+        try {
+            // Validation
+            $request->validate([
+                'file' => 'required'
+            ]); 
 
+            if($request->file('file')) {
+                $file = $request->file('file');
+                $name = str_replace('-', ' ', $file->getClientOriginalName());
+                $filename = time().'_'.$name;
 
-      // Validation
-      $request->validate([
-        'file' => 'required'
-    ]); 
+                // Get tenant-specific upload path
+                $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
+                $location = public_path("tenants/{$rescode}/upload/customerfiles");
+                $relativePath = "tenants/{$rescode}/upload/customerfiles";
 
-      if($request->file('file')) {
-       $file = $request->file('file');
-       $name = str_replace('-', ' ', $file->getClientOriginalName());
-       $filename = time().'_'.$name;
+                // Create directory if not exists
+                if (!File::exists($location)) {
+                    File::makeDirectory($location, 0755, true, true);
+                    
+                    // Fix ownership to apache:apache (PHP-FPM user)
+                    if (function_exists('posix_getuid') && posix_getuid() === 0) {
+                        @chown($location, 'apache');
+                        @chgrp($location, 'apache');
+                    }
+                }
 
-         // File upload location
-       $location = 'upload/customerfiles';
+                // Upload file
+                $file->move($location, $filename);
+                
+                // Fix uploaded file ownership
+                $uploadedFile = $location . '/' . $filename;
+                if (function_exists('posix_getuid') && posix_getuid() === 0) {
+                    @chown($uploadedFile, 'apache');
+                    @chgrp($uploadedFile, 'apache');
+                }
 
-         // Upload file
-       $file->move($location,$filename);
+                $id_customer = ($request['id_customer']);
 
-       $id_customer = ($request['id_customer']);
+                // Gunakan nama custom jika diisi, fallback ke nama asli file
+                $customName = trim($request->input('file_name', ''));
+                $displayName = $customName !== '' ? $customName : $file->getClientOriginalName();
 
-       \App\File::create([
-        'id_customer' => $id_customer,
-        'name' =>$file->getClientOriginalName(),
-        'path' => $location.'/'.$filename, 
+                \App\File::create([
+                    'id_customer' => $id_customer,
+                    'name' => $displayName,
+                    'path' => $relativePath.'/'.$filename, 
+                ]);
 
-    ]);
-
-
-       return redirect ('/customer/'.$id_customer)->with('success','Item Updates successfully!');
-   }else{
-    return redirect ('/customer'.$id_customer)->with('success','File Not Uploaded!');
-}
-
-      // return redirect('/');
-
-}
+                return redirect('/customer/'.$id_customer)->with('success','File uploaded successfully!');
+            } else {
+                return redirect('/customer/'.$id_customer)->with('error','File not uploaded!');
+            }
+        } catch (\Exception $e) {
+            \Log::error('File upload error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to upload file: ' . $e->getMessage());
+        }
+    }
 
     /**
      * Display the specified resource.
@@ -145,8 +207,23 @@ class FileController extends Controller
      */
     public function destroy($id)
     {
-        //
-      \App\File::destroy($id);
-      return redirect ('/customer')->with('success','Item deleted successfully!');
-  }
+        try {
+            // Get file record
+            $fileRecord = \App\File::findOrFail($id);
+            
+            // Delete physical file if exists
+            $filePath = public_path($fileRecord->path);
+            if (File::exists($filePath)) {
+                File::delete($filePath);
+            }
+            
+            // Delete database record
+            $fileRecord->delete();
+            
+            return redirect('/customer')->with('success','File deleted successfully!');
+        } catch (\Exception $e) {
+            \Log::error('File delete error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to delete file: ' . $e->getMessage());
+        }
+    }
 }

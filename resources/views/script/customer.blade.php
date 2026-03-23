@@ -1,4 +1,5 @@
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 
   var input = document.getElementById("parameter");
@@ -28,13 +29,11 @@
     "autoWidth": false,
     "searching": false,
     "language": {
-      "processing": "<span class='fa-stack fa-lg'>\n\
-      <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-      </span>&emsp;Processing ..."
+      "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
     },
-    dom: 'lBfrtip',
+    dom: 'Bfrtip',
     buttons: [
-      'copy', 'excel', 'pdf', 'csv', 'print'
+      'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
       ],
     "lengthMenu": [[25, 50, 100, 200, 500], [25, 50, 100, 200, 500]],
     processing: true,
@@ -50,7 +49,8 @@
          "parameter": $("#parameter").val(),
          "id_status": $("#id_status").val(),
          "id_plan": $("#id_plan").val(),  
-         "id_merchant": $("#id_merchant").val(),            
+         "id_merchant": $("#id_merchant").val(),
+         "id_tag": $("#id_tag").val(),
        } );
      },
 
@@ -86,13 +86,23 @@
       "targets": 7, // your case first columnzZxZ
       "className": "text-center",
 
-    }
-    ,
+    },
     {
       "targets": 8, // your case first columnzZxZ
       "className": "text-center",
 
+    },
+    {
+      "targets": 9, // your case first columnzZxZ
+      "className": "text-center",
+
+    },
+    {
+      "targets": 10, // your case first columnzZxZ
+      "className": "text-center",
+
     }
+
     ],
    columns: [
     { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
@@ -104,9 +114,10 @@
     {data: 'billing_start', name: 'billing_start'},
     {data: 'isolir_date', name: 'isolir_date'},
     {data: 'status_cust', name: 'status_cust'},
-    // {data: 'select', name: 'select'},
+
     {data: 'invoice', name: 'invoice'},
-    {data: 'action', name: 'action'}
+    {data: 'notification', name: 'notification'},
+    {data: 'app_status', name: 'app_status', orderable: false, searchable: false}
 
 
     ],
@@ -118,14 +129,12 @@
     "autoWidth": false,
     "searching": false,
     "language": {
-      "processing": "<span class='fa-stack fa-lg'>\n\
-      <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-      </span>&emsp;Processing ..."
+      "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
     },
-    // dom: 'lBfrtip',
-    // buttons: [
-    //  'copy', 'excel', 'pdf', 'csv', 'print'
-    //  ],
+    dom: 'Bfrtip',
+    buttons: [
+     'pageLength',
+     ],
     "lengthMenu": [[5, 10, 20, 50, 100], [5, 10, 20, 50, 100]],
     processing: true,
     serverSide: true,
@@ -177,6 +186,10 @@
 <script>
 
   function updateChart(data, total) {
+    if (typeof Chart === 'undefined') {
+      console.warn('Chart.js belum dimuat, chart dilewati.');
+      return;
+    }
     let percentages = {
       potensial: ((data.potensial / total) * 100).toFixed(2),
       active: ((data.active / total) * 100).toFixed(2),
@@ -210,11 +223,11 @@
           }]
         },
         options: {
-            indexAxis: 'y', // Membuat chart horizontal
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
+           // indexAxis: 'y', // Membuat chart horizontal
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
                     display: false, // Menyembunyikan legend karena label sudah ada
                   },
                   tooltip: {

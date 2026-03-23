@@ -4,6 +4,9 @@
 {!! $map['js'] !!}
 @endsection
 
+@push('summernote-script')
+<script src="{{ url('dashboard/plugins/summernote/summernote-bs4.min.js') }}"></script>
+@endpush
 <script type="text/javascript">
   function copy_name()
   {
@@ -218,18 +221,11 @@
 </div>
 
 <div class="form-group col-md-12">
- <label for="nama">Description</label>
- 
- 
- 
- 
- <textarea name="description" class="textarea form-control @error('tittle') is-invalid @enderror "  id="description"  placeholder="Ticket description" value="{{old('description')}}"></textarea>
+ <label for="description">Description</label>
+ <textarea name="description" id="description" class="textarea form-control @error('description') is-invalid @enderror">{{ old('description') }}</textarea>
  @error('description')
  <div class="error invalid-feedback">{{ $message }}</div>
- @enderror 
- 
- 
- 
+ @enderror
 </div>
 
 

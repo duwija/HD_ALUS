@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Warna utama (purple_primary, colorPrimary, dll) didefinisikan
+         per-flavor di src/kencana/res/values/colors.xml
+         dan src/perumnet/res/values/colors.xml -->
+
+    <!-- Warna netral (shared, tidak di-override flavor) -->
+    <color name="nav_item_unselected">#9E9E9E</color>
+    <color name="background_light">#F5F5F5</color>
+    <color name="divider">#E0E0E0</color>
+    <color name="error_red">#F44336</color>
+    <color name="success_green">#4CAF50</color>
+</resources>

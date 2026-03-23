@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.kencana.billing.app-mergeDebugResources-41:/layout/activity_dashboard.xml",
+        "source": "com.kencana.billing.app-main-44:/layout/activity_dashboard.xml"
+    },
+    {
+        "merged": "com.kencana.billing.app-mergeDebugResources-41:/layout/activity_login.xml",
+        "source": "com.kencana.billing.app-main-44:/layout/activity_login.xml"
+    }
+]

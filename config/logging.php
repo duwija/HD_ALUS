@@ -37,8 +37,13 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => ['single'],
+            'channels' => ['tenant'],
             'ignore_exceptions' => false,
+        ],
+
+        'tenant' => [
+            'driver' => 'custom',
+            'via' => App\Logging\TenantLogger::class,
         ],
 
         'single' => [
@@ -97,28 +102,38 @@ return [
         ],
         'invoice' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/invoice.log'),
+            'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/invoice.log'),
             'level' => 'info',
+            'days' => 90,
         ],
 
         'notif' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/notif.log'),
+            'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/notif.log'),
             'level' => 'info',
+            'days' => 90,
         ],
         'isolir' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/isolir.log'),
+            'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/isolir.log'),
             'level' => 'info',
+            'days' => 90,
         ],
-	 'payment' => [
+        'payment' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/payment.log'),
+            'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/payment.log'),
             'level' => 'info',
+            'days' => 90,
         ],
 
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
+        ],
+        'auth' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/auth.log'),
+            'level' => 'info',
+            'days' => 90,
         ],
     ],
 

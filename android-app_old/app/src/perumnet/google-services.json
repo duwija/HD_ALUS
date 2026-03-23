@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "99706567270",
+    "project_id": "lubax-bill-2-0",
+    "storage_bucket": "lubax-bill-2-0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "GANTI_DENGAN_MOBILESDK_APP_ID_PERUMNET",
+        "android_client_info": {
+          "package_name": "com.perumnet.billing"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8kuWUzNGrUjSioCTWAKj91V4YMLJ9SZ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -13,16 +13,14 @@
     var table = $('#table-unpaid-customer').DataTable({
       "responsive": true,
       "autoWidth": false,
-      "searching": true,
+      "searching": false,
       "language": {
-        "processing": "<span class='fa-stack fa-lg'>\n\
-        <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-        </span>&emsp;Processing ..."
+        "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
       },
-      dom: 'lBfrtip',
+      dom: 'Bfrtip',
       buttons: [
-        'copy', 'excel', 'pdf', 'csv', 'print'
-        ],
+       'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
+       ],
       "lengthMenu": [[25, 50, 100, 200, 500], [25, 50, 100, 200, 500]],
       processing: true,
       serverSide: true,
@@ -59,13 +57,37 @@
       "className": "text-center",
 
     }
+    ,
+    {
+      "targets": 8, // your case first columnzZxZ
+      "className": "text-center",
+
+    }
+    ,
+    {
+      "targets": 9, // your case first columnzZxZ
+      "className": "text-center",
+
+    }
+    ,
+    {
+      "targets": 11, // your case first columnzZxZ
+      "className": "text-center",
+
+    },
+    {
+      "targets": 10, // your case first columnzZxZ
+      "className": "text-right",
+
+    }
     ],
      columns: [
       { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
       {data: 'customer_id', name: 'customer_id'},
       {data: 'name', name: 'name'},
+
+      {data: 'address', name: 'address'}, 
       {data: 'id_merchant', name: 'id_merchant'},
-      {data: 'address', name: 'address'},
       {data: 'plan', name: 'plan'},
       {data: 'tax', name: 'tax'},
       {data: 'billing_start', name: 'billing_start'},

@@ -4,7 +4,7 @@ import time
 import datetime
 import logging
 import socket
-
+import os
 
 
 ip = sys.argv[1]
@@ -88,7 +88,7 @@ def telnet_olt(host, port, username, password, log_path):
 
 
 # Define the log path
-log_path = '/var/www/html/billing.alus.co.id/storage/logs'
+log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'storage', 'logs'))
 
 # Call the telnet_olt function with the defined variables
 telnet_olt(ip, port, login, password, log_path)

@@ -1,0 +1,831 @@
+@extends('layout.main')
+@section('title', 'Network Dashboard')
+
+@section('content')
+<style>
+  /* === Compact Dashboard Layout === */
+  .card {
+    min-height: auto !important;
+    height: auto !important;
+    margin-bottom: 0.6rem !important;
+  }
+
+  .card-body {
+    padding: 6px 8px !important;
+  }
+
+  .card-header {
+    padding: 6px 10px !important;
+    min-height: 30px !important;
+  }
+
+  .card-title {
+    font-size: 14px;
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  .card-body canvas {
+    max-height: 180px !important;
+  }
+
+  .info-box .info-box-content {
+    line-height: 1.3;
+  }
+
+  .info-box {
+    margin-bottom: 0.6rem !important;
+  }
+
+  @media (max-width: 768px) {
+    .card-body canvas {
+      max-height: 130px !important;
+    }
+  }
+  /* Tombol refresh pojok kanan */
+  .card-header {
+    position: relative;
+  }
+
+  .card-header .refresh-router,
+  .card-header .refresh-olt {
+    position: absolute;
+    right: 8px;
+    top: 6px;
+    background-color: rgba(255,255,255,0.9) !important;
+    border: none;
+    color: #007bff;
+    padding: 2px 6px;
+    font-size: 11px;
+    border-radius: 4px;
+  }
+
+  .card-header .refresh-router:hover,
+  .card-header .refresh-olt:hover {
+    background-color: #e8f0ff !important;
+    color: #0056b3;
+  }
+
+  /* === Modern Soft Router & OLT Cards === */
+  /* === Modern Glass-morphism Router & OLT Cards === */
+  .router-card, .olt-card {
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    background: white;
+    margin-bottom: 12px;
+    position: relative;
+  }
+
+  .router-card:hover, .olt-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  }
+
+  .router-card {
+    border-color: #60a5fa;
+  }
+
+  .router-card:hover {
+    border-color: #3b82f6;
+  }
+
+  .olt-card {
+    border-color: #22d3ee;
+  }
+
+  .olt-card:hover {
+    border-color: #06b6d4;
+  }
+
+  .router-card .card-header {
+    background: linear-gradient(135deg, #93c5fd 0%, #3b82f6 100%) !important;
+    padding: 12px 14px !important;
+    border: none;
+    border-bottom: none !important;
+  }
+
+  .olt-card .card-header {
+    background: linear-gradient(135deg, #67e8f9 0%, #06b6d4 100%) !important;
+    padding: 12px 14px !important;
+    border: none;
+    border-bottom: none !important;
+  }
+
+  .router-card .card-title,
+  .olt-card .card-title {
+    color: white !important;
+    font-weight: 700;
+    font-size: 15px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  .router-card .card-title i {
+    color: white !important;
+    font-size: 18px;
+  }
+
+  .olt-card .card-title i {
+    color: white !important;
+    font-size: 18px;
+  }
+
+  .router-card .card-body,
+  .olt-card .card-body {
+    padding: 12px 14px !important;
+    background: white;
+  }
+
+  .router-card .badge,
+  .olt-card .badge {
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 11px;
+    margin: 2px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .router-card .badge-info,
+  .olt-card .badge-info {
+    background: #5eb3f6;
+    color: white;
+  }
+
+  .router-card .badge-success,
+  .olt-card .badge-success {
+    background: #10b981;
+    color: white;
+  }
+
+  .router-card .badge-danger,
+  .olt-card .badge-danger {
+    background: #ef4444;
+    color: white;
+  }
+
+  .router-card .badge-warning,
+  .olt-card .badge-warning {
+    background: #f59e0b;
+    color: white;
+  }
+
+  .router-card .badge-secondary,
+  .olt-card .badge-secondary {
+    background: #6b7280;
+    color: white;
+  }
+
+  .router-card a,
+  .olt-card a {
+    color: #3b82f6;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .router-card a:hover,
+  .olt-card a:hover {
+    color: #2563eb;
+    text-decoration: none;
+  }
+
+  .router-card .small,
+  .olt-card .small {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  /* Section Headers */
+  h5.mt-1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2d3748;
+    padding: 10px 0;
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 15px !important;
+  }
+
+  h5.mt-1 i {
+    margin-right: 8px;
+    color: #667eea;
+  }
+
+  /* === Timeline Card Styling === */
+  .timeline-item {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+    padding: 12px 15px !important;
+    margin-bottom: 15px !important;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+
+  .timeline-item:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+  }
+
+  /* Status Badge di pojok kanan atas */
+  .timeline-item .status-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+  }
+
+  .timeline-item .time {
+    background: #f7fafc;
+    padding: 4px 10px !important;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #4a5568;
+    font-weight: 500;
+  }
+
+  .timeline-item strong {
+    color: #2d3748;
+    font-size: 14px;
+  }
+
+  .timeline-item .small {
+    color: #718096;
+    font-size: 12px;
+  }
+
+  .timeline-header {
+    margin: 8px 0;
+  }
+
+  .timeline-header a {
+    color: #2d3748;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .timeline-header a:hover {
+    color: #667eea;
+  }
+
+  /* Ticket ID Badge - Sesuai warna status Bootstrap */
+  .badge-modern {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 14px;
+    display: inline-block;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    transition: all 0.3s ease;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-modern:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+  }
+
+  .badge-Open {
+    background-color: #dc3545;
+    color: white;
+  }
+
+  .badge-Pending {
+    background-color: #ffc107;
+    color: #212529;
+  }
+
+  .badge-Inprogress {
+    background-color: #17a2b8;
+    color: white;
+  }
+
+  .badge-Solve {
+    background-color: #28a745;
+    color: white;
+  }
+
+  .badge-Close {
+    background-color: #6c757d;
+    color: white;
+  }
+
+  /* Status Badge - Modern & Soft Design (Ganti Ribbon) */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
+  }
+
+  .status-badge:before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: currentColor;
+    opacity: 0.8;
+  }
+
+  .status-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+
+  .status-badge.badge-danger {
+    background-color: #fee;
+    color: #dc3545;
+    border: 1px solid #dc354550;
+  }
+
+  .status-badge.badge-warning {
+    background-color: #fff8e1;
+    color: #f59e0b;
+    border: 1px solid #ffc10750;
+  }
+
+  .status-badge.badge-info {
+    background-color: #e0f7fa;
+    color: #17a2b8;
+    border: 1px solid #17a2b850;
+  }
+
+  .status-badge.badge-success {
+    background-color: #e8f5e9;
+    color: #28a745;
+    border: 1px solid #28a74550;
+  }
+
+  .status-badge.badge-secondary {
+    background-color: #f5f5f5;
+    color: #6c757d;
+    border: 1px solid #6c757d50;
+  }
+
+  .status-badge.badge-primary {
+    background-color: #e3f2fd;
+    color: #007bff;
+    border: 1px solid #007bff50;
+  }
+
+  /* Remove old ribbon styles */
+  .ribbon-wrapper {
+    position: relative;
+    margin-bottom: 8px;
+  }
+
+  .ribbon-wrapper .ribbon {
+    display: none;
+  }
+
+  .timeline-body {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .timeline-body strong {
+    color: #1a202c;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  /* Workflow Progress Styling */
+  .workflow-wrapper {
+    padding: 15px 0;
+    margin: 10px 0;
+  }
+
+  .base-line {
+    height: 2px;
+    background: #e2e8f0;
+    top: 15px;
+    left: 0;
+  }
+
+  .progress-line {
+    height: 2px;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    top: 15px;
+    left: 0;
+    transition: width 0.3s ease;
+  }
+
+  .step-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 8px;
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s ease;
+  }
+
+  .step-dot.pending {
+    background: white;
+    border: 2px solid #cbd5e0;
+    color: #a0aec0;
+  }
+
+  .step-dot.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 2px solid #667eea;
+    color: white;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.2);
+    animation: pulse 2s infinite;
+  }
+
+  .step-dot.done {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    border: 2px solid #48bb78;
+    color: white;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.2);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(102, 126, 234, 0.1);
+    }
+  }
+
+  .step-label {
+    font-size: 11px;
+    color: #4a5568;
+    font-weight: 500;
+    padding: 0 4px;
+  }
+
+  /* Contact Info Styling */
+  .timeline-item .col-md-5 {
+    font-size: 13px;
+    color: #4a5568;
+  }
+
+  /* 2 Column Layout for Timeline */
+  .timeline-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+  }
+
+  @media (max-width: 992px) {
+    .timeline-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .timeline-grid .timeline-item {
+    margin-bottom: 0 !important;
+  }
+
+  /* Load More Button */
+  #load-more-timeline {
+    padding: 8px 24px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+
+  #load-more-timeline:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  }
+</style>
+
+<div class="container-fluid">
+
+  {{-- Header --}}
+  <div class="row mb-2">
+    <div class="col-md-6 d-flex align-items-center">
+      <!-- <h5 class="mb-0">📡 Network Dashboard</h5> -->
+    </div>
+<!--     <div class="col-md-6 text-right">
+      <form method="GET" action="/home/network" class="form-inline justify-content-end">
+        <label for="date_start" class="mr-2">Dari:</label>
+        <input type="date" id="date_start" name="date_start" class="form-control mr-2"
+        value="{{ request('date_start', date('Y-m-d')) }}">
+        <label for="date_end" class="mr-2">s/d</label>
+        <input type="date" id="date_end" name="date_end" class="form-control mr-2"
+        value="{{ request('date_end', date('Y-m-d')) }}">
+        <button type="submit" class="btn btn-primary btn-sm">Tampilkan</button>
+      </form>
+    </div> -->
+  </div>
+
+  {{-- ================== INFO BOX ================== --}}
+  <div class="row">
+    <div class="col-md-3">
+      {{-- Ticket Info --}}
+      <div class="info-box">
+        <span class="info-box-icon bg-info elevation-1"><a href="/ticket"><i class="fas fa-ticket-alt text-white"></i></a></span>
+        <div class="info-box-content">
+          <span class="info-box-text mb-1"><strong>Tickets</strong></span>
+          <span>
+            <span class="badge badge-danger mr-1">Open: <b>{{ $ticket_count_per_status['Open'] ?? 0 }}</b></span>
+            <span class="badge badge-warning mr-1">Pending: <b>{{ $ticket_count_per_status['Pending'] ?? 0 }}</b></span>
+            <span class="badge badge-info mr-1">Inprogress: <b>{{ $ticket_count_per_status['Inprogress'] ?? 0 }}</b></span>
+            <span class="badge badge-success mr-1">Solve: <b>{{ $ticket_count_per_status['Solve'] ?? 0 }}</b></span>
+            <span class="badge badge-secondary">Close: <b>{{ $ticket_count_per_status['Close'] ?? 0 }}</b></span>
+          </span>
+        </div>
+      </div>
+
+      {{-- Invoice Info --}}
+      <div class="info-box">
+        <span class="info-box-icon bg-danger elevation-1"><a href="/suminvoice"><i class="fas fa-money-check-alt text-white"></i></a></span>
+        <div class="info-box-content">
+          <span class="info-box-text">Pending Invoice</span>
+          <span class="info-box-number">{{ $invoice_count }}</span>
+        </div>
+      </div>
+
+      {{-- Transaction Info --}}
+      <div class="info-box">
+        <span class="info-box-icon bg-success elevation-1"><a href="/suminvoice/transaction"><i class="fas fa-cash-register text-white"></i></a></span>
+        <div class="info-box-content">
+          <span class="info-box-text">Transaction</span>
+          <span class="info-box-number">{{ $invoice_paid }}</span>
+        </div>
+      </div>
+
+      {{-- Customer Info --}}
+      <div class="info-box">
+        <span class="info-box-icon bg-warning elevation-1"><a href="/customer"><i class="fas fa-users text-white"></i></a></span>
+        <div class="info-box-content" style="font-size: 14px">
+          <span class="info-box-text">Active: <b>{{ $cust_active }}</b></span>
+          <span class="info-box-text">Blocked: <b>{{ $cust_block }}</b></span>
+          <span class="info-box-text">Inactive: <b>{{ $cust_inactive }}</b></span>
+          <span class="info-box-text">Potential: <b>{{ $cust_potensial }}</b></span>
+        </div>
+      </div>
+    </div>
+
+    {{-- ================== CHART AREA ================== --}}
+    <div class="col-md-9">
+      <div class="row">
+        {{-- Customer Status --}}
+        <div class="col-md-6 d-flex align-items-stretch">
+          <div class="card card-success card-outline flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h3 class="card-title mb-0">Customer Status</h3>
+            </div>
+            <div class="card-body p-2">
+              <canvas id="customerStatusChart" height="150"></canvas>
+            </div>
+          </div>
+        </div>
+
+        {{-- Tickets by Category --}}
+        <div class="col-md-6 d-flex align-items-stretch">
+          <div class="card card-warning card-outline flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h3 class="card-title mb-0">Tickets by Category</h3>
+            </div>
+            <div class="card-body p-2">
+              <canvas id="ticketCategoryChart" height="150"></canvas>
+            </div>
+          </div>
+        </div>
+
+        {{-- New Customers --}}
+        <div class="col-md-6 d-flex align-items-stretch">
+          <div class="card card-primary card-outline flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h3 class="card-title mb-0">New Customers</h3>
+              <span class="badge badge-info badge-pill">Total: {{ $totalNewCustomers ?? 0 }}</span>
+            </div>
+            <div class="card-body p-2">
+              <canvas id="dailyNewCustomersChart" height="150"></canvas>
+            </div>
+          </div>
+        </div>
+
+        {{-- Daily Transactions - Only for Admin & Accounting --}}
+        @if(Auth::check() && in_array(Auth::user()->privilege, ['admin', 'accounting']))
+        <div class="col-md-6 d-flex align-items-stretch">
+          <div class="card card-info card-outline flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h3 class="card-title mb-0">Daily Transactions</h3>
+            </div>
+            <div class="card-body p-2">
+              <canvas id="dailyTransactionChart" height="150"></canvas>
+            </div>
+          </div>
+        </div>
+        @endif
+      </div>
+    </div>
+  </div>
+
+  {{-- ================== DISTRIBUTION ROUTERS ================== --}}
+  <h5 class="mt-1 mb-1"><i class="fas fa-network-wired"></i> Distribution Routers</h5>
+  <div class="row" id="router-card-list">
+    @foreach($distrouter as $router)
+    <div class="col-lg-3 col-md-4 mb-3">
+      <div class="card shadow-sm border-0 router-card" data-id="{{ $router->id }}" data-ip="{{ $router->ip }}">
+        <div class="card-header bg-gradient-primary text-white py-2 d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-server mr-1"></i> {{ $router->name }}</span>
+          <button class="btn btn-light btn-xs refresh-router" data-id="{{ $router->id }}"><i class="fas fa-sync"></i></button>
+        </div>
+        <div class="card-body p-2 text-center">
+          <div id="pppoe-{{ $router->id }}" class="my-2 small text-muted">Loading...</div>
+          <a href="/distrouter/{{ $router->id }}" target="_blank" class="d-block small text-primary">
+            <i class="fas fa-globe"></i> {{ $router->ip }}
+          </a>
+
+        </div>
+      </div>
+    </div>
+    @endforeach
+  </div>
+
+  {{-- ================== ZTE OLT LIST ================== --}}
+  <h5 class="mt-1 mb-1"><i class="fas fa-microchip"></i> ZTE OLT Devices</h5>
+  <div class="row" id="olt-card-list">
+    @foreach($olts as $olt)
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+      <div class="card shadow-sm border-0 olt-card" data-id="{{ $olt->id }}">
+        <div class="card-header bg-gradient-info text-white py-2 d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-microchip mr-1"></i> {{ $olt->name }}</span>
+          <button class="btn btn-light btn-xs refresh-olt" data-id="{{ $olt->id }}"><i class="fas fa-sync"></i></button>
+        </div>
+        <div class="card-body text-center p-2">
+          <div id="olt-info-{{ $olt->id }}" class="my-2 small text-muted">Loading...</div>
+          <a href="/olt/{{ $olt->id }}" target="_blank" class="d-block small text-primary">
+           <i class="fas fa-map-marker-alt"></i> {{ $olt->ip ?? '-' }}
+         </a>
+         <!-- <div class="mt-2"><button class="btn btn-sm btn-outline-info show-olt-detail" data-id="{{ $olt->id }}">Detail</button></div> -->
+       </div>
+     </div>
+   </div>
+   @endforeach
+ </div>
+
+  <h5 class="mt-1 mb-1"><i class="fas fa-clipboard-list"></i> Tickets & Job Schedule</h5>
+ <section class="content">
+  <div class="container-fluid">
+    <!-- Timelime example  -->
+    <div class="row">
+      <div class="col-12">
+        <!-- The time line -->
+        <div class="timeline-grid" id="timeline-list">
+          @include('partials.timeline_items', ['tickets' => $ticket])
+        </div>
+        <!-- /.timeline -->
+        
+        <div class="text-center my-3" id="load-more-info" style="display: {{ count($ticket) >= 10 ? 'block' : 'none' }}">
+          <span class="spinner-border spinner-border-sm mr-2 d-none" id="timeline-loading"></span>
+          <button class="btn btn-outline-primary btn-sm" id="load-more-timeline">Load More</button>
+        </div>
+        <input type="hidden" id="page" value="1">
+      </div>
+      <!-- /.col -->
+    </div>
+  </div>
+  <!-- /.timeline -->
+
+</section>
+<!-- /.content -->
+
+</div>
+@endsection
+
+@section('footer-scripts')
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // === CHARTS ===
+  const ctxStatus = document.getElementById('customerStatusChart').getContext('2d');
+  new Chart(ctxStatus, {
+    type: 'bar',
+    data: {
+      labels: ['Potential', 'Active', 'Inactive', 'Blocked'],
+      datasets: [{ data: [{{ $cust_potensial }}, {{ $cust_active }}, {{ $cust_inactive }}, {{ $cust_block }}],
+        backgroundColor: ['#FFCC00', '#28A745', '#6C757D', '#DC3545'] }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  const ticketReport = @json($ticket_report);
+  new Chart(document.getElementById('ticketCategoryChart').getContext('2d'), {
+    type: 'pie',
+    data: {
+      labels: ticketReport.map(t => t.name),
+      datasets: [{
+        data: ticketReport.map(t => t.count),
+        backgroundColor: ['#007BFF','#28A745','#FFC107','#DC3545','#6F42C1','#20C997','#17A2B8','#E83E8C']
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            label: (tooltipItem) => {
+              const total = ticketReport.reduce((a,b)=>a+b.count,0);
+              const pct = ((tooltipItem.raw/total)*100).toFixed(1);
+              return `${tooltipItem.label}: ${tooltipItem.raw} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const dailyNewCustomers = @json($dailyNewCustomers);
+  new Chart(document.getElementById('dailyNewCustomersChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: dailyNewCustomers.map(i=>i.date),
+      datasets: [{ label: 'New Customers', data: dailyNewCustomers.map(i=>i.new_count),
+        borderColor: '#007BFF', backgroundColor: 'rgba(0,123,255,0.2)', fill: true, tension: 0.3 }]
+    }
+  });
+
+  // Daily Transaction Chart - Only for Admin & Accounting
+  @if(Auth::check() && in_array(Auth::user()->privilege, ['admin', 'accounting']))
+  const dailyData = @json($dailyTransactions);
+  new Chart(document.getElementById('dailyTransactionChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: dailyData.map(i=>i.date),
+      datasets: [
+        { label: 'Jumlah Transaksi', data: dailyData.map(i=>i.volume), backgroundColor: 'rgba(54,162,235,0.6)' },
+        { label: 'Total Pembayaran', data: dailyData.map(i=>i.total_paid), type: 'line', borderColor: 'rgba(255,99,132,0.8)', fill: false }
+        ]
+    }
+  });
+  @endif
+
+  // === ROUTER & OLT AUTO REFRESH ===
+  $(function(){
+    function renderRouterSummary(container,data){
+      let html = `
+      <div class="badge badge-info mr-1 p-1">Total: ${data.pppUserCount||0}</div>
+      <div class="badge badge-success mr-1 p-1">Active: ${data.pppActiveCount||0}</div>
+      <div class="badge badge-danger mr-1 p-1">Offline: ${data.pppOfflineCount||0}</div>
+      <div class="badge badge-secondary p-1">Disabled: ${data.pppDisabledCount||0}</div>`;
+      $(container).html(html);
+    }
+
+    function fetchRouterInfo(id){
+      const target='#pppoe-'+id;
+      $(target).html('<span class="spinner-border spinner-border-sm text-muted"></span>');
+      $.get(`/distrouter/getrouterinfo/${id}`,r=>{
+        if(r.success) renderRouterSummary(target,r);
+        else $(target).html('<span class="text-warning small">No data</span>');
+      }).fail(()=>$(target).html('<span class="text-danger small">Error</span>'));
+    }
+
+    function renderOltSummary(container,data){
+      let o=data.oltInfo;
+      let html=`<div class="badge badge-primary mr-1 p-1">Total: ${o.onuCount||0}</div>
+      <div class="badge badge-success mr-1 p-1">Online: ${o.working||0}</div>
+      <div class="badge badge-danger mr-1 p-1">LOS: ${o.los||0}</div>
+      <div class="badge badge-warning mr-1 p-1">Dyinggasp: ${o.dyinggasp||0}</div>
+      <div class="badge badge-secondary p-1">Offline: ${o.offline||0}</div>`;
+      $(container).html(html);
+    }
+
+    function fetchOltInfo(id){
+      const target='#olt-info-'+id;
+      $(target).html('<span class="spinner-border spinner-border-sm text-muted"></span>');
+      $.get(`/olt/getoltinfo/${id}`,r=>{
+        if(r.success) renderOltSummary(target,r);
+        else $(target).html('<span class="text-warning small">No data</span>');
+      }).fail(()=>$(target).html('<span class="text-danger small">Error</span>'));
+    }
+
+    @foreach($distrouter as $r) fetchRouterInfo({{ $r->id }}); @endforeach
+    @foreach($olts as $o) fetchOltInfo({{ $o->id }}); @endforeach
+
+    $(document).on('click','.refresh-router',e=>fetchRouterInfo($(e.currentTarget).data('id')));
+    $(document).on('click','.refresh-olt',e=>fetchOltInfo($(e.currentTarget).data('id')));
+
+    // Auto-refresh tiap 3 menit
+    setInterval(()=>{
+      @foreach($distrouter as $r) fetchRouterInfo({{ $r->id }}); @endforeach
+      @foreach($olts as $o) fetchOltInfo({{ $o->id }}); @endforeach
+    },180000);
+  });
+</script>
+@endsection

@@ -1,0 +1,40 @@
+@extends('layout.main')
+@section('title','Distribution Point List')
+@section('content')
+<section class="content-header">
+
+  <div class="card card-primary card-outline">
+    <div class="card-header">
+      <h3 class="card-title">Distibution Point List  </h3>
+      <a href="{{url ('distpoint/create')}}" class=" float-right btn  bg-gradient-primary btn-sm">Add New Distribution Point</a>
+    </div>
+
+    <!-- /.card-header -->
+    <div class="card-body">
+      <table id="table-distrouter-list" class="table table-bordered table-striped">
+
+        <thead >
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">Name</th>
+            <th scope="col">Site</th>
+            <th scope="col">Capacity</th>
+            <th scope="col">Optic Power</th>
+            <th scope="col">Parrent</th>
+            <th scope="col">Description</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+
+      </table>
+    </div>
+  </div>
+
+</section>
+
+@endsection
+@section('footer-scripts')
+@include('script.distrouter_list')
+@endsection 
+
+

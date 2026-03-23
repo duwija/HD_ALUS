@@ -1,0 +1,221 @@
+/* === WRAPPER UTAMA === */
+.workflow-wrapper {
+  position: relative;
+  padding: 12px 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* === GARIS DASAR & PROGRES === */
+.workflow-wrapper .base-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #e0e0e0;
+  z-index: 1;
+  transform: translateY(-50%);
+}
+
+.workflow-wrapper .progress-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #007bff 0%, #00bfff 100%);
+  z-index: 2;
+  transform: translateY(-50%);
+  transition: width 0.4s ease-in-out;
+}
+
+/* === STEP CONTAINER === */
+.workflow-wrapper .d-flex {
+  display: flex;
+  flex-wrap: nowrap !important;
+  justify-content: space-between;
+  position: relative;
+  z-index: 3;
+}
+
+/* === STEP DOT === */
+.step-dot {
+  position: relative;
+  z-index: 3;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #ccc;
+  background: #fff;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: white;
+  transform: translateY(2px); /* sedikit menindih garis */
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* === STATUS DOT === */
+.step-dot.active {
+  background: #007bff;
+  border-color: #007bff;
+  color: #fff;
+  animation: pulse 1.5s infinite;
+}
+
+.step-dot.done {
+  background: #28a745;
+  border-color: #28a745;
+  color: #fff;
+}
+
+.step-dot.pending {
+  background: #fff;
+  border-color: #ccc;
+  opacity: 0.6;
+}
+
+/* === LABEL STEP === */
+.step-label {
+  font-size: 0.7rem;
+  margin-top: 4px;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+/* === ANIMASI DENYUT UNTUK STEP AKTIF === */
+@keyframes pulse {
+  0% {
+    transform: translateY(2px) scale(1);
+    box-shadow: 0 0 0 0 rgba(0,123,255,0.5);
+  }
+  70% {
+    transform: translateY(2px) scale(1.1);
+    box-shadow: 0 0 0 8px rgba(0,123,255,0);
+  }
+  100% {
+    transform: translateY(2px) scale(1);
+    box-shadow: 0 0 0 0 rgba(0,123,255,0);
+  }
+}
+
+/* === RIBBON (STATUS) === */
+.ribbon-wrapper {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  overflow: hidden;
+  width: 85px;
+  height: 85px;
+}
+
+.ribbon {
+  position: relative;
+  left: -6px;
+  top: 10px;
+  transform: rotate(45deg);
+  width: 100px;
+  text-align: center;
+  font-size: 0.7rem;
+  line-height: 20px;
+  font-weight: bold;
+  color: #fff;
+}
+
+/* === TIMELINE ITEM === */
+.timeline-item {
+  background: #fff;
+  border-left: 4px solid #007bff;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+/* === RESPONSIVE: MOBILE FIX === */
+@media (max-width: 768px) {
+  .workflow-wrapper {
+    padding: 10px 0;
+  }
+
+  /* Garis lebih tipis & sejajar lingkaran */
+  .workflow-wrapper .base-line,
+  .workflow-wrapper .progress-line {
+    height: 2px;
+    top: 50%;
+    transform: translateY(calc(-50% - 5px)); /* geser sedikit ke bawah agar sejajar */
+  }
+
+  /* Lingkaran lebih kecil */
+  .step-dot {
+    width: 14px;
+    height: 14px;
+    border-width: 1.5px;
+    font-size: 7px;
+    transform: translateY(1px); /* pas sejajar garis */
+  }
+
+  .step-dot.active {
+    box-shadow: 0 0 5px rgba(0,123,255,0.5);
+  }
+
+  .step-dot.done {
+    box-shadow: 0 0 4px rgba(40,167,69,0.4);
+  }
+
+  /* Label lebih kecil dan rapat */
+  .step-label {
+    font-size: 0.65rem;
+    margin-top: 3px;
+    line-height: 1;
+  }
+
+  /* Timeline body padding kecil */
+  .timeline-item {
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+
+  /* Ribbon posisi lebih kecil */
+  .ribbon-wrapper {
+    width: 70px;
+    height: 70px;
+  }
+  .ribbon {
+    font-size: 0.6rem;
+    line-height: 16px;
+  }
+}
+
+/* Very small devices: keep timeline in one row and allow horizontal swipe */
+@media (max-width: 480px) {
+  .workflow-wrapper {
+    overflow-x: auto;            /* enable horizontal scroll */
+    overflow-y: hidden;
+    white-space: nowrap;         /* keep children on single line */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Force the step container to not wrap and allow inline items */
+  .workflow-wrapper .d-flex {
+    flex-wrap: nowrap !important;
+    justify-content: flex-start !important;
+  }
+
+  /* Ensure step items render inline so they can overflow horizontally */
+  .workflow-wrapper .d-flex > .text-center.flex-fill,
+  .workflow-wrapper .d-flex > .step-item {
+    display: inline-block;
+    vertical-align: top;
+    white-space: normal; /* allow label wrapping inside the inline-block if necessary */
+  }
+
+  /* Optionally hide long labels on very small screens to keep compact view */
+  .workflow-wrapper .step-label { display: none; }
+}

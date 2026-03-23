@@ -56,18 +56,97 @@ public function searchforjurnal(Request $request) {
 
     public function log()
     {
-        //
-       if ((Auth::user()->privilege)=="admin")
-       {     
+        if ((Auth::user()->privilege) != "admin") {
+            return redirect()->back()->with('error', 'Sorry, You Are Not Allowed to Access Destination page !!');
+        }
 
-        return view ('user/log');
+        $tenantKey  = env('DB_DATABASE', 'default');
+        $tenantDir  = storage_path("logs/tenant_{$tenantKey}");
+        $rootDir    = storage_path('logs');
+
+        // Tenant-specific channel logs (invoice, notif, payment, auth, laravel)
+        $tenantFiles = [];
+        if (is_dir($tenantDir)) {
+            foreach (glob($tenantDir . '/*.log') as $path) {
+                $name = basename($path);
+                if ($name === 'laravel.log') continue; // shown separately
+                $tenantFiles[] = [
+                    'name'     => "tenant_{$tenantKey}/{$name}",
+                    'label'    => $name,
+                    'size'     => filesize($path),
+                    'modified' => filemtime($path),
+                ];
+            }
+        }
+        usort($tenantFiles, fn($a, $b) => $b['modified'] - $a['modified']);
+
+        // Non-tenant logs from Python (olt_log_*.log, jobsprocess.log) — root storage/logs/
+        $rootFiles = [];
+        foreach (glob($rootDir . '/*.log') as $path) {
+            $name = basename($path);
+            if ($name === 'laravel.log') continue;
+            $rootFiles[] = [
+                'name'     => $name,
+                'label'    => $name,
+                'size'     => filesize($path),
+                'modified' => filemtime($path),
+            ];
+        }
+        usort($rootFiles, fn($a, $b) => $b['modified'] - $a['modified']);
+
+        // Tenant laravel.log
+        $tenantLogPath   = storage_path("logs/tenant_{$tenantKey}/laravel.log");
+        $tenantLogExists = file_exists($tenantLogPath);
+        $tenantLogInfo   = $tenantLogExists ? [
+            'name'     => "tenant_{$tenantKey}/laravel.log",
+            'size'     => filesize($tenantLogPath),
+            'modified' => filemtime($tenantLogPath),
+        ] : null;
+
+        // App files combined = tenant files + root non-laravel files
+        $appFiles = array_merge($tenantFiles, $rootFiles);
+
+        return view('user/log', compact('appFiles', 'tenantLogInfo', 'tenantKey'));
     }
-    else
-    {
-      return redirect()->back()->with('error','Sorry, You Are Not Allowed to Access Destination page !!');
-  }
 
-}
+    public function logRead(\Illuminate\Http\Request $request)
+    {
+        if ((Auth::user()->privilege) != "admin") {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $file   = $request->get('file', '');
+        $lines  = (int) $request->get('lines', 300);
+        $logDir = storage_path('logs');
+
+        // Sanitize path — only allow files within storage/logs
+        $path = realpath($logDir . '/' . $file);
+        if (!$path || !str_starts_with($path, realpath($logDir))) {
+            return response()->json(['error' => 'File tidak ditemukan'], 404);
+        }
+
+        $content = $this->tailLogFile($path, $lines);
+        return response()->json(['content' => $content, 'size' => filesize($path), 'modified' => date('d M Y H:i', filemtime($path))]);
+    }
+
+    private function tailLogFile(string $path, int $lineCount = 300): string
+    {
+        $fp = fopen($path, 'rb');
+        if (!$fp) return '';
+        fseek($fp, 0, SEEK_END);
+        $pos = ftell($fp);
+        $buf = '';
+        while ($pos > 0 && substr_count($buf, "\n") < $lineCount) {
+            $read  = min(8192, $pos);
+            $pos  -= $read;
+            fseek($fp, $pos);
+            $buf = fread($fp, $read) . $buf;
+        }
+        fclose($fp);
+        $all = explode("\n", $buf);
+        return implode("\n", array_slice($all, -$lineCount));
+    }
+
 public function create()
 {
         //
@@ -75,8 +154,9 @@ public function create()
    {     
     $groups = \App\Group::all();
     $akuns = \App\Akun::where('category', 'kas & bank')->get();
+    $supervisors = \App\User::where('is_active', 1)->orderBy('name')->get(['id','name','job_title']);
 
-    return view ('user/create', ['groups' => $groups, 'akuns'=>$akuns]);
+    return view ('user/create', ['groups' => $groups, 'akuns'=>$akuns, 'supervisors'=>$supervisors]);
 }
 else
 {
@@ -174,9 +254,47 @@ else
         // Mulai Database Transaction
             DB::beginTransaction();
 
-        // Upload foto jika disediakan
-            if ($request->hasFile('photo')) {
-                $imageName = $request->file('photo')->store('users', 'public');
+        // Upload foto - Prioritaskan cropped photo
+            if ($request->filled('cropped_photo')) {
+                // Handle cropped photo from base64
+                $base64Image = $request->cropped_photo;
+                
+                // Extract base64 string
+                if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $type)) {
+                    $data = substr($base64Image, strpos($base64Image, ',') + 1);
+                    $type = strtolower($type[1]); // jpg, png, gif
+                    
+                    // Decode base64
+                    $data = str_replace(' ', '+', $data);
+                    $decodedImage = base64_decode($data);
+                    
+                    if ($decodedImage === false) {
+                        throw new \Exception('Base64 decode failed');
+                    }
+                    
+                    // Generate unique filename
+                    $fileName = 'user_' . time() . '_' . uniqid() . '.' . $type;
+                    
+                    // Save directly to public/storage/users/
+                    $filePath = public_path('storage/users/' . $fileName);
+                    
+                    // Ensure directory exists
+                    if (!file_exists(public_path('storage/users'))) {
+                        mkdir(public_path('storage/users'), 0777, true);
+                    }
+                    
+                    $saved = file_put_contents($filePath, $decodedImage);
+                    
+                    if (!$saved) {
+                        throw new \Exception('Failed to save cropped image');
+                    }
+                    
+                    $imageName = $fileName;
+                }
+            } elseif ($request->hasFile('photo')) {
+                // Fallback to original file if no crop
+                $imageName = time() . '.' . $request->photo->getClientOriginalExtension();
+                $request->photo->move(public_path('storage/users'), $imageName);
             }
 
         // Membuat User
@@ -193,6 +311,7 @@ else
                 'phone' => $request->phone,
                 'description' => $request->description ?? null,
                 'photo' => $imageName,
+                'supervisor_id' => $request->supervisor_id ?: null,
             ]);
 
         // Menyinkronkan groups
@@ -247,7 +366,8 @@ else
             $merchants = \App\Merchant::all();
             $groups = \App\Group::all();
             $userGroupIds = $user->groups->pluck('id')->toArray();
-            return view ('user.edit',['user' => $user, 'groups' => $groups, 'userGroupIds'=>$userGroupIds, 'akuns' =>$akuns, 'userAkunIds'=>$userAkunIds, 'merchants' =>$merchants]);
+            $supervisors = \App\User::where('is_active', 1)->where('id','!=',$id)->orderBy('name')->get(['id','name','job_title']);
+            return view ('user.edit',['user' => $user, 'groups' => $groups, 'userGroupIds'=>$userGroupIds, 'akuns' =>$akuns, 'userAkunIds'=>$userAkunIds, 'merchants' =>$merchants, 'supervisors'=>$supervisors]);
         }
         else
         {
@@ -307,11 +427,53 @@ else
         // Hash the password if it's not already hashed
             $password = strlen($request->password) >= 50 ? $request->password : Hash::make($request->password);
 
-        // Handle photo upload
-            if ($request->hasFile('photo')) {
+        // Handle photo upload - Prioritaskan cropped photo
+            if ($request->filled('cropped_photo')) {
+                // Handle cropped photo from base64
+                $base64Image = $request->cropped_photo;
+                
+                // Extract base64 string
+                if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $type)) {
+                    $data = substr($base64Image, strpos($base64Image, ',') + 1);
+                    $type = strtolower($type[1]); // jpg, png, gif
+                    
+                    // Decode base64
+                    $data = str_replace(' ', '+', $data);
+                    $decodedImage = base64_decode($data);
+                    
+                    if ($decodedImage === false) {
+                        throw new \Exception('Base64 decode failed');
+                    }
+                    
+                    // Delete old photo if exists and not default
+                    if ($user->photo && $user->photo != 'user.png' && file_exists(public_path("storage/users/{$user->photo}"))) {
+                        @unlink(public_path("storage/users/{$user->photo}"));
+                    }
+                    
+                    // Generate unique filename
+                    $fileName = 'user_' . time() . '_' . uniqid() . '.' . $type;
+                    
+                    // Save directly to public/storage/users/
+                    $filePath = public_path('storage/users/' . $fileName);
+                    
+                    // Ensure directory exists
+                    if (!file_exists(public_path('storage/users'))) {
+                        mkdir(public_path('storage/users'), 0777, true);
+                    }
+                    
+                    $saved = file_put_contents($filePath, $decodedImage);
+                    
+                    if (!$saved) {
+                        throw new \Exception('Failed to save cropped image');
+                    }
+                    
+                    $user->photo = $fileName;
+                }
+            } elseif ($request->hasFile('photo')) {
+                // Fallback to original file if no crop
             // Delete the old photo if exists
-                if ($user->photo && file_exists(public_path("storage/users/{$user->photo}"))) {
-                    unlink(public_path("storage/users/{$user->photo}"));
+                if ($user->photo && $user->photo != 'user.png' && file_exists(public_path("storage/users/{$user->photo}"))) {
+                    @unlink(public_path("storage/users/{$user->photo}"));
                 }
 
             // Store the new photo
@@ -334,7 +496,8 @@ else
                 'privilege' => $request->privilege,
                 'description' => $request->description,
                 'id_merchant' => $request->id_merchant,
-
+                'supervisor_id' => $request->supervisor_id ?: null,
+                'dashboard_preference' => in_array($request->privilege, ['merchant','vendor']) ? null : ($request->dashboard_preference ?: null),
             ]);
 
         // Sync groups
@@ -366,6 +529,22 @@ else
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
+    public function toggleActive($id)
+    {
+        $user = \App\User::findOrFail($id);
+
+        // Jangan izinkan menonaktifkan diri sendiri
+        if ($user->id === auth()->id()) {
+            return redirect()->back()->with('error', 'Anda tidak dapat menonaktifkan akun sendiri.');
+        }
+
+        $user->is_active = !$user->is_active;
+        $user->save();
+
+        $status = $user->is_active ? 'diaktifkan' : 'dinonaktifkan';
+        return redirect()->back()->with('success', "User {$user->name} berhasil {$status}.");
+    }
+
     public function destroy($id)
     {
         //

@@ -8,15 +8,13 @@
     "autoWidth": false,
     "searching": false,
     "language": {
-      "processing": "<span class='fa-stack fa-lg'>\n\
-      <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-      </span>&emsp;Processing ..."
+      "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
     },
-    dom: 'lBfrtip',
+    dom: 'Bfrtip',
     buttons: [
-      'copy', 'excel', 'pdf', 'csv', 'print'
-      ],
-    "lengthMenu": [[200, 500, 1000], [200, 500, 1000]],
+     'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
+     ],
+    "lengthMenu": [[100, 200, 500, 1000], [100, 200, 500, 1000]],
     processing: true,
     serverSide: true,
     ajax: {
@@ -34,35 +32,36 @@
 
     },
     {
-      "targets": 2, // your case first column
+      "targets": 2, // vendor column
       "className": "text-center",
 
     },
     {
-      "targets": 3, // your case first columnzZxZ
+      "targets": 3, // type column
       "className": "text-center",
 
     },
     {
-      "targets": 4, // your case first columnzZxZ
+      "targets": 4, // ip column
       "className": "text-center",
 
     },
     {
-      "targets": 7, // your case first column
+      "targets": 5, // port column
+      "className": "text-center",
+
+    },
+    {
+      "targets": 8, // snmp_port column
       "className": "text-center",
 
     },
     
-    // {
-    //   "targets": 7, // your case first columnzZxZ
-    //   "className": "text-center font-weight-bold",
-
-    // },
     ],
     columns: [
       { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
       {data: 'name', name: 'name'},
+      {data: 'vendor', name: 'vendor'},
       {data: 'type', name: 'type'},
       {data: 'ip', name: 'ip'},
       {data: 'port', name: 'port'},

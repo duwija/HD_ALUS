@@ -8,7 +8,7 @@ class Ticketdetail extends Model
 {
 
 
-	 protected $fillable = ['id', 'id_ticket','description', 'updated_by','created_at','updated_at'];
+	 protected $fillable = ['id', 'id_ticket','description', 'updated_by','coordinate','device_type','created_at','updated_at'];
     //
 	 public function ticket()
     {

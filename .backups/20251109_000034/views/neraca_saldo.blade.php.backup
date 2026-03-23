@@ -1,0 +1,158 @@
+@extends('layout.main')
+
+@section('title', 'Laporan Neraca Saldo')
+
+@section('content')
+<section class="content-header">
+  <div class="card card-primary card-outline">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h3 class="card-title font-weight-bold m-0">
+        NERACA SALDO
+        <small class="ml-2">
+          ({{ \Carbon\Carbon::parse($tanggalAwal)->format('d/m/Y') }} - {{ \Carbon\Carbon::parse($tanggalAkhir)->format('d/m/Y') }})
+        </small>
+      </h3>
+
+    </div>
+
+    <div class="container col-md-10 pt-3">
+      <form action="{{ url('/jurnal/neracasaldo') }}" method="GET" class="mb-4">
+        <div class="row align-items-end">
+          <div class="col-md-3">
+            <div class="form-group">
+              <label for="tanggal_awal">Tanggal Awal</label>
+              <input type="date" name="tanggal_awal" id="tanggal_awal" class="form-control" value="{{ $tanggalAwal }}">
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label for="tanggal_akhir">Tanggal Akhir</label>
+              <input type="date" name="tanggal_akhir" id="tanggal_akhir" class="form-control" value="{{ $tanggalAkhir }}">
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label class="d-block">&nbsp;</label>
+              <button type="submit" class="btn btn-primary">
+               Filter
+             </button>
+           </div>
+         </div>
+         <div class="col-md-3">
+           <div class="form-group mb-0 text-md-right mt-3 mt-md-0">
+            <a href="{{ url('/jurnal/neracasaldo/export/excel') . '?' . http_build_query(request()->all()) }}" class="btn btn-success">
+              <i class="fas fa-file-excel"></i> Export Excel
+            </a>
+            <a href="{{ url('/jurnal/neracasaldo/export/pdf') . '?' . http_build_query(request()->all()) }}" class="btn btn-danger">
+              <i class="fas fa-file-pdf"></i> Export PDF
+            </a>
+          </div>
+        </div>
+      </div>
+    </form>
+
+  </div>      
+
+  <div class="card-body">
+    <div class="row justify-content-center">
+
+      <div class="col-md-10 text-center">
+        <h3 class="font-weight-bold m-0">
+          {{ config('app.company', env('COMPANY','Perusahaan')) }}
+        </h3>
+        <div><strong>Trial Balance</strong></div>
+        <small class="d-block">
+          Per {{ \Carbon\Carbon::parse($tanggalAkhir)->format('d/m/Y') }}
+        </small>
+        <hr>
+      </div>
+      <div class="col-md-10">
+        <table class="table table-bordered table-striped ">
+         <thead>
+          <tr>
+            <th rowspan="2" class="align-middle">Kode Akun</th>
+            <th rowspan="2" class="align-middle">Nama Akun</th>
+            <th colspan="2" class="text-center">Saldo Awal</th>
+            <th colspan="2" class="text-center">Pergerakan</th>
+            <th colspan="2" class="text-center">Saldo Akhir</th>
+            <th rowspan="2" class="text-center align-middle">Balance</th>
+          </tr>
+          <tr>
+            <th class="text-right">Debit</th>
+            <th class="text-right">Kredit</th>
+            <th class="text-right">Debit</th>
+            <th class="text-right">Kredit</th>
+            <th class="text-right">Debit</th>
+            <th class="text-right">Kredit</th>
+          </tr>
+        </thead>
+        <tbody>
+          @php $fmt = fn($n) => number_format((float)$n, 2, ',', '.'); @endphp
+
+          @forelse ($grouped as $groupName => $section)
+          {{-- Header Grup (SESUAIKAN colspan jadi 9 kolom total) --}}
+          <tr class="table-active">
+            <th colspan="9" class="text-left">{{ $groupName }}</th>
+          </tr>
+
+          {{-- Rows per akun --}}
+          @foreach ($section['rows'] as $item)
+          @php $balance = $item['akhir_debit'] - $item['akhir_kredit']; @endphp
+          <tr>
+            <td>{{ $item['kode'] }}</td>
+            <td>{{ $item['nama'] }}</td>
+            <td class="text-right">{{ $fmt($item['awal_debit']) }}</td>
+            <td class="text-right">{{ $fmt($item['awal_kredit']) }}</td>
+            <td class="text-right">{{ $fmt($item['gerak_debit']) }}</td>
+            <td class="text-right">{{ $fmt($item['gerak_kredit']) }}</td>
+            <td class="text-right">{{ $fmt($item['akhir_debit']) }}</td>
+            <td class="text-right">{{ $fmt($item['akhir_kredit']) }}</td>
+            <td class="text-right">
+              {!! $balance < 0 ? '(' . $fmt(abs($balance)) . ')' : $fmt($balance) !!}
+            </td>
+          </tr>
+          @endforeach
+
+          {{-- Subtotal per grup (label span 2 kolom: Kode+Nama) --}}
+          @php $s = $section['subtotal']; $balSec = $s['akhir_debit'] - $s['akhir_kredit']; @endphp
+          <tr class="font-weight-bold">
+            <td class="text-right" colspan="2">Subtotal {{ $groupName }}</td>
+            <td class="text-right">{{ $fmt($s['awal_debit']) }}</td>
+            <td class="text-right">{{ $fmt($s['awal_kredit']) }}</td>
+            <td class="text-right">{{ $fmt($s['gerak_debit']) }}</td>
+            <td class="text-right">{{ $fmt($s['gerak_kredit']) }}</td>
+            <td class="text-right">{{ $fmt($s['akhir_debit']) }}</td>
+            <td class="text-right">{{ $fmt($s['akhir_kredit']) }}</td>
+            <td class="text-right">
+              {!! $balSec < 0 ? '(' . $fmt(abs($balSec)) . ')' : $fmt($balSec) !!}
+            </td>
+          </tr>
+          @empty
+          <tr><td colspan="9" class="text-center">Tidak ada data untuk periode ini.</td></tr>
+          @endforelse
+        </tbody>
+
+        @php $grandBalance = $grand['akhir_debit'] - $grand['akhir_kredit']; @endphp
+        <tfoot>
+          <tr class="bg-light font-weight-bold">
+            <td class="text-right" colspan="2">TOTAL</td>
+            <td class="text-right">{{ $fmt($grand['awal_debit']) }}</td>
+            <td class="text-right">{{ $fmt($grand['awal_kredit']) }}</td>
+            <td class="text-right">{{ $fmt($grand['gerak_debit']) }}</td>
+            <td class="text-right">{{ $fmt($grand['gerak_kredit']) }}</td>
+            <td class="text-right">{{ $fmt($grand['akhir_debit']) }}</td>
+            <td class="text-right">{{ $fmt($grand['akhir_kredit']) }}</td>
+            <td class="text-right">
+              {!! $grandBalance < 0 ? '(' . $fmt(abs($grandBalance)) . ')' : $fmt($grandBalance) !!}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+  </div>
+
+</div>
+</div>
+</section>
+@endsection

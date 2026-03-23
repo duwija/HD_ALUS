@@ -304,43 +304,388 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 <div class="container-fluid ">
   <div class="row">
-    <div class="col-12 border-dark tiketview">
-      <div class="callout callout-warning" >
-        <div class="col-12">
-         <strong> Tiket Description </strong>
-         <span class="float-right"><i class="far fa-clock"></i><small>{{$ticket->created_at}}</small> </span> 
+    <div class="col-12">
+
+    </div>
+
+    
+    <div class="card shadow-sm mt-0 pt-0 col-12">
+      @if(isset($workflowSteps) && $workflowSteps->count() > 0)
+
+      @php
+      $totalSteps = $workflowSteps->count();
+      $currentStepId = $ticket->current_step_id ?? null;
+      $currentIndex = $workflowSteps->search(fn($step) => $step->id == $currentStepId);
+      $progressPercent = $currentIndex !== false && $totalSteps > 1 
+      ? ($currentIndex / ($totalSteps - 1)) * 100 
+      : 0;
+
+      $currentStep = $workflowSteps->firstWhere('id', $currentStepId);
+      $isFinishStep = $currentStep && strtolower($currentStep->name) === 'finish';
+      if ($isFinishStep) {
+        $progressPercent = 100;
+      }
+      @endphp
+
+      <!-- Wrapper Workflow -->
+      <div class="workflow-wrapper position-relative">
+
+
+        <!-- Garis Dasar & Progress -->
+        <div class="base-line position-absolute w-100"></div>
+        <div class="progress-line position-absolute" style="width: {{ $progressPercent }}%;"></div>
+
+        <!-- Step Item -->
+        <div class="d-flex justify-content-start">
+          @foreach($workflowSteps as $index => $step)
+          @php
+          if ($isFinishStep) {
+            $class = 'done';
+          } else {
+            $class = ($currentStepId == $step->id) ? 'active' :
+            ($currentIndex !== false && $index < $currentIndex ? 'done' : 'pending');
+          }
+          @endphp
+
+          <div class="text-center flex-fill">
+            <div class="step-dot {{ $class }}">
+              <i class="fas {{ $class === 'done' ? 'fa-check' : 'fa-circle-notch' }}"></i>
+            </div>
+            <span class="step-label small">{{ ucfirst($step->name) }}</span>
+          </div>
+          @endforeach
+        </div>
+      </div>
+
+      <!-- Tombol Edit Workflow -->
+      <div class="card-body row">
+        <button type="button" class="btn btn-primary btn-sm m-1" data-toggle="modal" data-target="#modal-workflow">
+          <i class="fas fa-stream"></i> Edit Workflow
+        </button>
+      </div>
+
+      @else
+      @if(!in_array($ticket->status ?? '', ['Solve','Close']))
+      <div class="card-body row">
+        <button id="btn-start-workflow" class="btn btn-success btn-sm">
+          <i class="fas fa-play"></i> Start Workflow
+        </button>
+      </div>
+      @endif
+      @endif
+    </div>
+
+    <!-- Modal Workflow -->
+    <div class="modal fade" id="modal-workflow" tabindex="-1" role="dialog" aria-labelledby="modalWorkflowLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+
+          <!-- Header -->
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="modalWorkflowLabel"><i class="fas fa-tasks"></i> Workflow Steps</h5>
+            <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="modal-body">
+            <!-- Form tambah step -->
+            <form id="addStepForm" class="form-inline mb-3">
+              @csrf
+              <input type="hidden" id="ticketId" value="{{ $ticket->id }}">
+              <input type="text" id="stepName" class="form-control mr-2" placeholder="Nama step baru" required>
+              <button class="btn btn-success" type="submit"><i class="fas fa-plus"></i></button>
+            </form>
+
+            <!-- List step drag & drop -->
+            <ul id="workflow-steps" class="list-group">
+              @foreach($workflowSteps as $step)
+              @php
+              $isCurrent = $ticket->current_step_id == $step->id;
+              @endphp
+              <li class="list-group-item d-flex justify-content-between align-items-center {{ $isCurrent ? 'bg-primary text-white' : '' }}" 
+              style="cursor: grab;" data-step="{{ $step->id }}">
+              <!-- Hapus di kiri -->
+              <button type="button" class="btn btn-outline-danger btn-sm btn-delete-step mr-2" data-step="{{ $step->id }}">
+                <i class="fas fa-trash"></i>
+              </button>
+
+              <span class="flex-fill text-center">{{ $step->name }}</span>
+
+              <!-- Pilih di kanan -->
+              <button type="button" class="btn btn-outline-primary btn-sm btn-choose-step" data-step="{{ $step->id }}" {{ $isCurrent ? 'disabled' : '' }}>
+                Pilih
+              </button>
+            </li>
+            @endforeach
+          </ul>
+        </div>
+
+        <!-- Footer -->
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+  <script>
+    document.querySelectorAll('.scroll-arrow').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const wrapper = this.closest('.workflow-wrapper');
+        wrapper.scrollBy({
+          left: this.classList.contains('right') ? 150 : -150,
+          behavior: 'smooth'
+        });
+      });
+    });
+    document.addEventListener("DOMContentLoaded", function () {
+      let ticketId = "{{ $ticket->id }}";
+
+  // START workflow jika kosong
+      let startBtn = document.getElementById("btn-start-workflow");
+      if (startBtn) {
+        startBtn.addEventListener("click", function () {
+          Swal.fire({
+            title: 'Mulai Workflow?',
+            text: "Status tiket akan berubah jadi Inprogress dan langkah default akan dibuat.",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, mulai',
+            cancelButtonText: 'Batal'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              fetch(`/ticket/${ticketId}/workflow/start`, {
+                method: "POST",
+                headers: {
+                  "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                  "Content-Type": "application/json"
+                }
+              })
+              .then(res => res.json())
+              .then(data => {
+                if (data.success) {
+                  Swal.fire('Berhasil!', 'Workflow dimulai & status tiket jadi Inprogress.', 'success')
+                  .then(() => location.reload());
+                }
+              });
+            }
+          });
+        });
+      }
+    });
+  </script>
+
+  <script>
+
+
+    document.addEventListener("DOMContentLoaded", function () {
+      let ticketId = "{{ $ticket->id }}";
+      let el = document.getElementById("workflow-steps");
+
+    // ✅ Aktifkan drag & drop (tidak mengganggu tombol klik)
+      if (el) {
+        Sortable.create(el, {
+          animation: 150,
+            handle: ".list-group-item", // seluruh item masih bisa drag
+            filter: ".btn-choose-step, .btn-delete-step", // tombol tetap bisa diklik
+            preventOnFilter: true,
+
+            onEnd: function () {
+              let order = [];
+              document.querySelectorAll('#workflow-steps li').forEach((item, index) => {
+                order.push({ id: item.getAttribute("data-step"), position: index + 1 });
+              });
+
+              fetch(`/ticket/${ticketId}/workflow/reorder`, {
+                method: "POST",
+                headers: {
+                  "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ order: order })
+              })
+              .then(res => res.json())
+              .then(data => {
+                if (data.success) {
+                  Swal.fire({
+                    title: 'Urutan Disimpan!',
+                    text: 'Urutan langkah telah berhasil diperbarui.',
+                    icon: 'success',
+                    confirmButtonText: 'OK'
+                  }).then(() => {
+                    location.reload();
+                  });
+                }
+              });
+            }
+
+          });
+      }
+
+    // ✅ Handler pilih step (click + touchstart untuk mobile)
+      document.querySelectorAll('.btn-choose-step').forEach(btn => {
+        ['click', 'touchstart'].forEach(evt => {
+          btn.addEventListener(evt, function (e) {
+            e.preventDefault();
+                e.stopPropagation(); // Hindari konflik drag
+
+                let stepId = this.getAttribute("data-step");
+
+                Swal.fire({
+                  title: 'Pilih Step ini?',
+                  icon: 'question',
+                  showCancelButton: true,
+                  confirmButtonText: 'Ya, pilih',
+                  cancelButtonText: 'Batal'
+                }).then((result) => {
+                  if (result.isConfirmed) {
+                    Swal.fire({
+                      title: 'Memproses...',
+                      allowOutsideClick: false,
+                      didOpen: () => Swal.showLoading()
+                    });
+
+                    fetch(`/ticket/${ticketId}/workflow/move`, {
+                      method: "POST",
+                      headers: {
+                        "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                        "Content-Type": "application/json"
+                      },
+                      body: JSON.stringify({ step_id: stepId })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                      if (data.success) {
+                        Swal.fire('Berhasil!', 'Step berhasil dipilih.', 'success')
+                        .then(() => location.reload());
+                      }
+                    });
+                  }
+                });
+              });
+        });
+      });
+
+    // ✅ Hapus step (sweetalert)
+      document.querySelectorAll('.btn-delete-step').forEach(btn => {
+        ['click', 'touchstart'].forEach(evt => {
+          btn.addEventListener(evt, function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            let stepId = this.getAttribute("data-step");
+
+            Swal.fire({
+              title: 'Yakin hapus step ini?',
+              text: "Data step akan hilang permanen!",
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonText: 'Ya, hapus',
+              cancelButtonText: 'Batal'
+            }).then((result) => {
+              if (result.isConfirmed) {
+                Swal.fire({
+                  title: 'Menghapus...',
+                  allowOutsideClick: false,
+                  didOpen: () => Swal.showLoading()
+                });
+
+                fetch(`/ticket/${ticketId}/workflow/delete`, {
+                  method: "POST",
+                  headers: {
+                    "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                    "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({ step_id: stepId })
+                })
+                .then(res => res.json())
+                .then(data => {
+                  if (data.success) {
+                    Swal.fire('Dihapus!', 'Step berhasil dihapus.', 'success')
+                    .then(() => location.reload());
+                  }
+                });
+              }
+            });
+          });
+        });
+      });
+
+    // ✅ Tambahkan step baru
+      let addForm = document.getElementById("addStepForm");
+      if (addForm) {
+        addForm.addEventListener("submit", function(e){
+          e.preventDefault();
+          let name = document.getElementById("stepName").value;
+
+          Swal.fire({
+            title: 'Menambah Step...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+          });
+
+          fetch(`/ticket/${ticketId}/workflow/add`, {
+            method: "POST",
+            headers: {
+              "X-CSRF-TOKEN": "{{ csrf_token() }}",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ name: name })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              Swal.fire('Berhasil!', 'Step baru ditambahkan.', 'success')
+              .then(() => location.reload());
+            }
+          });
+        });
+      }
+    });
+  </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="container-fluid ">
+    <div class="row">
+      <div class="col-12 border-dark tiketview">
+        <div class="callout callout-warning" >
+          <div class="col-12">
+           <strong> Tiket Description </strong>
+           <span class="float-right"><i class="far fa-clock"></i><small>{{$ticket->created_at}}</small> </span> 
+         </div>
+         <hr>
+         {!! $ticket->description !!}
        </div>
-       <hr>
-       {!! $ticket->description !!}
      </div>
    </div>
  </div>
-</div>
 
 
 
-@foreach( $ticket->ticketdetail as $ticketdetail)
+ @foreach( $ticket->ticketdetail as $ticketdetail)
 
 
-<div class="container-fluid ">
+ <div class="container-fluid ">
   <div class="row">
     <div class="col-12 border-dark tiketview">
       <div class="callout callout-success" >
@@ -454,7 +799,7 @@
                   <div class="form-group ">
                     <label for="tittle">Title</label>
                     <div class="input-group ">
-                      <input disabled type="text" class="form-control" name="tittle" id="tittle"  placeholder="Ticket tittle" value="{{$ticket->tittle}}">
+                      <input readonly type="text" class="form-control" name="tittle" id="tittle"  placeholder="Ticket tittle" value="{{$ticket->tittle}}">
 
 
                     </div>
@@ -659,3 +1004,7 @@
     </div>
   </section>
   @endsection
+
+@push('summernote-script')
+<script src="{{ url('dashboard/plugins/summernote/summernote-bs4.min.js') }}"></script>
+@endpush

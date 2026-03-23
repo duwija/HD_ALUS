@@ -34,13 +34,24 @@
                     <td>{{ $loop->iteration }}</td>
                     <td>{{ $log->date }}</td>
                     <td>{{ $log->updated_by }}</td>
-                    <td>{{ $log->topic }}</td>
+                    <td>
+                        @php
+                        $topicMap = [
+                            'customerdata'     => ['label' => 'Data Update',      'class' => 'badge-primary'],
+                            'convert_to_active'=> ['label' => 'Convert to Active','class' => 'badge-success'],
+                            'mark_as_lost'     => ['label' => 'Mark as Lost',     'class' => 'badge-danger'],
+                            'reopen_lead'      => ['label' => 'Reopen Lead',      'class' => 'badge-warning'],
+                        ];
+                        $topicInfo = $topicMap[$log->topic] ?? ['label' => ucfirst(str_replace('_',' ',$log->topic)), 'class' => 'badge-secondary'];
+                        @endphp
+                        <span class="badge {{ $topicInfo['class'] }}">{{ $topicInfo['label'] }}</span>
+                    </td>
                     <td>
                         <ul>
                             @php
                             $changes = json_decode($log->updates, true);
                             @endphp
-                            @foreach ($changes as $key => $change)
+                            @forelse ($changes ?? [] as $key => $change)
                             <li><strong>{{ ucfirst($key) }}</strong>: 
                                 @if(is_array($change))
                                 <span class="text-danger">{{ $change['old'] ?? 'N/A' }}</span> → 
@@ -49,7 +60,9 @@
                                 {{ $change }}
                                 @endif
                             </li>
-                            @endforeach
+                            @empty
+                            <li class="text-muted">-</li>
+                            @endforelse
                         </ul>
                     </td>
                 </tr>

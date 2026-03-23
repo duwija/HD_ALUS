@@ -34,5 +34,13 @@ return [
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
+    'whatsapp' => [
+        'gateway_url' => env('WA_GATEWAY_URL', 'http://127.0.0.1:3005'),
+    ],
+
+    'firebase' => [
+        'project_id'  => env('FCM_PROJECT_ID', 'lubax-bill-2-0'),
+        'credentials' => env('FIREBASE_CREDENTIALS', storage_path('app/firebase-credentials.json')),
+    ],
 
 ];

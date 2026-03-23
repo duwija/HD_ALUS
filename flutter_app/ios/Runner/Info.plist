@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Kamera — untuk selfie absen -->
+	<key>NSCameraUsageDescription</key>
+	<string>Digunakan untuk mengambil foto selfie saat absen masuk dan pulang.</string>
+
+	<!-- GPS — untuk validasi lokasi absen -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Digunakan untuk memvalidasi lokasi Anda saat melakukan absensi.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Digunakan untuk memvalidasi lokasi absensi.</string>
+
+	<!-- Foto library (opsional) -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Digunakan untuk menyimpan foto absensi.</string>
+</dict>
+</plist>

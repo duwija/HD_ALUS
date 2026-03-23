@@ -1,113 +1,86 @@
 
 <script>
 
-
-  $('#myticket_filter').click(function() 
-  {
-   // document.getElementById("search_var").value = "";
-        //$('#invoice-customer').DataTable().ajax.reload();
+  $('#myticket_filter').click(function() {
     $('#table-myticket-list').DataTable().ajax.reload();
-
   });
 
-
-
+  $('#myticket_reset').on('click', function() {
+    $('[name="date_from"]').val('{{ date("Y-m-01") }}');
+    $('[name="date_end"]').val('{{ date("Y-m-d") }}');
+    $('#id_status').val('');
+    $('#table-myticket-list').DataTable().ajax.reload();
+  });
 
   var table = $('#table-myticket-list').DataTable({
     "responsive": true,
     "autoWidth": false,
     "searching": false,
     "language": {
-      "processing": "<span class='fa-stack fa-lg'>\n\
-      <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-      </span>&emsp;Processing ..."
+      "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
     },
     dom: 'lBfrtip',
     buttons: [
       'copy', 'excel', 'pdf', 'csv', 'print'
-      ],
+    ],
     "lengthMenu": [[200, 500, 1000], [200, 500, 1000]],
     processing: true,
     serverSide: true,
     ajax: {
       url: '/ticket/table_myticket_list',
       method: 'POST',
-      data: function ( d ) {
-       return $.extend( {}, d, {
-        "date_from": $(document.querySelector('[name="date_from"]')).val(),
-        "date_end": $(document.querySelector('[name="date_end"]')).val(),    
-        "id_status": $(document.querySelector('[name="id_status"]')).val(),
+      data: function(d) {
+        return $.extend({}, d, {
+          "date_from": $('[name="date_from"]').val(),
+          "date_end":  $('[name="date_end"]').val(),
+          "id_status": $('[name="id_status"]').val(),
+        });
+      },
+      dataSrc: function(json) {
+        $('#total').text(json.total || 0);
+        $('#open').text(json.open || 0);
+        $('#close').text(json.close || 0);
+        $('#inprogress').text(json.inprogress || 0);
+        $('#solve').text(json.solve || 0);
+        $('#pending').text(json.pending || 0);
 
-      } );
-     },
-
-
-     dataSrc: function(json) {
-                    // Mengupdate nilai total amount di view
-    // console.log(json); // Log data JSON untuk debugging
-      $('#total').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.total)),
-      $('#open').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.open));
-      $('#close').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.close));
-      $('#inprogress').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.inprogress));
-      $('#solve').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.solve));
-      $('#pending').text(json.pending);
-      return json.data;
-    }
-
-  },
-
-  'columnDefs': [
-
-  {
-      "targets": 1, // your case first column
-      "className": "text-center",
-
+        // MTTR
+        var mttrVal = parseFloat(json.mttr || 0);
+        var $badge  = $('#mttr_badge');
+        $('#mttr').text(mttrVal.toFixed(1));
+        $('#mttr_count').text(json.mttr_count || 0);
+        if (mttrVal === 0 || !json.mttr_count) {
+          $badge.attr('class', 'badge badge-light').html('<i class="fas fa-circle mr-1 text-secondary"></i> No Data');
+        } else if (mttrVal < 4) {
+          $badge.attr('class', 'badge badge-success').html('<i class="fas fa-check-circle mr-1"></i> Avg ' + mttrVal.toFixed(1) + ' h');
+        } else if (mttrVal < 8) {
+          $badge.attr('class', 'badge badge-warning').html('<i class="fas fa-check-circle mr-1"></i> Avg ' + mttrVal.toFixed(1) + ' h');
+        } else {
+          $badge.attr('class', 'badge badge-danger').html('<i class="fas fa-exclamation-circle mr-1"></i> Avg ' + mttrVal.toFixed(1) + ' h');
+        }
+        return json.data;
+      }
     },
-    {
-      "targets": 2, // your case first column
-      "className": "text-left",
-
-    },
-    {
-      "targets": 3, // your case first columnzZxZ
-      "className": "text-center",
-
-    },
-    {
-      "targets": 4, // your case first columnzZxZ
-      "className": "text-left",
-
-    },
-    // {
-    //   "targets": 7, // your case first column
-    //   "className": "text-center",
-
-    // },
-    
-    // // {
-    // //   "targets": 7, // your case first columnzZxZ
-    // //   "className": "text-center font-weight-bold",
-
-    // },
+    'columnDefs': [
+      { "targets": 1, "className": "text-center" },
+      { "targets": 2, "className": "text-left" },
+      { "targets": 3, "className": "text-center" },
+      { "targets": 4, "className": "text-left" },
     ],
-  columns: [
-    { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
-    {data: 'id', name: 'id'},
-    {data: 'id_customer', name: 'id_customer'},
-    {data: 'status', name: 'status'},
-    {data: 'id_categori', name: 'id_categori'},
-    {data: 'tittle', name: 'tittle'},
-    {data: 'assign_to', name: 'assign_to'},
-    {data: 'date', name: 'date'},
-
-
+    columns: [
+      { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
+      { data: 'id', name: 'id' },
+      { data: 'id_customer', name: 'id_customer' },
+      { data: 'status', name: 'status' },
+      { data: 'id_categori', name: 'id_categori' },
+      { data: 'tittle', name: 'tittle' },
+      { data: 'assign_to', name: 'assign_to' },
+      { data: 'date', name: 'date' },
+      { data: 'mttr', name: 'mttr', orderable: false, searchable: false, defaultContent: '-' },
     ],
+  });
 
-});
-
-
-
-
+</script>
 
 
 </script>

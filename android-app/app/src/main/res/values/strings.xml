@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kencana Billing</string>
+    <string name="login_title">Login Pelanggan</string>
+    <string name="login_subtitle">Akses tagihan dan informasi akun Anda</string>
+</resources>

@@ -1,0 +1,205 @@
+@extends('layout.main')
+@section('title','Customer Notification')
+@section('content')
+<section class="content-header">
+
+
+
+
+
+
+
+  <div class="card card-primary card-outline">
+    <div class="card-header">
+      <h5 class="card-title m-0"><strong>Notification</strong></h5>
+    </div>
+    <div class="card-body">
+
+
+
+
+      <div class="row">
+        <div class="col-lg-3 col-6">
+
+          <div class="small-box bg-info">
+            <div class="inner">
+              <h3>{{$custactiveinv}} Customer</h3>
+
+              <p>Send Notifications to Consumers who still have Invoices</p>
+            </div>
+            <div class="icon">
+              <i class="ion ion-bag"></i>
+            </div>
+            <!-- <a href="#" class="small-box-footer">SEND <i class="fas fa-arrow-circle-right"></i></a> -->
+
+            <form  action="/jobs/notifinv" method="POST" class="d-inline notifblocked-send" >
+              @method('get')
+              @csrf
+
+
+              <button  type="submit"  class="small-box-footer btn p-2  bg-gradient-info btn-sm bg-info  m-0 col-12 "> SEND <i class="fas fa-arrow-circle-right"></i> </button>
+            </form>
+          </div>
+        </div>
+
+<!-- <div class="col-lg-3 col-6">
+
+<div class="small-box bg-success">
+<div class="inner">
+<h3>53<sup style="font-size: 20px">%</sup></h3>
+<p>Bounce Rate</p>
+</div>
+<div class="icon">
+<i class="ion ion-stats-bars"></i>
+</div>
+<a href="#" class="small-box-footer">More info <i class="fas fa-arrow-circle-right"></i></a>
+</div>
+</div> -->
+
+<div class="col-lg-3 col-6">
+
+  <div class="small-box bg-danger">
+    <div class="inner">
+      <h3>{{$custblocked}} Customer</h3>
+      <p>Send Notifications to Consumers with Blocked Status</p>
+    </div>
+    <div class="icon">
+      <i class="ion ion-person-add"></i>
+    </div>
+    <form  action="/jobs/customerblockednotifjob" method="POST" class="d-inline notifblocked-send" >
+      @method('get')
+      @csrf
+
+
+      <button  type="submit"  class="small-box-footer btn p-2  bg-gradient-danger btn-sm bg-danger  m-0 col-12 "> SEND <i class="fas fa-arrow-circle-right"></i> </button>
+    </form>
+  </div>
+</div>
+
+
+
+
+
+</div>
+</div>
+</div>
+
+<div class="card card-primary card-outline">
+
+  <div class="card-body">
+    <div class="row">
+
+      <div class="col-lg-3 col-6">
+
+        <div class="small-box bg-danger">
+         <div class="card-header">
+          <h5 class="card-title m-0"><strong>Customer Isolir</strong></h5>
+        </div>
+        <div class="inner">
+          <h3> <div id="customercount" name="customercount"></div>
+          </h3>
+          <div id="result" name="result"></div>
+
+        </div>
+        <form  action="/jobs/customerisolirjob" method="POST" class="d-inline " >
+         @method('post')
+         @csrf
+         <div class="input-group">
+          <label class="col-lg-6 " for="site location"> Select Isolir Date </label>
+          <select name="isolir_date" id="isolir_date" onchange="getSelectedisolirdate()" class="form-control select2 col-lg-4 p-2">
+            @php
+            $numbers = [];
+            for ($i = 1; $i <= 29; $i++) {
+              $numbers[] = sprintf('%02d', $i);
+
+            }
+            @endphp
+            @foreach ($numbers as $numbers)
+            @if ($numbers == date('d'))
+            <option selected value="{{$numbers}}">{{ $numbers }}</option>
+
+
+            @else
+
+
+            <option value="{{ $numbers}}">{{ $numbers }}</option>
+
+            @endif
+
+            @endforeach
+            @php
+            echo '<script type="text/javascript">';
+            echo   'getSelectedisolirdate();';
+          echo '</script>';
+          @endphp
+        </select>
+      </div>
+      <div class="icon">
+        <i class="ion ion-locked"></i>
+      </div>
+
+
+
+      <button  type="submit"  class="small-box-footer btn p-2  bg-gradient-danger btn-sm bg-danger  m-0 col-12 notifblocked-send "> BLOCK | ISOLIR <i class="fas fa-arrow-circle-right"></i> </button>
+    </form>
+  </div>
+
+
+</div>
+
+
+
+<div class="col-lg-3 col-6">
+
+  <div class="small-box bg-info">
+    <div class="card-header">
+      <h5 class="card-title m-0"><strong>Create Monthly Invoice</strong></h5>
+    </div>
+    <div class="inner">
+      <h3>{{$customerinv}} Customer</h3>
+      <p>Create Monthly Invoice</p>
+    </div>
+    <div class="icon">
+      <i class="ion ion-card"></i>
+    </div>
+    <form  action="/jobs/customerinvjob" method="POST" class="d-inline createmonthlyinv-send" >
+      @method('get')
+      @csrf
+
+
+      <button  type="submit"  class="small-box-footer btn p-2  bg-gradient-info btn-sm bg-info  m-0 col-12 "> CREATE <i class="fas fa-arrow-circle-right"></i> </button>
+    </form>
+  </div>
+</div>
+
+
+
+
+
+</div>
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+@endsection
+
+<script type="text/javascript">
+
+  function getSelectedisolirdate()
+  {
+    var isolirdate = $('#isolir_date').val();
+    $.ajax({
+      url: '/jobs/isolirdata',
+      type: 'GET',
+      data: { isolirdate: isolirdate },
+      success: function(response) {
+        $('#result').html(response.message);
+        $('#customercount').html(response.customercount);
+      }
+    });
+  }
+</script>

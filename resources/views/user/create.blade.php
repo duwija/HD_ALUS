@@ -60,9 +60,31 @@
             <option value="Marketing">Marketing</option>
             <option value="HRD">HRD</option>
             <option value="GA">GA</option>
+            <option value="GA">Vedor</option>
             <option value="Management">Management</option>
 
           </select>
+        </div>
+        <div class="form-group col-sm-3">
+          <label for="privilege">
+            <i class="fas fa-user-shield"></i> Privilege Level
+          </label>
+          <select name="privilege" id="privilege" class="form-control @error('privilege') is-invalid @enderror">
+            <option value="user" {{ old('privilege') == 'user' ? 'selected' : '' }}>User</option>
+            <option value="admin" {{ old('privilege') == 'admin' ? 'selected' : '' }}>Admin</option>
+            <option value="hrd" {{ old('privilege') == 'hrd' ? 'selected' : '' }}>HRD</option>
+            <option value="management" {{ old('privilege') == 'management' ? 'selected' : '' }}>Management</option>
+            <option value="accounting" {{ old('privilege') == 'accounting' ? 'selected' : '' }}>Accounting</option>
+            <option value="marketing" {{ old('privilege') == 'marketing' ? 'selected' : '' }}>Marketing</option>
+            <option value="payment" {{ old('privilege') == 'payment' ? 'selected' : '' }}>Payment</option>
+            <option value="noc" {{ old('privilege') == 'noc' ? 'selected' : '' }}>Noc</option>
+            <option value="merchant" {{ old('privilege') == 'merchant' ? 'selected' : '' }}>Merchant</option>
+            <option value="vendor" {{ old('privilege') == 'vendor' ? 'selected' : '' }}>Vendor</option>
+          </select>
+          @error('privilege')
+          <div class="error invalid-feedback">{{ $message }}</div>
+          @enderror
+          <small class="text-muted">Default: User</small>
         </div>
       </div>
       {{--  <div class="row">
@@ -105,6 +127,18 @@
       @enderror
     </div>
     <div class="form-group col-sm-3">
+      <label for="supervisor_id">Supervisor / Atasan</label>
+      <select name="supervisor_id" id="supervisor_id" class="form-control select2">
+        <option value="">-- Tidak Ada --</option>
+        @foreach ($supervisors as $sup)
+        <option value="{{ $sup->id }}" {{ old('supervisor_id') == $sup->id ? 'selected' : '' }}>
+          {{ $sup->name }}{{ $sup->job_title ? ' - '.$sup->job_title : '' }}
+        </option>
+        @endforeach
+      </select>
+    </div>
+
+    <div class="form-group col-sm-3">
       <label for="groups">Assign Bank Akun</label>
       <select name="akuns[]" id="akuns" class="form-control select2" multiple>
         @foreach ($akuns as $akun)
@@ -145,10 +179,30 @@
   </div>
 </div>
 <div class="form-group">
-  <label>Upload Photo</label>
-  <input type="file" class="form-control-file m-3" name="photo" id="photo">
+  <label>Upload Photo (Square Format)</label>
+  <input type="file" class="form-control-file m-3" name="photo" id="photo" accept="image/*">
+  <input type="hidden" name="cropped_photo" id="cropped_photo">
+  <small class="text-muted d-block mb-2">Photo will be cropped to square format (1:1)</small>
+  
+  <!-- Preview Area -->
+  <div id="preview-container" style="display: none;" class="mt-3">
+    <div class="row">
+      <div class="col-md-6">
+        <h6>Original Image</h6>
+        <div style="max-width: 100%; overflow: hidden;">
+          <img id="image-preview" style="max-width: 100%;">
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h6>Cropped Preview</h6>
+        <div id="cropped-preview" style="width: 200px; height: 200px; border: 2px solid #ddd; overflow: hidden; background: #f5f5f5;"></div>
+        <button type="button" class="btn btn-success btn-sm mt-2" id="crop-button">
+          <i class="fas fa-crop"></i> Apply Crop
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
-
 
 
 
@@ -162,7 +216,20 @@
   <input type="hidden" name="create_at" value="{{now()}}" >
 </div>
 
-
+<div class="row">
+  <div class="form-group col-sm-4">
+    <label for="dashboard_preference">Dashboard Preference</label>
+    <select name="dashboard_preference" id="dashboard_preference" class="form-control">
+      <option value="" {{ old('dashboard_preference') === '' ? 'selected' : '' }}>— Default (/) —</option>
+      <option value="home-v2" {{ old('dashboard_preference') === 'home-v2' ? 'selected' : '' }}>Dashboard V2 (Teknisi)</option>
+      <option value="home-v3" {{ old('dashboard_preference') === 'home-v3' ? 'selected' : '' }}>Dashboard V3 (NOC + Network)</option>
+      <option value="home-v4" {{ old('dashboard_preference') === 'home-v4' ? 'selected' : '' }}>Dashboard V4 (Marketing)</option>
+      <option value="home-v5" {{ old('dashboard_preference') === 'home-v5' ? 'selected' : '' }}>Dashboard V5 (Accounting)</option>
+      <option value="home-admin" {{ old('dashboard_preference') === 'home-admin' ? 'selected' : '' }}>Dashboard Admin (Summary)</option>
+      <option value="attendance/dashboard" {{ old('dashboard_preference') === 'attendance/dashboard' ? 'selected' : '' }}>Dashboard HRD</option>
+    </select>
+  </div>
+</div>
 
 </div>
 <!-- /.card-body -->
@@ -187,4 +254,115 @@
 
 </section>
 
+@endsection
+
+@section('footer-scripts')
+<!-- Cropper.js CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+<!-- Cropper.js JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const photoInput = document.getElementById('photo');
+  const imagePreview = document.getElementById('image-preview');
+  const previewContainer = document.getElementById('preview-container');
+  const croppedPreview = document.getElementById('cropped-preview');
+  const cropButton = document.getElementById('crop-button');
+  const croppedPhotoInput = document.getElementById('cropped_photo');
+  const form = photoInput.closest('form');
+  let cropper = null;
+  let isCropped = false;
+
+  photoInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+      isCropped = false;
+      croppedPhotoInput.value = '';
+      
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        imagePreview.src = event.target.result;
+        previewContainer.style.display = 'block';
+        
+        if (cropper) {
+          cropper.destroy();
+        }
+        
+        cropper = new Cropper(imagePreview, {
+          aspectRatio: 1,
+          viewMode: 1,
+          autoCropArea: 1,
+          responsive: true,
+          guides: true,
+          center: true,
+          highlight: true,
+          cropBoxResizable: true,
+          cropBoxMovable: true,
+          crop: function(event) {
+            updateCroppedPreview();
+          },
+          ready: function() {
+            updateCroppedPreview();
+          }
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  function updateCroppedPreview() {
+    if (!cropper) return;
+    const canvas = cropper.getCroppedCanvas({
+      width: 200,
+      height: 200
+    });
+    croppedPreview.innerHTML = '';
+    if (canvas) {
+      croppedPreview.appendChild(canvas);
+    }
+  }
+
+  cropButton.addEventListener('click', function() {
+    if (!cropper) return;
+    const canvas = cropper.getCroppedCanvas({
+      width: 500,
+      height: 500
+    });
+    
+    if (canvas) {
+      canvas.toBlob(function(blob) {
+        const reader = new FileReader();
+        reader.onloadend = function() {
+          croppedPhotoInput.value = reader.result;
+          isCropped = true;
+          console.log('Cropped photo set:', croppedPhotoInput.value.substring(0, 50));
+          
+          Swal.fire({
+            icon: 'success',
+            title: 'Photo Cropped!',
+            text: 'Your photo has been cropped and ready to upload.',
+            timer: 2000,
+            showConfirmButton: false
+          });
+        };
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.9);
+    }
+  });
+
+  form.addEventListener('submit', function(e) {
+    if (photoInput.files.length > 0 && !isCropped && !croppedPhotoInput.value) {
+      e.preventDefault();
+      Swal.fire({
+        icon: 'warning',
+        title: 'Please Crop Your Photo',
+        text: 'You need to click "Apply Crop" button before submitting.',
+        confirmButtonText: 'OK'
+      });
+      return false;
+    }
+  });
+});
+</script>
 @endsection

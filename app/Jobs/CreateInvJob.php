@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
+use App\Mail\EmailNotification;
+use Illuminate\Support\Facades\Mail;
+use App\Helpers\WaGatewayHelper;
 
 class CreateInvJob implements ShouldQueue
 {
@@ -56,32 +59,38 @@ class CreateInvJob implements ShouldQueue
             return;
         }
 
+        // Load add-ons for this customer
+        $customerModel = \App\Customer::with('addons')->find($this->customerId);
+        $addons = $customerModel ? $customerModel->addons : collect();
+
         $month = Carbon::parse($this->inv_date)->format('mY');
         $period = Carbon::parse($this->inv_date)->format('F Y'); 
         $latest_number = uniqid();
         $invdate = Carbon::parse($this->inv_date)->format("Y-m-d");
-
+        $notif='';
+        $code = substr(md5(uniqid('', true)), 0, 10);
 
 
         $check_invoice = Invoice::where('id_customer', $customer->id)
         ->where('periode', $month)
         ->where('monthly_fee', '1')
+        ->where('payment_status', '!=', 0)
         ->first();
 
         if ($check_invoice) {
 
-           \Log::channel('invoice')->info('CID : '. $customer->customer_id. ' |' . $customer->name . ' already have monthly Inv => INFO!! ');
-           return;
-       }
-       else
-       {
+            \Log::channel('invoice')->warning('CID : '. $customer->customer_id. ' |' . $customer->name . ' already have monthly Inv => INFO!! ');
+            return;
+        }
+        else
+        {
 
            $tempcode = sha1(time()) . rand();
 
            DB::beginTransaction();
 
            try {
-            // Step 1: Create Item Invoice
+            // Step 1: Create main plan line item
             Invoice::create([
                 'id_customer' => $customer->id,
                 'monthly_fee' => '1',
@@ -95,14 +104,31 @@ class CreateInvJob implements ShouldQueue
                 'created_by' => 'System',
             ]);
 
+            // Step 1b: Create add-on line items
+            $addons_total = 0;
+            foreach ($addons as $addon) {
+                Invoice::create([
+                    'id_customer' => $customer->id,
+                    'monthly_fee' => '1',
+                    'periode' => $month,
+                    'description' => 'Add-on: ' . $addon->name,
+                    'qty' => '1',
+                    'amount' => $addon->price,
+                    'payment_status' => 3,
+                    'tax' => '0',
+                    'tempcode' => $tempcode,
+                    'created_by' => 'System',
+                ]);
+                $addons_total += $addon->price;
+            }
+
             // Step 2: Create INV
             $due_date_isolir = $customer->isolir_date - 1;
             $due_date = ($due_date_isolir < 1) ? null : Carbon::parse($invdate)->format("Y-m-" . $due_date_isolir);
 
-
-
             $tax = $customer->tax;
-            $total_amount = $customer->price + ($customer->price * $tax / 100);
+            $base_price   = $customer->price + $addons_total;
+            $total_amount = $base_price + ($base_price * $tax / 100);
             $result= Suminvoice::create([
                 'id_customer' => $customer->id,
                 'number' => $latest_number,
@@ -116,7 +142,7 @@ class CreateInvJob implements ShouldQueue
 
 
 
-            $total_tax = $customer->price * $tax / 100;
+            $total_tax = $base_price * $tax / 100;
 
 // Data dasar jurnal
             $base_data = [
@@ -126,12 +152,14 @@ class CreateInvJob implements ShouldQueue
                 'type' => 'jumum',
                 'description' => 'Invoice #' . $latest_number . ' | ' . $customer->name,
                 'note' => 'Invoice #' . $latest_number . ' | ' . $customer->customer_id . ' | ' . $customer->name,
+                'contact_id' => $customer->id,
+                'code' => $code,
             ];
 
 // 1. Catat KREDIT ke akun Pendapatan
             \App\Jurnal::create(array_merge($base_data, [
                 'id_akun' => '4-40000',
-                'kredit' => $customer->price,
+                'kredit' => $base_price,
             ]));
 
 // 2. Jika ada pajak, catat KREDIT ke akun Pajak
@@ -151,29 +179,104 @@ class CreateInvJob implements ShouldQueue
 
 
             DB::commit();
-            if ($result)
-            {
+            if ($result) {
 
-                $encryptedurl = Crypt::encryptString($customer->id);
+                $encryptedUrl = Crypt::encryptString($customer->id);
+                $duedate = $due_date ?: 'N/A';
+                if ($customer->notification == 1) {
+                    // WhatsApp Notification
+                    
+                    // Check WA Provider from tenant config
+                    $waProvider = tenant_config('wa_provider', 'gateway'); // default: gateway
 
-                $response = qontak_whatsapp_helper_info_new_inv(
-                    $customer->phone,
-                    $customer->name,
-                    $customer->customer_id,
-                    $total_amount,
-                    $due_date,
-                    "/invoice/cst/" . $encryptedurl
-                );
+                    if ($waProvider === 'qontak') {
+                        // Use Qontak WhatsApp API
+                        $response = qontak_whatsapp_helper_info_new_inv(
+                            $customer->phone,
+                            $customer->name,
+                            $customer->customer_id,
+                            $total_amount,
+                            $duedate,
+                            "/invoice/cst/" . $encryptedUrl
+                        );
+                    } else {
+                        // Use Regular WA Gateway
+                        $message = "*[Informasi Pembayaran Internet]*";
+                        $message .= "\n\n";
+                        $message .= "Yth. " . $customer->name . ",";
+                        $message .= "\n\n";
+                        $message .= "Tagihan Anda dengan Customer ID (CID) *" . $customer->customer_id . "* telah diterbitkan.";
+                        $message .= "\n*Total Tagihan:* Rp." . number_format($total_amount, 0, ',', '.') . "";
+                        $message .= "\n*Batas Pembayaran:* " . $due_date;
+                        $message .= "\n\n";
+                        $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
+                        $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedUrl;
+                        $message .= "\n\n";
+                        $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
+                        $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
+                        $message .= "\n\n";
+                        $message .= "".tenant_config('signature', env("SIGNATURE"))."";
+                        $msgresult = WaGatewayHelper::wa_payment($customer->phone, $message);
+                    }
 
+                    $notif='Notification by WhatsApp';
 
-            }
+               } elseif ($customer->notification == 2) {
+        // Email Notification
+                if (!empty($customer->email)) {
+                    $data = [
+                        'phone' => $customer->phone,
+                        'name' => $customer->name,
+                        'customer_id' => $customer->customer_id,
+                        'number' => "#" . $latest_number,
+                        'total_amount' => $total_amount,
+                        'date' => $invdate,
+                        'due_date' => $duedate,
+                        'url' => "/invoice/cst/" .$encryptedUrl,
+                    ];
 
-            \Log::channel('invoice')->info('CID : '. $customer->customer_id. ' |' . $customer->name . ' Created monthly Inv ');
+                    try {
+                        Mail::to($customer->email)->send(new EmailNotification($data));
+                        $notif='Notification by Email '.$e->getMessage();
+                    } catch (\Exception $e) {
+                       \Log::error("Gagal kirim email ke {$customer->email} untuk {$customer->name} ({$customer->customer_id}): " . $e->getMessage());
+                       $notif='Notification by Email ERROR';
 
-        } catch (Exception $e) {
-            DB::rollback();
-            \Log::channel('invoice')->error('Failed to create invoice for CID : ' . $customer->customer_id . ' |' . $customer->name . ' | Error: ' . $e->getMessage());
-        }
-    }
+                   }
+               }
+           }
+       }
+
+       // ── FCM Push Notification (selalu dikirim jika ada fcm_token) ──
+       if (!empty($customer->fcm_token)) {
+           try {
+               \App\Services\FcmService::send(
+                   $customer->fcm_token,
+                   '📄 Tagihan Baru Tersedia',
+                   'Tagihan bulan ini untuk ' . $customer->name . ' sebesar Rp ' . number_format($total_amount, 0, ',', '.') . ' telah diterbitkan.',
+                   [
+                       'type'        => 'new_invoice',
+                       'customer_id' => $customer->customer_id,
+                       'amount'      => $total_amount,
+                       'due_date'    => $due_date ?? '',
+                       'url'         => '/tagihan',
+                   ]
+               );
+           } catch (\App\Exceptions\FcmTokenUnregisteredException $eFcmUnreg) {
+               $customer->fcm_token = null;
+               $customer->save();
+               \Log::channel('notif')->warning('[FCM] Token UNREGISTERED — dihapus dari DB | CID ' . $customer->customer_id . ' | ' . $customer->name);
+           } catch (\Exception $eFcm) {
+               \Log::channel('notif')->error('[FCM] CreateInvJob error: ' . $eFcm->getMessage());
+           }
+       }
+
+       \Log::channel('invoice')->info('CID : '. $customer->customer_id. ' |' . $customer->name . ' Created monthly Inv |'. $notif);
+
+   } catch (Exception $e) {
+    DB::rollback();
+    \Log::channel('invoice')->error('Failed to create invoice for CID : ' . $customer->customer_id . ' |' . $customer->name . ' | Error: ' . $e->getMessage());
+}
+}
 }
 }

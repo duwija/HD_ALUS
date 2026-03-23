@@ -1,34 +1,41 @@
 
 <script>
 
+ $('#apply-filters').on('click', function() {
+  $('#table-distpoint-list').DataTable().ajax.reload();
+});
 
 
-  var table = $('#table-distpoint-list').DataTable({
-    "responsive": true,
-    "autoWidth": false,
-    "searching": true,
-    "language": {
-      "processing": "<span class='fa-stack fa-lg'>\n\
-      <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-      </span>&emsp;Processing ..."
-    },
-    dom: 'lBfrtip',
-    buttons: [
-      'copy', 'excel', 'pdf', 'csv', 'print'
-      ],
-    "lengthMenu": [[200, 500, 1000], [200, 500, 1000]],
-    processing: true,
-    serverSide: true,
-    ajax: {
-      url: '/distpoint/table_distpoint_list',
-      method: 'POST',
 
-      
-    },
+ var table = $('#table-distpoint-list').DataTable({
+  "responsive": true,
+  "autoWidth": false,
+  "searching": false,
+  "language": {
+    "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
+  },
+  dom: 'Bfrtip',
+  buttons: [
+   'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
+   ],
+  "lengthMenu": [[100, 200, 500, 1000], [100, 200, 500, 1000]],
+  processing: true,
+  serverSide: true,
+  ajax: {
+    url: '/distpoint/table_distpoint_list',
+    method: 'POST',
+    data: function(d) {
+      d.site = $('#filter-site').val();
+      d.group = $('#filter-group').val();
+      d.name = $('#filter-name').val();
+    }
 
-    'columnDefs': [
+    
+  },
 
-    {
+  'columnDefs': [
+
+  {
       "targets": 1, // your case first column
       "className": "text-center",
 
@@ -65,22 +72,23 @@
 
     // },
     ],
-    columns: [
-      { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
-      {data: 'name', name: 'name'},
-      {data: 'site', name: 'site'},
-      {data: 'ip', name: 'ip'},
-      {data: 'customer_count', name: 'customer_count'},
-      {data: 'security', name: 'security'},
-      {data: 'parrent', name: 'parrent'},
-      {data: 'description', name: 'description'},
+  columns: [
+    { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
+    {data: 'name', name: 'name'},
+
+    {data: 'ip', name: 'ip'},
+    {data: 'customer_count', name: 'customer_count'},
+    {data: 'security', name: 'security'},
+    {data: 'site', name: 'site'},
+    {data: 'parrent', name: 'parrent'},
+    {data: 'group', name: 'group'},
+    {data: 'description', name: 'description'},
 
 
 
-      ],
+    ],
 
-  });
-
+});
 
 
 

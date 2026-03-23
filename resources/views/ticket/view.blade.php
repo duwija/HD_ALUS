@@ -15,6 +15,7 @@
       @if (empty($date_from))
       <form role="form" method="post" action="/ticket/search">
           @csrf
+          <input type="hidden" name="id_customer" value="{{ $id_customer }}">
           <div class="row pt-2 pl-2">
             <a class=" pt-2"> Show From :</a>
             <div class="input-group p-1 col-md-2   date" id="reservationdate" data-target-input="nearest">
@@ -32,7 +33,16 @@
                 </div>
             </div>
 
-            <div class="input-group p-1 col-md-3">
+            <div class="input-group p-1 col-md-2">
+                <select name="id_categori" class="form-control">
+                    <option value="">-- Semua Kategori --</option>
+                    @foreach($category as $catId => $catName)
+                    <option value="{{ $catId }}">{{ $catName }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="input-group p-1 col-md-1">
                <button type="submit" class="btn btn-warning">show</button>
            </div> 
        </div>
@@ -43,6 +53,7 @@
 
    <form role="form" method="post" action="/ticket/search">
       @csrf
+      <input type="hidden" name="id_customer" value="{{ $id_customer }}">
       <div class="row float-right  pt-2 col-md-12 m-auto pl-4">
         <a class=" pt-2"> Show From :</a>
         <div class="input-group p-1 col-md-2   date" id="reservationdate" data-target-input="nearest">
@@ -60,7 +71,16 @@
             </div>
         </div>
 
-        <div class="input-group p-1 col-md-3">
+        <div class="input-group p-1 col-md-2">
+            <select name="id_categori" class="form-control">
+                <option value="">-- Semua Kategori --</option>
+                @foreach($category as $catId => $catName)
+                <option value="{{ $catId }}" {{ (isset($id_categori) && $id_categori == $catId) ? 'selected' : '' }}>{{ $catName }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="input-group p-1 col-md-1">
            <button type="submit" class="btn btn-warning">show</button>
        </div> 
    </div>

@@ -13,15 +13,10 @@ class Suminvoice extends Model
 {
     //
     //use softDeletes;
-    protected $fillable =['id','id_customer','number','date','tax','pph','verify','tempcode','payment_status','updated_by','created_at','deleted_at','file','total_amount','recieve_payment','payment_point','payment_id','note','payment_date','due_date'];
+    protected $fillable =['id','id_customer','number','date','tax','pph','verify','tempcode','payment_status','updated_by','created_at','deleted_at','file','total_amount','recieve_payment','payment_point','payment_id','payment_gateway','note','payment_date','due_date','merchant_fee'];
     public static  function countinv($id)
     {
-    	// //$mount = now()->format('mY');
-        // $count = $this->where('id_customer', $id)
-    	//    // ->where('periode', '=', $mount)
-        // ->where('payment_status', '=', 0)
-        // ->count();
-        // return $count;
+
 
         return static::where('id_customer', $id)
         ->where('payment_status', 0)

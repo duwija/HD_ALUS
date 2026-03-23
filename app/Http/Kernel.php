@@ -13,16 +13,18 @@ class Kernel extends HttpKernel
      *
      * @var array
      */
-    protected $middleware = [
-        // \App\Http\Middleware\TrustHosts::class,
-        \App\Http\Middleware\TrustProxies::class,
-        \Fruitcake\Cors\HandleCors::class,
-        \App\Http\Middleware\CheckForMaintenanceMode::class,
-        \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
-        \App\Http\Middleware\TrimStrings::class,
-        \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
-      // \App\Http\Middleware\XenditAuth::class,
-    ];
+        protected $middleware = [
+                // \App\Http\Middleware\TrustHosts::class,
+                \App\Http\Middleware\TenantMiddleware::class, // Multi-Tenancy Support (paling atas)
+                \App\Http\Middleware\TrustProxies::class,
+                \Fruitcake\Cors\HandleCors::class,
+                \App\Http\Middleware\CheckForMaintenanceMode::class,
+                \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
+                \App\Http\Middleware\TrimStrings::class,
+                \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+                \App\Http\Middleware\SetTenantContext::class, // Tenant Logging Context
+            // \App\Http\Middleware\XenditAuth::class,
+        ];
 
     /**
      * The application's route middleware groups.
@@ -67,5 +69,8 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'xenditauth' => \App\Http\Middleware\XenditAuth::class,
         'checkPrivilege' => \App\Http\Middleware\CheckPrivilege::class,
+        'admin' => \App\Http\Middleware\AdminMiddleware::class,
+        'filter.tenant.logs' => \App\Http\Middleware\FilterTenantLogs::class,
+        'dashboard.pref'  => \App\Http\Middleware\EnforceDashboardPreference::class,
     ];
 }

@@ -1,0 +1,1048 @@
+@extends('layout.main')
+@section('title', 'Network Dashboard')
+
+@section('content')
+<style>
+  /* === Modern Dashboard Layout === */
+  body {
+    background: #f8fafc;
+  }
+
+  .content-wrapper {
+    background: #f8fafc !important;
+  }
+
+  /* Modern Card Design */
+  .card {
+    border: none !important;
+    border-radius: 16px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06) !important;
+    margin-bottom: 1.5rem !important;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95) !important;
+  }
+
+  .card:hover {
+    box-shadow: 0 10px 25px rgba(0,0,0,0.12), 0 5px 10px rgba(0,0,0,0.08) !important;
+    transform: translateY(-2px);
+  }
+
+  .card-body {
+    padding: 1.25rem !important;
+  }
+
+  .card-header {
+    padding: 1rem 1.25rem !important;
+    border: none !important;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    border-bottom: 2px solid rgba(99, 102, 241, 0.1) !important;
+  }
+
+  .card-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.4;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-title::before {
+    content: '';
+    width: 4px;
+    height: 24px;
+    background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 2px;
+  }
+
+  /* Chart specific styles */
+  .card-success .card-header {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%) !important;
+    border-bottom: 2px solid rgba(5, 150, 105, 0.3) !important;
+  }
+
+  .card-warning .card-header {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
+    border-bottom: 2px solid rgba(217, 119, 6, 0.3) !important;
+  }
+
+  .card-info .card-header {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+    border-bottom: 2px solid rgba(37, 99, 235, 0.3) !important;
+  }
+
+  .card-primary .card-header {
+    background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%) !important;
+    border-bottom: 2px solid rgba(99, 102, 241, 0.3) !important;
+  }
+
+  .card-body canvas {
+    max-height: 200px !important;
+  }
+
+  /* === Modern Info Box Design === */
+  .info-box {
+    border-radius: 16px !important;
+    border: none !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06) !important;
+    margin-bottom: 1.25rem !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95) !important;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .info-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .info-box:hover::before {
+    opacity: 1;
+  }
+
+  .info-box:hover {
+    box-shadow: 0 10px 25px rgba(0,0,0,0.12), 0 5px 10px rgba(0,0,0,0.08) !important;
+    transform: translateY(-4px);
+  }
+
+  .info-box-icon {
+    border-radius: 12px !important;
+    width: 70px !important;
+    height: 70px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  }
+
+  .info-box .info-box-content {
+    line-height: 1.6;
+    padding-left: 1rem;
+  }
+
+  .info-box-text {
+    font-weight: 600;
+    color: #475569;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .info-box-number {
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+  }
+
+  @media (max-width: 768px) {
+    .card-body canvas {
+      max-height: 160px !important;
+    }
+  }
+  
+  /* === Modern Refresh Button === */
+  .card-header {
+    position: relative;
+  }
+
+  .card-header .refresh-router,
+  .card-header .refresh-olt {
+    position: absolute;
+    right: 1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    border: none;
+    color: white !important;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+    transition: all 0.3s ease;
+  }
+
+  .card-header .refresh-router:hover,
+  .card-header .refresh-olt:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    transform: translateY(-50%) scale(1.05);
+  }
+
+  .card-header .refresh-router i,
+  .card-header .refresh-olt i {
+    margin-right: 0.5rem;
+  }
+
+  /* === Modern Glass-morphism Router & OLT Cards === */
+  .router-card, .olt-card {
+    border-radius: 16px;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.06);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    margin-bottom: 1.25rem;
+    position: relative;
+  }
+
+  .router-card::before,
+  .olt-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, currentColor, transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .router-card::before {
+    color: #6366f1;
+  }
+
+  .olt-card::before {
+    color: #06b6d4;
+  }
+
+  .router-card:hover::before,
+  .olt-card:hover::before {
+    opacity: 1;
+  }
+
+  .router-card:hover, .olt-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08);
+  }
+
+  .router-card .card-header {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    padding: 1rem 1.25rem !important;
+    border: none;
+  }
+
+  .olt-card .card-header {
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important;
+    padding: 1rem 1.25rem !important;
+    border: none;
+  }
+
+  .router-card .card-title,
+  .olt-card .card-title {
+    color: white !important;
+    font-weight: 700;
+    font-size: 1rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    letter-spacing: -0.01em;
+  }
+
+  .router-card .card-title i,
+  .olt-card .card-title i {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 1.25rem;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+  }
+
+  .router-card .card-body,
+  .olt-card .card-body {
+    padding: 1.25rem !important;
+    background: white;
+  }
+
+  .router-card .badge,
+  .olt-card .badge {
+    padding: 0.375rem 0.75rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.75rem;
+    margin: 0.25rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
+  }
+
+  .router-card .badge:hover,
+  .olt-card .badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+    margin: 2px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .router-card .badge-info,
+  .olt-card .badge-info {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    color: white;
+  }
+
+  .router-card .badge-success,
+  .olt-card .badge-success {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    color: white;
+  }
+
+  .router-card .badge-danger,
+  .olt-card .badge-danger {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    color: white;
+  }
+
+  .router-card .badge-warning,
+  .olt-card .badge-warning {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    color: white;
+  }
+
+  .router-card .badge-secondary,
+  .olt-card .badge-secondary {
+    background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+    color: white;
+  }
+
+  .router-card a,
+  .olt-card a {
+    color: #6366f1;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+
+  .router-card a:hover,
+  .olt-card a:hover {
+    color: #4f46e5;
+    text-decoration: none;
+    transform: translateX(2px);
+  }
+
+  .router-card .small,
+  .olt-card .small {
+    font-size: 0.8125rem;
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  /* === Modern Section Headers === */
+  h5.mt-1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    padding: 1.25rem 0 0.75rem 0;
+    margin-bottom: 1.25rem !important;
+    position: relative;
+    letter-spacing: -0.02em;
+  }
+
+  h5.mt-1::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 60px;
+    height: 4px;
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 2px;
+  }
+
+  h5.mt-1 i {
+    margin-right: 0.75rem;
+    color: #6366f1;
+    filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2));
+  }
+
+  /* === Timeline Card Styling === */
+  .timeline-item {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    backdrop-filter: blur(10px);
+    padding: 1.25rem 1.5rem !important;
+    margin-bottom: 1.25rem !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .timeline-item:hover::before {
+    opacity: 1;
+  }
+
+  .timeline-item:hover {
+    box-shadow: 0 10px 25px rgba(0,0,0,0.12), 0 5px 10px rgba(0,0,0,0.08);
+    transform: translateY(-4px);
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  /* Status Badge di pojok kanan atas */
+  .timeline-item .status-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    z-index: 10;
+  }
+
+  .timeline-item .time {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    padding: 0.5rem 0.875rem !important;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    color: #475569;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    display: inline-block;
+  }
+
+  .timeline-item strong {
+    color: #0f172a;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .timeline-item .small {
+    color: #64748b;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .timeline-header {
+    margin: 0.75rem 0;
+  }
+
+  .timeline-header a {
+    color: #1e293b;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+
+  .timeline-header a:hover {
+    color: #6366f1;
+  }
+
+  /* === Ticket ID Badge - Modern Gradient Design === */
+  .badge-modern {
+    padding: 0.625rem 1.25rem;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.875rem;
+    display: inline-block;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .badge-modern:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+  }
+
+  .badge-Open {
+    background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
+    color: white;
+  }
+
+  .badge-Pending {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    color: #78350f;
+  }
+
+  .badge-Inprogress {
+    background: linear-gradient(135deg, #22d3ee 0%, #0891b2 100%);
+    color: white;
+  }
+
+  .badge-Solve {
+    background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+    color: white;
+  }
+
+  .badge-Close {
+    background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+    color: white;
+  }
+
+  /* === Status Badge - Soft Pill Design === */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-radius: 24px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 2px solid transparent;
+  }
+
+  .status-badge:before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+    background: currentColor;
+    opacity: 0.9;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 0.9;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(0.9);
+    }
+  }
+
+  .status-badge:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    border-color: currentColor;
+  }
+
+  .status-badge.badge-danger {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: #dc2626;
+    border-color: rgba(220, 38, 38, 0.3);
+  }
+
+  .status-badge.badge-warning {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #d97706;
+    border-color: rgba(217, 119, 6, 0.3);
+  }
+
+  .status-badge.badge-info {
+    background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
+    color: #0891b2;
+    border-color: rgba(8, 145, 178, 0.3);
+  }
+
+  .status-badge.badge-success {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #059669;
+    border-color: rgba(5, 150, 105, 0.3);
+  }
+
+  .status-badge.badge-secondary {
+    background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+    color: #6b7280;
+    border-color: rgba(107, 114, 128, 0.3);
+  }
+
+  .status-badge.badge-primary {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #2563eb;
+    border-color: rgba(37, 99, 235, 0.3);
+  }
+
+  /* Remove old ribbon styles */
+  .ribbon-wrapper {
+    position: relative;
+    margin-bottom: 0.75rem;
+  }
+
+  .ribbon-wrapper .ribbon {
+    display: none;
+  }
+
+  .timeline-body {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 2px solid #f1f5f9;
+  }
+
+  .timeline-body strong {
+    color: #0f172a;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    font-weight: 600;
+  }
+
+  /* === Modern Workflow Progress Styling === */
+  .workflow-wrapper {
+    padding: 1.5rem 0;
+    margin: 1rem 0;
+  }
+
+  .base-line {
+    height: 3px;
+    background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e1 100%);
+    top: 18px;
+    left: 0;
+    border-radius: 2px;
+  }
+
+  .progress-line {
+    height: 3px;
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+    top: 18px;
+    left: 0;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 2px;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+  }
+
+  .step-dot {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 0.75rem;
+    position: relative;
+    z-index: 2;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+
+  .step-dot.pending {
+    background: white;
+    border: 3px solid #cbd5e0;
+    color: #94a3b8;
+  }
+
+  .step-dot.active {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border: 3px solid #6366f1;
+    color: white;
+    box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.2), 0 4px 12px rgba(99, 102, 241, 0.3);
+    animation: workflowPulse 2s ease-in-out infinite;
+    transform: scale(1.1);
+  }
+
+  .step-dot.done {
+    background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+    border: 3px solid #10b981;
+    color: white;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  }
+
+  @keyframes workflowPulse {
+    0%, 100% {
+      box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.2), 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 0 10px rgba(99, 102, 241, 0.1), 0 6px 16px rgba(99, 102, 241, 0.4);
+    }
+  }
+
+  .step-label {
+    font-size: 0.6875rem;
+    color: #475569;
+    font-weight: 600;
+    padding: 0 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* === Contact Info Styling === */
+  .timeline-item .col-md-5 {
+    font-size: 0.8125rem;
+    color: #475569;
+    font-weight: 500;
+  }
+
+  /* === 2 Column Layout for Timeline === */
+  .timeline-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+  }
+
+  @media (max-width: 992px) {
+    .timeline-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .timeline-grid .timeline-item {
+    margin-bottom: 0 !important;
+  }
+
+  /* === Load More Button - Modern Gradient === */
+  #load-more-timeline {
+    padding: 0.75rem 2rem;
+    border-radius: 12px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border: none;
+    color: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.875rem;
+  }
+
+  #load-more-timeline:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  }
+
+  #load-more-timeline:active {
+    transform: translateY(-1px);
+  }
+</style>
+
+<div class="container-fluid">
+
+  {{-- Header --}}
+  <div class="row mb-2">
+    <div class="col-md-6 d-flex align-items-center">
+      <!-- <h5 class="mb-0">📡 Network Dashboard</h5> -->
+    </div>
+<!--     <div class="col-md-6 text-right">
+      <form method="GET" action="/home/network" class="form-inline justify-content-end">
+        <label for="date_start" class="mr-2">Dari:</label>
+        <input type="date" id="date_start" name="date_start" class="form-control mr-2"
+        value="{{ request('date_start', date('Y-m-d')) }}">
+        <label for="date_end" class="mr-2">s/d</label>
+        <input type="date" id="date_end" name="date_end" class="form-control mr-2"
+        value="{{ request('date_end', date('Y-m-d')) }}">
+        <button type="submit" class="btn btn-primary btn-sm">Tampilkan</button>
+      </form>
+    </div> -->
+  </div>
+
+  {{-- ================== INFO BOX ================== --}}
+  <div class="row">
+    <div class="col-md-3">
+      {{-- Ticket Info --}}
+      <div class="info-box">
+        <span class="info-box-icon bg-info elevation-1"><a href="/ticket"><i class="fas fa-ticket-alt text-white"></i></a></span>
+        <div class="info-box-content">
+          <span class="info-box-text mb-1"><strong>Tickets</strong></span>
+          <span>
+            <span class="badge badge-danger mr-1">Open: <b>{{ $ticket_count_per_status['Open'] ?? 0 }}</b></span>
+            <span class="badge badge-warning mr-1">Pending: <b>{{ $ticket_count_per_status['Pending'] ?? 0 }}</b></span>
+            <span class="badge badge-info mr-1">Inprogress: <b>{{ $ticket_count_per_status['Inprogress'] ?? 0 }}</b></span>
+            <span class="badge badge-success mr-1">Solve: <b>{{ $ticket_count_per_status['Solve'] ?? 0 }}</b></span>
+            <span class="badge badge-secondary">Close: <b>{{ $ticket_count_per_status['Close'] ?? 0 }}</b></span>
+          </span>
+        </div>
+      </div>
+
+      {{-- Invoice Info --}}
+      <div class="info-box">
+        <span class="info-box-icon bg-danger elevation-1"><a href="/suminvoice"><i class="fas fa-money-check-alt text-white"></i></a></span>
+        <div class="info-box-content">
+          <span class="info-box-text">Pending Invoice</span>
+          <span class="info-box-number">{{ $invoice_count }}</span>
+        </div>
+      </div>
+
+      {{-- Transaction Info --}}
+      <div class="info-box">
+        <span class="info-box-icon bg-success elevation-1"><a href="/suminvoice/transaction"><i class="fas fa-cash-register text-white"></i></a></span>
+        <div class="info-box-content">
+          <span class="info-box-text">Transaction</span>
+          <span class="info-box-number">{{ $invoice_paid }}</span>
+        </div>
+      </div>
+
+      {{-- Customer Info --}}
+      <div class="info-box">
+        <span class="info-box-icon bg-warning elevation-1"><a href="/customer"><i class="fas fa-users text-white"></i></a></span>
+        <div class="info-box-content" style="font-size: 14px">
+          <span class="info-box-text">Active: <b>{{ $cust_active }}</b></span>
+          <span class="info-box-text">Blocked: <b>{{ $cust_block }}</b></span>
+          <span class="info-box-text">Inactive: <b>{{ $cust_inactive }}</b></span>
+          <span class="info-box-text">Potential: <b>{{ $cust_potensial }}</b></span>
+        </div>
+      </div>
+    </div>
+
+    {{-- ================== CHART AREA ================== --}}
+    <div class="col-md-9">
+      <div class="row">
+        {{-- Customer Status --}}
+        <div class="col-md-6 d-flex align-items-stretch">
+          <div class="card card-success card-outline flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h3 class="card-title mb-0">Customer Status</h3>
+            </div>
+            <div class="card-body p-2">
+              <canvas id="customerStatusChart" height="150"></canvas>
+            </div>
+          </div>
+        </div>
+
+        {{-- Tickets by Category --}}
+        <div class="col-md-6 d-flex align-items-stretch">
+          <div class="card card-warning card-outline flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h3 class="card-title mb-0">Tickets by Category</h3>
+            </div>
+            <div class="card-body p-2">
+              <canvas id="ticketCategoryChart" height="150"></canvas>
+            </div>
+          </div>
+        </div>
+
+        {{-- New Customers --}}
+        <div class="col-md-6 d-flex align-items-stretch">
+          <div class="card card-primary card-outline flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h3 class="card-title mb-0">New Customers</h3>
+              <span class="badge badge-info badge-pill">Total: {{ $totalNewCustomers ?? 0 }}</span>
+            </div>
+            <div class="card-body p-2">
+              <canvas id="dailyNewCustomersChart" height="150"></canvas>
+            </div>
+          </div>
+        </div>
+
+        {{-- Daily Transactions - Only for Admin & Accounting --}}
+        @if(in_array(Auth::user()->privilege, ['admin', 'accounting']))
+        <div class="col-md-6 d-flex align-items-stretch">
+          <div class="card card-info card-outline flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h3 class="card-title mb-0">Daily Transactions</h3>
+            </div>
+            <div class="card-body p-2">
+              <canvas id="dailyTransactionChart" height="150"></canvas>
+            </div>
+          </div>
+        </div>
+        @endif
+      </div>
+    </div>
+  </div>
+
+  {{-- ================== DISTRIBUTION ROUTERS ================== --}}
+  <h5 class="mt-1 mb-1"><i class="fas fa-network-wired"></i> Distribution Routers</h5>
+  <div class="row" id="router-card-list">
+    @foreach($distrouter as $router)
+    <div class="col-lg-3 col-md-4 mb-3">
+      <div class="card shadow-sm border-0 router-card" data-id="{{ $router->id }}" data-ip="{{ $router->ip }}">
+        <div class="card-header bg-gradient-primary text-white py-2 d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-server mr-1"></i> {{ $router->name }}</span>
+          <button class="btn btn-light btn-xs refresh-router" data-id="{{ $router->id }}"><i class="fas fa-sync"></i></button>
+        </div>
+        <div class="card-body p-2 text-center">
+          <div id="pppoe-{{ $router->id }}" class="my-2 small text-muted">Loading...</div>
+          <a href="/distrouter/{{ $router->id }}" target="_blank" class="d-block small text-primary">
+            <i class="fas fa-globe"></i> {{ $router->ip }}
+          </a>
+
+        </div>
+      </div>
+    </div>
+    @endforeach
+  </div>
+
+  {{-- ================== OLT DEVICES LIST ================== --}}
+  <h5 class="mt-1 mb-1"><i class="fas fa-microchip"></i> OLT Devices</h5>
+  <div class="row" id="olt-card-list">
+    @foreach($olts as $olt)
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+      <div class="card shadow-sm border-0 olt-card" data-id="{{ $olt->id }}">
+        <div class="card-header bg-gradient-info text-white py-2 d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-microchip mr-1"></i> {{ $olt->name }}</span>
+          <button class="btn btn-light btn-xs refresh-olt" data-id="{{ $olt->id }}"><i class="fas fa-sync"></i></button>
+        </div>
+        <div class="card-body text-center p-2">
+          <div id="olt-info-{{ $olt->id }}" class="my-2 small text-muted">Loading...</div>
+          <a href="/olt/{{ $olt->id }}" target="_blank" class="d-block small text-primary">
+           <i class="fas fa-map-marker-alt"></i> {{ $olt->ip ?? '-' }}
+         </a>
+         <!-- <div class="mt-2"><button class="btn btn-sm btn-outline-info show-olt-detail" data-id="{{ $olt->id }}">Detail</button></div> -->
+       </div>
+     </div>
+   </div>
+   @endforeach
+ </div>
+
+  <h5 class="mt-1 mb-1"><i class="fas fa-clipboard-list"></i> Tickets & Job Schedule</h5>
+ <section class="content">
+  <div class="container-fluid">
+    <!-- Timelime example  -->
+    <div class="row">
+      <div class="col-12">
+        <!-- The time line -->
+        <div class="timeline-grid" id="timeline-list">
+          @include('partials.timeline_items', ['tickets' => $ticket])
+        </div>
+        <!-- /.timeline -->
+        
+        <div class="text-center my-3" id="load-more-info" style="display: {{ count($ticket) >= 10 ? 'block' : 'none' }}">
+          <span class="spinner-border spinner-border-sm mr-2 d-none" id="timeline-loading"></span>
+          <button class="btn btn-outline-primary btn-sm" id="load-more-timeline">Load More</button>
+        </div>
+        <input type="hidden" id="page" value="1">
+      </div>
+      <!-- /.col -->
+    </div>
+  </div>
+  <!-- /.timeline -->
+
+</section>
+<!-- /.content -->
+
+</div>
+@endsection
+
+@section('footer-scripts')
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // === CHARTS ===
+  const ctxStatus = document.getElementById('customerStatusChart').getContext('2d');
+  new Chart(ctxStatus, {
+    type: 'bar',
+    data: {
+      labels: ['Potential', 'Active', 'Inactive', 'Blocked'],
+      datasets: [{ data: [{{ $cust_potensial }}, {{ $cust_active }}, {{ $cust_inactive }}, {{ $cust_block }}],
+        backgroundColor: ['#FFCC00', '#28A745', '#6C757D', '#DC3545'] }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  const ticketReport = @json($ticket_report);
+  new Chart(document.getElementById('ticketCategoryChart').getContext('2d'), {
+    type: 'pie',
+    data: {
+      labels: ticketReport.map(t => t.name),
+      datasets: [{
+        data: ticketReport.map(t => t.count),
+        backgroundColor: ['#007BFF','#28A745','#FFC107','#DC3545','#6F42C1','#20C997','#17A2B8','#E83E8C']
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            label: (tooltipItem) => {
+              const total = ticketReport.reduce((a,b)=>a+b.count,0);
+              const pct = ((tooltipItem.raw/total)*100).toFixed(1);
+              return `${tooltipItem.label}: ${tooltipItem.raw} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const dailyNewCustomers = @json($dailyNewCustomers);
+  new Chart(document.getElementById('dailyNewCustomersChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: dailyNewCustomers.map(i=>i.date),
+      datasets: [{ label: 'New Customers', data: dailyNewCustomers.map(i=>i.new_count),
+        borderColor: '#007BFF', backgroundColor: 'rgba(0,123,255,0.2)', fill: true, tension: 0.3 }]
+    }
+  });
+
+  const dailyData = @json($dailyTransactions);
+  @if(in_array(Auth::user()->privilege, ['admin', 'accounting']))
+  new Chart(document.getElementById('dailyTransactionChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: dailyData.map(i=>i.date),
+      datasets: [
+        { label: 'Jumlah Transaksi', data: dailyData.map(i=>i.volume), backgroundColor: 'rgba(54,162,235,0.6)' },
+        { label: 'Total Pembayaran', data: dailyData.map(i=>i.total_paid), type: 'line', borderColor: 'rgba(255,99,132,0.8)', fill: false }
+        ]
+    }
+  });
+  @endif
+
+  // === ROUTER & OLT AUTO REFRESH ===
+  $(function(){
+    function renderRouterSummary(container,data){
+      let html = `
+      <div class="badge badge-info mr-1 p-1">Total: ${data.pppUserCount||0}</div>
+      <div class="badge badge-success mr-1 p-1">Active: ${data.pppActiveCount||0}</div>
+      <div class="badge badge-danger mr-1 p-1">Offline: ${data.pppOfflineCount||0}</div>
+      <div class="badge badge-secondary p-1">Disabled: ${data.pppDisabledCount||0}</div>`;
+      $(container).html(html);
+    }
+
+    function fetchRouterInfo(id){
+      const target='#pppoe-'+id;
+      $(target).html('<span class="spinner-border spinner-border-sm text-muted"></span>');
+      $.get(`/distrouter/getrouterinfo/${id}`,r=>{
+        if(r.success) renderRouterSummary(target,r);
+        else $(target).html('<span class="text-warning small">No data</span>');
+      }).fail(()=>$(target).html('<span class="text-danger small">Error</span>'));
+    }
+
+    function renderOltSummary(container,data){
+      let o=data.oltInfo;
+      let html=`<div class="badge badge-primary mr-1 p-1">Total: ${o.onuCount||0}</div>
+      <div class="badge badge-success mr-1 p-1">Online: ${o.working||0}</div>
+      <div class="badge badge-danger mr-1 p-1">LOS: ${o.los||0}</div>
+      <div class="badge badge-warning mr-1 p-1">Dyinggasp: ${o.dyinggasp||0}</div>
+      <div class="badge badge-secondary p-1">Offline: ${o.offline||0}</div>`;
+      $(container).html(html);
+    }
+
+    function fetchOltInfo(id){
+      const target='#olt-info-'+id;
+      $(target).html('<span class="spinner-border spinner-border-sm text-muted"></span>');
+      $.get(`/olt/getoltinfo/${id}`,r=>{
+        if(r.success) renderOltSummary(target,r);
+        else $(target).html('<span class="text-warning small">No data</span>');
+      }).fail(()=>$(target).html('<span class="text-danger small">Error</span>'));
+    }
+
+    @foreach($distrouter as $r) fetchRouterInfo({{ $r->id }}); @endforeach
+    @foreach($olts as $o) fetchOltInfo({{ $o->id }}); @endforeach
+
+    $(document).on('click','.refresh-router',e=>fetchRouterInfo($(e.currentTarget).data('id')));
+    $(document).on('click','.refresh-olt',e=>fetchOltInfo($(e.currentTarget).data('id')));
+
+    // Auto-refresh tiap 3 menit
+    setInterval(()=>{
+      @foreach($distrouter as $r) fetchRouterInfo({{ $r->id }}); @endforeach
+      @foreach($olts as $o) fetchOltInfo({{ $o->id }}); @endforeach
+    },180000);
+  });
+</script>
+@endsection

@@ -1,9 +1,11 @@
 @extends('layout.main')
 @section('title',' Edit Plan')
 @section('content')
-<section class="content-header">
+<div class="container-fluid">
+  <div class="row justify-content-center">
+    <div class="col-xl-6 col-lg-7 col-12">
 
-  <div class="card card-primary card-outline">
+      <div class="card card-primary card-outline">
               <div class="card-header">
                 <h3 class="card-title font-weight-bold"> Edit Plan </h3>
               </div>
@@ -40,10 +42,8 @@
             </div>
             <!-- /.card -->
 
-            <!-- Form Element sizes -->
-   
-
-          </div>
-          </section>
+    </div>
+  </div>
+</div>
 
 @endsection

@@ -1,0 +1,97 @@
+@extends('layout.main')
+@section('title', 'OLT')
+
+@section('content')
+<section class="content-header">
+  <div class="card card-primary card-outline">
+    <div class="card-header">
+      <h3 class="card-title font-weight-bold">Show Detail Olt</h3>
+    </div>
+
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header">
+              <h5 class="card-title">OLT Details</h5>
+            </div>
+            <div class="card-body">
+              <p><strong>Name:</strong> {{ $olt->name }}</p>
+              <p><strong>IP Address:</strong> {{ $olt->ip }}</p>
+              <p><strong>Type:</strong> {{ $olt->type }}</p>
+              <p><strong>User:</strong> {{ $olt->user }}</p>
+              <p><strong>SNMP Port:</strong> {{ $olt->snmp_port }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header">
+              <h5 class="card-title">Retrieved OLT Information</h5>
+            </div>
+            <div class="card-body">
+              <div id="snmpTableContainer" style="display:none;">
+                <table id="snmp-table" class="display" style="width:100%">
+                  <thead>
+                    <tr>
+                      <th>ONU Name</th>
+                      <th>ONU Status</th>
+                      <th>Rx Power</th>
+                      <th>Tx Power</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+
+              <div id="olt-info">
+                <div id="spinner" style="display:block;">
+                  <p>Loading...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.3/js/jquery.dataTables.min.js"></script>
+<script>
+  $(document).ready(function () {
+    $.ajax({
+      url: '/olt/getoltonu/2', // Menggunakan route untuk URL
+      type: 'GET',
+      success: function (data) {
+        $('#spinner').hide();
+
+        if (data.data && data.data.length > 0) {
+          $('#snmpTableContainer').show();
+
+          $('#snmp-table').DataTable({
+            data: data.data,
+            columns: [
+              { data: 'onu_name' },
+              { data: 'onu_status' },
+              { data: 'rx_power' },
+              // { data: 'tx_power' }
+              ],
+            destroy: true,
+            responsive: true,
+            searching: true
+          });
+        } else {
+          $('#olt-info').html('<div class="alert alert-danger">Tidak ada data yang ditemukan.</div>');
+        }
+      },
+      error: function (xhr, status, error) {
+        $('#spinner').hide();
+        $('#olt-info').html('<div class="alert alert-danger">Terjadi kesalahan saat mengambil data.</div>');
+      }
+    });
+  });
+</script>
+@endsection

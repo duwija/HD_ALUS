@@ -1,25 +1,28 @@
 
 <script>
 
-  // input.addEventListener("keypress", function(event) {
-  // // If the user presses the "Enter" key on the keyboard
-  //   if (event.key === "Enter") {
-  //   // Cancel the default action, if needed
-  //     event.preventDefault();
-  //   // Trigger the button element with a click
+  // Init datepickers
+  $(function () {
+    if ($.fn.datetimepicker) {
+      $('#gt_date_from_picker').datetimepicker({ format: 'YYYY-MM-DD' });
+      $('#gt_date_end_picker').datetimepicker({ format: 'YYYY-MM-DD', useCurrent: false });
+    }
+  });
 
+  // Apply Filters
+  $('#groupticket_filter').on('click', function() {
+    $('#table-groupticket-list').DataTable().ajax.reload();
+  });
 
-  //     document.getElementById("ticket_filter").click();
-  //   }
-  // });
-
-  $('#groupticket_filter').click(function() 
-  {
-   // document.getElementById("search_var").value = "";
-        //$('#invoice-customer').DataTable().ajax.reload();
-   $('#table-groupticket-list').DataTable().ajax.reload();
-
- });
+  // Reset Filters
+  $('#groupticket_reset').on('click', function() {
+    $('#gt_date_from').val('{{ date("Y-m-01") }}');
+    $('#gt_date_end').val('{{ date("Y-m-d") }}');
+    $('#id_categori').val('');
+    $('#assign_to').val('');
+    $('#id_status').val('');
+    $('#table-groupticket-list').DataTable().ajax.reload();
+  });
 
 
 
@@ -29,15 +32,13 @@
     "autoWidth": false,
     "searching": false,
     "language": {
-      "processing": "<span class='fa-stack fa-lg'>\n\
-      <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-      </span>&emsp;Processing ..."
+      "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
     },
-    dom: 'lBfrtip',
+    dom: 'Bfrtip',
     buttons: [
-      'copy', 'excel', 'pdf', 'csv', 'print'
+      'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
       ],
-    "lengthMenu": [[200, 500, 1000], [200, 500, 1000]],
+    "lengthMenu": [[100, 200, 500, 1000], [100, 200, 500, 1000]],
     processing: true,
     serverSide: true,
     ajax: {
@@ -45,25 +46,34 @@
       method: 'POST',
       data: function ( d ) {
        return $.extend( {}, d, {
-        "date_from": $(document.querySelector('[name="date_from"]')).val(),
-        "date_end": $(document.querySelector('[name="date_end"]')).val(),
-        "id_categori": $(document.querySelector('[name="id_categori"]')).val(),
-        "assign_to": $(document.querySelector('[name="assign_to"]')).val(),
-        "id_status": $(document.querySelector('[name="id_status"]')).val(),
-
+        "date_from": $('#gt_date_from').val(),
+        "date_end":   $('#gt_date_end').val(),
+        "id_categori": $('#id_categori').val(),
+        "assign_to":   $('#assign_to').val(),
+        "id_status":   $('#id_status').val(),
       } );
      },
 
 
      dataSrc: function(json) {
-                    // Mengupdate nilai total amount di view
-    // console.log(json); // Log data JSON untuk debugging
-      $('#total').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.total)),
-      $('#open').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.open));
-      $('#close').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.close));
-      $('#inprogress').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.inprogress));
-      $('#solve').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.solve));
-      $('#pending').text(json.pending);
+      var fmt = function(n){ return new Intl.NumberFormat('id-ID').format(n||0); };
+      $('#total').text(fmt(json.total));
+      $('#open').text(fmt(json.open));
+      $('#close').text(fmt(json.close));
+      $('#inprogress').text(fmt(json.inprogress));
+      $('#solve').text(fmt(json.solve));
+      $('#pending').text(fmt(json.pending));
+      // MTTR card
+      var hrs   = json.mttr   || 0;
+      var cnt   = json.mttr_count || 0;
+      $('#mttr_hours').text(hrs);
+      $('#mttr_count').text(cnt);
+      if (cnt > 0) {
+        var cls = hrs < 4 ? 'badge-success' : (hrs < 8 ? 'badge-warning' : 'badge-danger');
+        $('#mttr_badge').attr('class','badge '+cls).html('<i class="fas fa-check-circle mr-1"></i> Avg '+hrs+' h');
+      } else {
+        $('#mttr_badge').attr('class','badge badge-light').html('<i class="fas fa-circle mr-1 text-secondary"></i> No Data');
+      }
       return json.data;
     }
 
@@ -108,14 +118,17 @@
     {data: 'date', name: 'date'},
     {data: 'id', name: 'id'},
     {data: 'id_customer', name: 'id_customer'},
+    {data: 'address', name: 'address'},
     {data: 'merchant', name: 'merchant'},
     {data: 'status', name: 'status'},
     {data: 'id_categori', name: 'id_categori'},
     {data: 'tittle', name: 'tittle'},
+    {data: 'tags', name: 'tags', orderable: false, searchable: false},
     {data: 'assign_to', name: 'assign_to'},
-    
     {data: 'created_at', name: 'created_at'},
     {data: 'solved_at', name: 'solved_at'},
+    {data: 'progress', name: 'progress', orderable: false, searchable: false},
+    {data: 'mttr', name: 'mttr', orderable: false, searchable: false},
 
 
     ],

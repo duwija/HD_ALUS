@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Spatie\LaravelImageOptimizer\Facades\ImageOptimizer;
 
+
+
 class TicketdetailController extends Controller
 {
    public function __construct()
@@ -97,23 +99,42 @@ class TicketdetailController extends Controller
         ]);
 
         $description = $request->input('description');
-        $dom = new \DomDocument();
-        $dom->loadHtml($description, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-        $images = $dom->getElementsByTagName('img');
 
-        foreach ($images as $key => $img) {
-            $data = $img->getAttribute('src');
+    // Penting: Convert HTML sebelum load
+        $description = mb_convert_encoding($description, 'HTML-ENTITIES', 'UTF-8');
+        $dom = new \DomDocument();
+
+       libxml_use_internal_errors(true); // Suppress warning
+       $dom->loadHtml($description, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+       libxml_clear_errors();
+
+       $images = $dom->getElementsByTagName('img');
+
+       $rescode   = config('app.rescode') ?? config('tenant.rescode', 'default');
+       $uploadDir = public_path("tenants/{$rescode}/ticket");
+       if (!is_dir($uploadDir)) {
+           mkdir($uploadDir, 0755, true);
+       }
+
+       foreach ($images as $key => $img) {
+        $data = $img->getAttribute('src');
+
+        // Skip non-base64 (already saved URLs)
+        if (strpos($data, 'data:') !== 0) {
+            continue;
+        }
 
         // Memeriksa apakah gambar menggunakan base64
-            if (strpos($data, 'base64,') !== false) {
-                list($type, $data) = explode(';', $data);
-                list(, $data) = explode(',', $data);
-                $data = base64_decode($data);
+        if (strpos($data, 'base64,') !== false) {
+            list($type, $data) = explode(';', $data);
+            list(, $data) = explode(',', $data);
+            $data = base64_decode($data);
 
             // Menentukan ekstensi file dari tipe MIME
             $mimeType = explode('/', $type)[1]; // Contoh hasil: jpg, png, dll.
-            $image_name = "/upload/ticket/" . time() . $key . '.' . $mimeType;
-            $path = public_path() . $image_name;
+            $filename   = time() . $key . '.' . $mimeType;
+            $image_name = "/tenants/{$rescode}/ticket/{$filename}";
+            $path = $uploadDir . '/' . $filename;
 
             // Menyimpan gambar sementara
             file_put_contents($path, $data);
@@ -142,19 +163,21 @@ class TicketdetailController extends Controller
     // // return redirect($url)->with('success', 'Item created successfully!');
     //  return redirect->back()->with('success', 'Item created successfully!');
 
-     $ticketDetail = \App\Ticketdetail::create([
-    'id_ticket' => $request->id_ticket,
-    'description' => $description,
-    'updated_by' => $request->updated_by,
-]);
+    $ticketDetail = \App\Ticketdetail::create([
+        'id_ticket'   => $request->id_ticket,
+        'description' => $description,
+        'updated_by'  => $request->updated_by,
+        'coordinate'  => $request->input('coordinate'),
+        'device_type' => $request->input('device_type'),
+    ]);
 
-if ($ticketDetail) {
+    if ($ticketDetail) {
     // Redirect ke halaman sebelumnya dengan pesan sukses
-    return redirect()->back()->with('success', 'Item created successfully!');
-} else {
+        return redirect()->back()->with('success', 'Item created successfully!');
+    } else {
     // Redirect ke halaman sebelumnya dengan pesan error jika gagal
-    return redirect()->back()->with('error', 'Failed to create item!');
-}
+        return redirect()->back()->with('error', 'Failed to create item!');
+    }
 }
 
     /**

@@ -1,8 +1,6 @@
 @extends('layout.main')
 @section('title','Edit Customer')
-@section('maps')
-{!! $map['js'] !!}
-@endsection
+
 <script type="text/javascript">
   function copy_name()
   {
@@ -43,28 +41,35 @@
             @enderror
           </div>
 
-          <div class="form-group col-md-2">
+          <div class="form-group col-md-1">
             <label for="site location">  Status </label>
-            <div class="input-group mb-3">
-              <select name="id_status" id="id_status" class="form-control">
-
-                @foreach ($status as $id => $name)
-                @if ($id == $customer->id_status){
-                 <option selected value="{{ $id }}">{{ $name }}</option>
-               }
-               @else
-               {
-
-                <option value="{{ $id }}">{{ $name }}</option>
-              }
-              @endif
-
-              @endforeach
-            </select>
+            @if ($customer->id_status == 1)
+              {{-- Lead Potensial: status tidak bisa diubah via form edit --}}
+              <input type="hidden" name="id_status" value="{{ $customer->id_status }}">
+              <div class="form-control-plaintext">
+                <span class="badge badge-warning" style="font-size:0.9rem;padding:6px 10px;">
+                  <i class="fas fa-user-clock mr-1"></i> Potensial
+                </span>
+              </div>
+              <small class="text-info mt-1 d-block"><i class="fas fa-lock mr-1"></i>
+                Status hanya bisa diubah melalui tombol <strong>"Convert to Active"</strong> di halaman detail.
+              </small>
+            @else
+              <div class="input-group mb-3">
+                <select name="id_status" id="id_status" class="form-control">
+                  @foreach ($status as $id => $name)
+                    @if ($id == $customer->id_status)
+                      <option selected value="{{ $id }}">{{ $name }}</option>
+                    @else
+                      <option value="{{ $id }}">{{ $name }}</option>
+                    @endif
+                  @endforeach
+                </select>
+              </div>
+            @endif
           </div>
-        </div>
 
-        <div class="form-group col-md-2">
+        <div class="form-group col-md-1">
           <label for="customer_id"> Customer Id (CID) </label>
 
           <div class="input-group mb-2">
@@ -92,6 +97,23 @@
         <div class="error invalid-feedback">{{ $message }}</div>
         @enderror
       </div>
+      <div class="form-group col-md-2">
+        <label for="ip">IP Address</label>
+        <input 
+        type="text" 
+        class="form-control @error('ip') is-invalid @enderror" 
+        name="ip" 
+        id="ip" 
+        placeholder="Leave blank for dynamic IP" 
+        value="{{ old('ip', $customer->ip ?? '') }}" 
+        pattern="^(\d{1,3}\.){3}\d{1,3}$" 
+        title="Please enter a valid IPv4 address (e.g., 192.168.1.10)">
+
+        @error('ip')
+        <div class="error invalid-feedback">{{ $message }}</div>
+        @enderror
+      </div>
+
 
       <div class="form-group col-md-4">
         <label for="nama">Contact Name</label>
@@ -114,10 +136,16 @@
     </div>
     <div class="form-group col-md-2">
       <label for="nama">Phone No</label>
-      <input type="text" class="form-control @error('phone') is-invalid @enderror " name="phone" id="phone"  placeholder="Customer phone" value="{{$customer->phone}}">
+      <input type="text" class="form-control @error('phone') is-invalid @enderror" name="phone" id="phone"
+        placeholder="Contoh: 08123456789"
+        value="{{$customer->phone}}"
+        oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+        pattern="[0-9]{6,15}"
+        title="Nomor telepon: angka saja, tanpa tanda + atau spasi">
       @error('phone')
       <div class="error invalid-feedback">{{ $message }}</div>
       @enderror
+      <small class="text-muted"><i class="fas fa-info-circle"></i> Angka saja, tanpa tanda +</small>
     </div>
     <div class="form-group col-md-2">
       <label for="site location">  Date of Birth </label>
@@ -133,7 +161,7 @@
     </div>
     <div class="form-group col-sm-2">
      <label for="email"> Email  </label>
-     <input type="text" class="form-control @error('email') is-invalid @enderror" name="email"  id="email" placeholder="email" value="{{$customer->email}}">
+     <input type="email" class="form-control @error('email') is-invalid @enderror" name="email" id="email" placeholder="contoh@email.com" value="{{$customer->email}}">
      @error('email')
      <div class="error invalid-feedback">{{ $message }}</div>
      @enderror
@@ -187,6 +215,37 @@
 
 </div>
 
+<div class="form-group col-md-2">
+  <label for="notification">Sent Notif</label>
+  <div class="input-group mb-3">
+    <select name="notification" id="notification" class="form-control select2">
+
+      <option value="0" {{ $customer->notification == 0 ? 'selected' : '' }}>None</option>
+      <option value="1" {{ $customer->notification == 1 ? 'selected' : '' }}>Whatsapp</option>
+      <option value="2" {{ $customer->notification == 2 ? 'selected' : '' }}>Email</option>
+      <option value="3" {{ $customer->notification == 3 ? 'selected' : '' }}>Mobile App</option>
+    </select>
+  </div>
+  <div id="fcm-token-box" class="mt-2" style="display:{{ $customer->notification == 3 ? 'block' : 'none' }}">
+    @if($customer->fcm_token)
+      <div class="alert alert-success alert-sm py-1 px-2 mb-1" style="font-size:0.75rem;">
+        <i class="fas fa-mobile-alt mr-1"></i><strong>FCM Token terdaftar</strong>
+      </div>
+      <div class="input-group input-group-sm">
+        <input type="text" class="form-control form-control-sm" value="{{ $customer->fcm_token }}" readonly style="font-size:0.7rem;">
+        <div class="input-group-append">
+          <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyFcmToken(this)" title="Copy token">
+            <i class="fas fa-copy"></i>
+          </button>
+        </div>
+      </div>
+    @else
+      <div class="alert alert-warning alert-sm py-1 px-2" style="font-size:0.75rem;">
+        <i class="fas fa-exclamation-triangle mr-1"></i>Belum ada FCM token. Pelanggan perlu login ke mobile app.
+      </div>
+    @endif
+  </div>
+</div>
 
 <div class="form-group col-sm-4">
  <label for="coordinate"> Coordinate </label>
@@ -214,25 +273,39 @@
   </div>
 </div>
 
-<div class="form-group col-md-2">
+<div class="form-group col-md-3">
   <label for="site location"> Plan </label>
   <div class="input-group mb-3">
     <select name="id_plan" id="id_plan" class="form-control select2">
-
       @foreach ($plan as $plan)
-      @if ($plan->id == $customer->id_plan){
-       <option selected value="{{ $plan->id }}">{{ $plan->name  }} ( Rp. {{number_format($plan->price, 0, ',', '.')}} )</option>
-     }
+      @if ($plan->id == $customer->id_plan)
+       <option selected value="{{ $plan->id }}">{{ $plan->name }} ( Rp. {{number_format($plan->price, 0, ',', '.')}} )</option>
      @else
-     {
-
-      <option value="{{ $plan->id }}">{{ $plan->name  }} ( Rp. {{number_format($plan->price, 0, ',', '.')}} )</option>
-    }
+      <option value="{{ $plan->id }}">{{ $plan->name }} ( Rp. {{number_format($plan->price, 0, ',', '.')}} )</option>
     @endif
     @endforeach
-  </select>
+    </select>
+  </div>
 </div>
 
+{{-- ====== ADD-ON SELECTOR ====== --}}
+<div class="form-group col-md-3">
+  <label class="font-weight-bold">
+    <i class="fas fa-puzzle-piece mr-1 text-primary"></i>Add-on
+    <small class="text-muted font-weight-normal">(opsional &mdash; bisa lebih dari satu)</small>
+    <span id="addon-total-badge" class="badge badge-pill badge-success ml-2" style="display:none;">Total: Rp 0</span>
+  </label>
+  <select name="addons[]" id="addons" class="form-control select2-addons" multiple style="width:100%">
+    @foreach($addons as $addon)
+    <option value="{{ $addon->id }}"
+      data-price="{{ $addon->price }}"
+      data-desc="{{ $addon->description }}"
+      {{ in_array($addon->id, $customerAddons) ? 'selected' : '' }}>
+      {{ $addon->name }} (+Rp {{ number_format($addon->price, 0, ',', '.') }})
+    </option>
+    @endforeach
+  </select>
+  <small class="text-muted">Ketik untuk mencari, klik untuk memilih. Pilihan akan tampil sebagai tag.</small>
 </div>
 <div class="form-group col-md-1">
   <label for="site location"> Ppn (%)</label>
@@ -397,7 +470,6 @@
 </div>
 
 
-</div>
 <!-- /.card-body -->
 
 <div class="card-footer">
@@ -412,48 +484,163 @@
 
 
 
-<div class="modal fade" id="modal-maps">
-  <div class="modal-dialog modal-lg">
+
+<!-- Modal -->
+<div class="modal fade" id="modal-maps" tabindex="-1" role="dialog" aria-labelledby="modal-mapsLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
-            <!-- <div class="modal-header">
-             <h5 class="modal-title">drap Marker to Right Posision</h5> 
-              
-              
-           </div>-->
-           <div class="modal-body">
-            {!! $map['html'] !!}
-          </div>
-          <div class="modal-footer justify-content-between float-right">
-            <button type="button" class="btn btn-primary float-right " data-dismiss="modal">Apply</button>
 
-          </div>
-        </div>
-        <!-- /.modal-content -->
+      <div class="modal-header">
+        <h5 class="modal-title">Select Location from Map</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
       </div>
-      <!-- /.modal-dialog -->
+      
+      <div class="modal-body">
+        <div id="map" style="height: 400px;"></div>
+      </div>
+
+      <div class="modal-footer justify-content-end">
+       <button type="button" class="btn btn-secondary" id="btn-current-location">
+        <i class="fas fa-location-arrow"></i> Current Location
+      </button>
+      <button type="button" class="btn btn-primary" data-dismiss="modal">Set</button>
     </div>
-    <!-- /.modal -->
 
-    {{--     <div class="modal fade" id="modal-topology">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <!-- <div class="modal-header">
-             <h5 class="modal-title">drap Marker to Right Posision</h5> 
-              
-              
-           </div>-->
-           <div class="modal-body">
-            {!! $map['html'] !!}
-          </div>
-          <div class="modal-footer justify-content-between float-right">
-            <button type="button" class="btn btn-primary float-right " data-dismiss="modal">Apply</button>
+  </div>
+</div>
+</div>
+</section>
 
-          </div>
-        </div>
-        <!-- /.modal-content -->
-      </div>
-      <!-- /.modal-dialog -->
-    </div> --}}
-  </section>
+@endsection
 
-  @endsection
+@section('footer-scripts')
+<script>
+  // Notification type toggle
+  document.getElementById('notification').addEventListener('change', function () {
+    document.getElementById('fcm-token-box').style.display = this.value == '3' ? 'block' : 'none';
+  });
+  function copyFcmToken(btn) {
+    var val = btn.closest('.input-group').querySelector('input').value;
+    navigator.clipboard.writeText(val).then(function () {
+      btn.innerHTML = '<i class="fas fa-check"></i>';
+      setTimeout(function () { btn.innerHTML = '<i class="fas fa-copy"></i>'; }, 1500);
+    });
+  }
+</script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- Leaflet Geocoder -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+<script>
+  let map;
+  let marker;
+  let isMapInitialized = false;
+
+  $('#modal-maps').on('shown.bs.modal', function () {
+    if (!isMapInitialized) {
+      const defaultLatLng = "{{ env('COORDINATE_CENTER', '-6.200000,106.816666') }}".split(',');
+      const lat = parseFloat(defaultLatLng[0]);
+      const lng = parseFloat(defaultLatLng[1]);
+
+      map = L.map('map').setView([lat, lng], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      // 📌 Marker draggable
+      marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+      marker.on('dragend', function (e) {
+        const latlng = e.target.getLatLng();
+        document.getElementById('coordinate').value = `${latlng.lat.toFixed(6)},${latlng.lng.toFixed(6)}`;
+      });
+
+      // 🔍 Search bar
+      L.Control.geocoder({
+        defaultMarkGeocode: false
+      })
+      .on('markgeocode', function(e) {
+        const latlng = e.geocode.center;
+        map.setView(latlng, 16);
+        marker.setLatLng(latlng);
+        document.getElementById('coordinate').value = `${latlng.lat.toFixed(6)},${latlng.lng.toFixed(6)}`;
+      })
+      .addTo(map);
+
+      // Tandai bahwa peta sudah di-inisialisasi
+      isMapInitialized = true;
+    }
+
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 300);
+  });
+
+  // 🌍 Gunakan Lokasi Saya
+  document.getElementById('btn-current-location').addEventListener('click', function () {
+    if (!map) return;
+
+    map.locate({ setView: true, maxZoom: 18 });
+
+    map.once('locationfound', function (e) {
+      const { lat, lng } = e.latlng;
+      marker.setLatLng(e.latlng);
+      document.getElementById('coordinate').value = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    });
+
+    map.once('locationerror', function () {
+      alert('Tidak dapat menemukan lokasi Anda. Pastikan izin lokasi aktif di browser.');
+    });
+  });
+
+  // Add-on tag-style select2
+  $(document).ready(function () {
+    $('.select2').select2({ width: '100%' });
+
+    // Add-on total price updater
+    function updateAddonTotal() {
+      var total = 0;
+      $('#addons option:selected').each(function () {
+        total += parseInt($(this).data('price')) || 0;
+      });
+      var badge = $('#addon-total-badge');
+      if (total > 0) {
+        badge.text('Total: Rp ' + total.toLocaleString('id-ID')).show();
+      } else {
+        badge.hide();
+      }
+    }
+
+    $('#addons').select2({
+      width: '100%',
+      placeholder: 'Pilih add-on layanan...',
+      allowClear: true,
+      closeOnSelect: false,
+      templateResult: function (option) {
+        if (!option.id) return option.text;
+        var price = $(option.element).data('price');
+        var desc  = $(option.element).data('desc');
+        var html  = '<div class="d-flex justify-content-between align-items-center">' +
+                    '<span>' + option.text.split(' (')[0] + '</span>' +
+                    '<span class="badge badge-success ml-2">+Rp ' + parseInt(price).toLocaleString('id-ID') + '</span>' +
+                    '</div>';
+        if (desc) html += '<div><small class="text-muted">' + desc + '</small></div>';
+        return $(html);
+      },
+      templateSelection: function (option) {
+        if (!option.id) return option.text;
+        return option.text.split(' (')[0];
+      }
+    });
+
+    $('#addons').on('change', updateAddonTotal);
+    updateAddonTotal();
+  });
+</script>
+
+@endsection

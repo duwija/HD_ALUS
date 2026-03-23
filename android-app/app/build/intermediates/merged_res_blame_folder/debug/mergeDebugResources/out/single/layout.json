@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "com.kencana.billing.app-mergeDebugResources-41:/layout/activity_login.xml",
+        "source": "com.kencana.billing.app-main-44:/layout/activity_login.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-mergeDebugResources-41:\\layout\\activity_dashboard.xml",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\layout\\activity_dashboard.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-mergeDebugResources-41:\\layout\\activity_login.xml",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\layout\\activity_login.xml"
+    }
+]

@@ -18,9 +18,11 @@
             <th scope="col">#</th>
             <th scope="col">Name</th>
             <th scope="col">Email</th>
+            <th scope="col">Privilege</th>
             <th scope="col">Job Title</th>
             <th scope="col">Tiket Group</th>
             <th scope="col">Bank Akun</th>
+            <th scope="col">Status</th>
             <th scope="col">Action</th>
           </tr>
         </thead>
@@ -28,8 +30,42 @@
          @foreach( $user as $user)
          <tr>
           <th scope="row">{{ $loop->iteration }}</th>
-          <td>{{ $user->name }}</td>
+          <td class="d-flex align-items-center" style="gap:10px">
+            <img src="{{ $user->photo ? asset('storage/users/'.$user->photo) : asset('storage/users/user.png') }}"
+                 alt="{{ $user->name }}"
+                 style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #6c757d;">
+            <span>{{ $user->name }}</span>
+          </td>
           <td>{{ $user->email }}</td>
+          <td>
+            @php
+              $privilegeClass = 'secondary';
+              $privilegeIcon = 'user';
+              $privilegeText = ucfirst($user->privilege ?? 'user');
+              
+              switch($user->privilege ?? 'user') {
+                case 'admin':
+                case 'superadmin':
+                  $privilegeClass = 'danger';
+                  $privilegeIcon = 'user-shield';
+                  break;
+                case 'manager':
+                  $privilegeClass = 'warning';
+                  $privilegeIcon = 'user-tie';
+                  break;
+                case 'supervisor':
+                  $privilegeClass = 'info';
+                  $privilegeIcon = 'user-cog';
+                  break;
+                default:
+                  $privilegeClass = 'secondary';
+                  $privilegeIcon = 'user';
+              }
+            @endphp
+            <span class="badge badge-{{ $privilegeClass }}">
+              <i class="fas fa-{{ $privilegeIcon }}"></i> {{ $privilegeText }}
+            </span>
+          </td>
           <td>{{ $user->job_title }}</td>
           <td>@foreach ($user->groups as $group)
             <a class="badge btn-primary text-light"> {{ $group->name }} </a>
@@ -37,22 +73,37 @@
           <td>@foreach ($user->akuns as $akun)
             <a class="badge btn-primary text-light"> {{ $akun->name }} </a>
           @endforeach</td>
-          <td >
-            <div class="float-right " >
-             <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modal-user-detail{{ $user->id }}">Detail </button>
+          <td>
+            @if($user->is_active)
+              <span class="badge badge-success"><i class="fas fa-check-circle"></i> Aktif</span>
+            @else
+              <span class="badge badge-danger"><i class="fas fa-ban"></i> Nonaktif</span>
+            @endif
+          </td>
+          <td>
+            <div class="float-right">
+             <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modal-user-detail{{ $user->id }}">Detail</button>
 
-             <a href="/user/{{ $user->id }}/edit" class="btn btn-primary btn-sm " title="Edit"> <i class="fa fa-edit"> </i> </a>
+             <a href="/user/{{ $user->id }}/edit" class="btn btn-info btn-sm" title="Edit"><i class="fa fa-edit"></i></a>
 
+             <form action="{{ route('user.toggle-active', $user->id) }}" method="POST" class="d-inline">
+               @csrf
+               <button type="submit"
+                 class="btn btn-sm {{ $user->is_active ? 'btn-warning' : 'btn-success' }}"
+                 title="{{ $user->is_active ? 'Nonaktifkan' : 'Aktifkan' }}"
+                 onclick="return confirm('{{ $user->is_active ? 'Nonaktifkan' : 'Aktifkan' }} user {{ addslashes($user->name) }}?')"
+                 {{ $user->id === auth()->id() ? 'disabled' : '' }}>
+                 <i class="fas fa-{{ $user->is_active ? 'user-slash' : 'user-check' }}"></i>
+               </button>
+             </form>
 
-             <form  action="/user/{{ $user->id }}" method="POST" class="d-inline item-delete" >
+             <form action="/user/{{ $user->id }}" method="POST" class="d-inline item-delete">
               @method('delete')
               @csrf
-
-              <button type="submit"  class="btn btn-danger btn-sm" title="Delete"> <i class="fa fa-times"> </i> </button>
+              <button type="submit" class="btn btn-danger btn-sm" title="Delete"><i class="fa fa-times"></i></button>
             </form>
-
-          </div>
-        </td>
+            </div>
+          </td>
 
       </tr>
 

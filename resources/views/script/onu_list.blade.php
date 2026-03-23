@@ -279,18 +279,22 @@ $.ajax({
   url: '/olt/getoltpon/{{$olt->id}}',
   type: 'GET',
   success: function (response) {
+    console.log('getOltPon response:', response);
     if (response.data && response.data.length > 0) {
       var selectBox = $('#oltPonComboBox');
       selectBox.empty();
       selectBox.append('<option value="">Pilih OLT PON</option>');
       $.each(response.data, function (index, item) {
+        console.log('Adding option:', item.olt_pon, 'suffix:', item.suffix);
         selectBox.append('<option value="' + item.suffix + '">' + item.olt_pon + '</option>');
       });
     } else {
+      console.log('No data found in response');
       alert('Data tidak ditemukan');
     }
   },
   error: function (xhr, status, error) {
+    console.error('Error loading OLT PON:', error);
     alert('Terjadi kesalahan saat mengambil data');
   }
 });
@@ -301,6 +305,11 @@ $.ajax({
 
 $('#getOnu').click(function() {
   var selectedOltPon = $('#oltPonComboBox').val();
+  var oltId = $('#olt_id').val();
+  
+  console.log('OLT ID:', oltId);
+  console.log('Selected PON:', selectedOltPon);
+  
   if (selectedOltPon === "") {
     alert('Silakan pilih OLT PON terlebih dahulu.');
     return;
@@ -317,13 +326,11 @@ $('#getOnu').click(function() {
           "autoWidth": false,
           "searching": true,
           "language": {
-            "processing": "<span class='fa-stack fa-lg'>\n\
-            <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-            </span>&emsp;Processing ... "
+            "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
           },
-          dom: 'lBfrtip',
+          dom: 'Bfrtip',
           buttons: [
-            'copy', 'excel', 'pdf', 'csv', 'print'
+            'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
             ],
           "lengthMenu": [[200, 500, 1000], [200, 500, 1000]],
           processing: true,
@@ -331,14 +338,20 @@ $('#getOnu').click(function() {
           ajax: {
             url: '/olt/getolt/onu',
             method: 'POST',
+            headers: {
+              'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
             data: function ( d ) {
              return $.extend( {}, d, {
               "olt_id": $(document.querySelector('[name="olt_id"]')).val(),
               "olt_pon": $(document.querySelector('[name="oltPonComboBox"]')).val(),
-
+              "_token": $('meta[name="csrf-token"]').attr('content')
             } );
            },
-
+           error: function(xhr, error, code) {
+             console.log('AJAX Error:', xhr.responseText);
+             alert('Error loading ONU data: ' + xhr.responseText);
+           }
          },
 
     //console.log(data),
@@ -476,9 +489,7 @@ var table = $('#table-onu-unconfig').DataTable({
   "autoWidth": false,
   "searching": false,
   "language": {
-    "processing": "<span class='fa-stack fa-lg'>\n\
-    <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-    </span>&emsp;Processing ..."
+    "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
   },
   // dom: 'lBfrtip',
   // buttons: [

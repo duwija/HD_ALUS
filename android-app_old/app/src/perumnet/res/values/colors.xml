@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Perumnet: Tema Biru Teal -->
+    <color name="purple_primary">#0288d1</color>
+    <color name="purple_secondary">#00838f</color>
+    <color name="colorPrimary">#0288d1</color>
+    <color name="colorPrimaryDark">#0277bd</color>
+    <color name="colorAccent">#00838f</color>
+    <color name="colorOnPrimary">#FFFFFF</color>
+    <color name="gradient_start">#0288d1</color>
+    <color name="gradient_end">#00838f</color>
+    <color name="statusBarColor">#0277bd</color>
+    <color name="navBadgeBackground">#FF6B6B</color>
+    <color name="navItemChecked">#0288d1</color>
+    <color name="navItemUnchecked">#9E9E9E</color>
+    <color name="white">#FFFFFF</color>
+    <color name="textPrimary">#212121</color>
+    <color name="textSecondary">#757575</color>
+</resources>

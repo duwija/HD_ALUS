@@ -291,23 +291,24 @@
                @php 
 
 
-               if ( $suminvoice_number->tax == null){
-                $taxfee =0;
-              }
-              else
-              {
-                $taxfee =  $suminvoice_number->tax;
-              }
+               $taxfee     = $suminvoice_number->tax      ?? 0;
+               $pphfee     = $suminvoice_number->pph      ?? 0;
 
-              $tax = round($subtotal * $taxfee/100, 0);
-              $pph = $subtotal * $suminvoice_number->pph/100;
+               if ($status == 0 && !is_null(Auth::user()->admin_fee))
+               {
+                 $admin_fee  = Auth::user()->admin_fee      ?? 0;
+               }
+               else
+               {$admin_fee  = 0;}
+               
+               
 
+               $tax = round($subtotal * ($taxfee / 100), 0);
+               $pph = round($subtotal * ($pphfee / 100), 0);
+               $total = (float)$subtotal + (float)$tax - (float)$pph + (float)$admin_fee;
+               @endphp
 
-              $total = $subtotal + $tax - $pph;
-
-              @endphp
-
-              <tr> <td colspan="5"> <strong> Tax Ppn ({{$taxfee}}%)</strong>
+               <tr> <td colspan="5"> <strong> Tax Ppn ({{$taxfee}}%)</strong>
 
                 <input type="hidden" name="tax" id="tax" value={{$taxfee}} ></td> 
 
@@ -316,32 +317,44 @@
 
                   {{ number_format($tax, 0, ',', '.') }}
 
-                </strong> </td></tr>
-                @if ( $pph != 0)
-                <tr> <td colspan="5"> <strong> Pph 23</strong></td>
+                </strong> </td>
+              </tr>
+              {{-- Hanya tampil jika UNPAID dan ada biaya admin --}}
+              @if ($status == 0 && !is_null(Auth::user()->admin_fee))
+              <tr>
+                <td colspan="5"><strong>Biaya Admin</strong></td>
+                <td colspan="2">
+                  <strong>{{ number_format(Auth::user()->admin_fee, 0, ',', '.') }}</strong>
+                </td>
+              </tr>
+              @endif
+
+
+              @if ( $pph != 0)
+              <tr> <td colspan="5"> <strong> Pph 23</strong></td>
+                <td colspan="2">
+                 <strong id="total"> {{ number_format(-$pph, 0, ',', '.') }} </strong> </td></tr>
+                 @else
+                 @endif
+                 <tr> <td colspan="5"> <strong> Total</strong></td>
                   <td colspan="2">
-                   <strong id="total"> {{ number_format(-$pph, 0, ',', '.') }} </strong> </td></tr>
-                   @else
-                   @endif
-                   <tr> <td colspan="5"> <strong> Total</strong></td>
-                    <td colspan="2">
-                      <strong id="total"> {{ number_format($total, 0, ',', '.') }}</strong> </td></tr>
+                    <strong id="total"> {{ number_format($total, 0, ',', '.') }}</strong> </td></tr>
 
-                    </tbody>
-                  </table>
-                </div>
-
-              </form>
-              <div class=" text-sm  p-2 card ">
-                <b>Note:</b> {{$suminvoice_number->note}}
+                  </tbody>
+                </table>
               </div>
-              @if ($suminvoice_number->payment_status ==0)
+
+            </form>
+            <div class=" text-sm  p-2 card ">
+              <b>Note:</b> {{$suminvoice_number->note}}
+            </div>
+            @if ($suminvoice_number->payment_status ==0)
 
 
-              @if (Auth::user()->privilege == 'admin' OR Auth::user()->privilege =='accounting' )
+            @if (Auth::user()->privilege == 'admin' OR Auth::user()->privilege =='accounting' )
 
 
-              <button type="button" class="float-right btn p-2  bg-gradient-primary btn-sm btn-primary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
+            <button type="button" class="float-right btn p-2  bg-gradient-primary btn-sm btn-primary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
 
 
 <!--              <form  action="/suminvoice/{{$suminvoice_number->id }}" method="POST" class="d-inline invoice-cancel" >
@@ -372,20 +385,7 @@
 
 
 
-<!--              <form  action="/suminvoice/{{$suminvoice_number->id }}" method="POST" class="d-inline invoice-cancel" >
-              @method('delete')
-              @csrf
 
-              <input type="hidden" name="tempcode" value="{{$suminvoice_number->tempcode}}">
-              <input type="hidden" name="payment_id" value="{{$suminvoice_number->payment_id}}">
-              <input type="hidden"  class="form-control " name="updated_by" id="updated_by"  value="{{ Auth::user()->id }}">
-
-              <button  type="submit"  class="float-left btn p-2  bg-gradient-warning btn-sm btn-warning mr-2  mb-2 "> Cancel </button>
-            </form> -->
-
-          <!--   <button type="button" class="float-left btn p-2 bg-gradient-warning btn-sm btn-warning mr-2 mb-2" data-toggle="modal" data-target="#cancelModal">
-              Cancel
-            </button> -->
             @endif
             @elseif ($suminvoice_number->payment_status ==1)
             @if (Auth::user()->privilege == 'admin' OR Auth::user()->privilege =='accounting' )
@@ -393,12 +393,12 @@
               Cancel
             </button>
             @endif
-            <button disabled="" type="button" class="float-right btn p-2 btn-sm btn-secondary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment y</button>
+            <button disabled="" type="button" class="float-right btn p-2 btn-sm btn-secondary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
             @else
 <!--             <button type="button" class="float-left btn p-2 bg-gradient-warning btn-sm btn-warning mr-2 mb-2" data-toggle="modal" data-target="#cancelModal">
               Cancel
             </button> -->
-            <button disabled="" type="button" class="float-right btn p-2 btn-sm btn-secondary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment x </button>
+            <button disabled="" type="button" class="float-right btn p-2 btn-sm btn-secondary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
 
 
             @endif 
@@ -410,14 +410,19 @@
             <a href="{{url('suminvoice').'/' .$invoice->tempcode. '/print'}}" target="_blank" class="btn btn-primary float-left mr-2 ">Print</a>
             <a href="{{url('suminvoice').'/' .$invoice->tempcode. '/dotmatrix'}}" target="_blank" class="btn btn-primary float-left mr-2">Print Thermal</a>
 
-            @if (Auth::user()->privilege == 'admin' OR Auth::user()->privilege =='accounting' )
-            <!-- <button type="button" class="{{-- float-right  --}}btn btn-success " data-toggle="modal" data-target="#modal-wa_invoice"> <i class="fab fa-whatsapp">  </i> WA</button> -->
+          <!--   @if (Auth::user()->privilege == 'admin' OR Auth::user()->privilege =='accounting' )
+           
             <form action="/suminvoice/remainderinv/{{$suminvoice_number->id}}" method="POST" class="d-inline">
               @method('post')
               @csrf
-              <!-- <input type="text" name="id" value="{{ $suminvoice_number->id }}"> -->
               <button type="submit" class="btn btn-success float-left mr-2"><i class="fab fa-whatsapp">   </i> Sent Remainder</button>
             </form>
+            @endif -->
+
+            @if (Auth::user()->privilege == 'admin' || Auth::user()->privilege == 'accounting')
+            <button type="button" class="btn btn-success float-left mr-2" onclick="showNotificationOptions('{{ $suminvoice_number->id }}')">
+              <i class="fab fa-whatsapp"></i> Send Remainder
+            </button>
             @endif
           </div>
         </div>
@@ -439,7 +444,26 @@
                   <input type="hidden" name="tempcode" value="{{$suminvoice_number->tempcode}}">
                   <input type="hidden" name="payment_id" value="{{$suminvoice_number->payment_id}}">
                   <input type="hidden" name="updated_by" value="{{ Auth::user()->id }}">
-
+                  <div class="form-group">
+                    <label for="cancel_date">Cancellation Date</label>
+                    <input type="date" class="form-control" name="cancel_date" id="cancel_date" value="{{ now()->format('Y-m-d') }}" required>
+                  </div>
+                  
+                  {{-- Jika invoice sudah dibayar, tampilkan opsi refund --}}
+                  @if ($suminvoice_number->payment_status == 1)
+                  <div class="form-group">
+                    <label for="refund_account">Refund dari Kas/Bank</label>
+                    @if ($bank->isNotEmpty())
+                    <select name="refund_account" id="refund_account" class="form-control">
+                      @foreach ($bank as $akun)
+                      <option value="{{ $akun->akun_code }}">{{ $akun->akun_code }} : {{ $akun->name }}</option>
+                      @endforeach
+                    </select>
+                    @else
+                    <input type="text" class="form-control text-danger" value="Akun Kas/Bank tidak ditemukan!" readonly>
+                    @endif
+                  </div>
+                  @endif
                   <div class="form-group">
                     <label for="cancel_reason">Reason for Cancellation</label>
                     <textarea class="form-control" name="cancel_reason" id="cancel_reason" rows="3" required></textarea>
@@ -558,7 +582,7 @@
           $message .= "\nTagihan Customer dengan CID *".$customer->customer_id."* sudah kami Terbitkan sebesar *Rp.".$total."*";
           $message .="\nSilahkan melakukan pembayaran sebelum tanggal 20-".date("m-Y", time());
           $message .="\nUntuk info lebih lengkap silahkan klik link berikut";
-          $message .="\nhttp://".env("DOMAIN_NAME")."/suminvoice/".$suminvoice_number->tempcode."/print";
+          $message .="\nhttp://".tenant_config('domain_name', env("DOMAIN_NAME"))."/suminvoice/".$suminvoice_number->tempcode."/print";
           $message .="\n";
 
           $message .="\nUntuk pembayaran non-tunai, Mohon mengirimkan bukti transfer ke nomor ini karena nomor sebelumnya sudah tidak aktif .";
@@ -574,7 +598,7 @@
          $message .="\n";
          $message .="\nTerimakasih, Pembayaran tagihan Customer dengan CID ".$customer->customer_id." sudah kami *TERIMA* ";
          $message .="\nUntuk info lebih lengkap silahkan klik link";
-         $message .="\nhttp://".env("DOMAIN_NAME")."/suminvoice/".$suminvoice_number->tempcode."/print";
+         $message .="\nhttp://".tenant_config('domain_name', env("DOMAIN_NAME"))."/suminvoice/".$suminvoice_number->tempcode."/print";
          $message .="\n";
          $message .="\n* Payment System Alusnet *";
 
@@ -729,6 +753,47 @@
   @endsection
 
   @section('footer-scripts')
+
+
+  <script>
+    function showNotificationOptions(id) {
+      Swal.fire({
+        title: 'Kirim Pengingat',
+        html:
+          '<p class="mb-3">Pilih cara pengiriman notifikasi:</p>' +
+          '<button onclick="Swal.close(); sendNotification(\'wa\', ' + id + ')" class="btn btn-success m-1"><i class="fab fa-whatsapp"></i> WhatsApp</button>' +
+          '<button onclick="Swal.close(); sendNotification(\'fcm\', ' + id + ')" class="btn btn-primary m-1"><i class="fas fa-mobile-alt"></i> Android App</button>' +
+          '<button onclick="Swal.close(); sendNotification(\'email\', ' + id + ')" class="btn btn-info m-1"><i class="fas fa-envelope"></i> Email</button>',
+        icon: 'question',
+        showConfirmButton: false,
+        showCancelButton: true,
+        cancelButtonText: 'Batal',
+      });
+    }
+
+    function sendNotification(type, id) {
+      fetch(`/suminvoice/remainderinv/${id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ type: type })
+      })
+      .then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        if (ok) {
+          Swal.fire('Terkirim!', data.message, 'success');
+        } else {
+          Swal.fire('Gagal!', data.message || 'Terjadi kesalahan.', 'warning');
+        }
+      })
+      .catch(error => {
+        Swal.fire('Error!', 'Terjadi kesalahan saat mengirim notifikasi.', 'error');
+        console.error(error);
+      });
+    }
+  </script>
 
 
   @endsection

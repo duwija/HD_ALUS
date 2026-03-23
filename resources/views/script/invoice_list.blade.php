@@ -41,14 +41,12 @@
     "autoWidth": false,
     "searching": false,
     "language": {
-      "processing": "<span class='fa-stack fa-lg'>\n\
-      <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-      </span>&emsp;Processing ..."
+      "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
     },
-    dom: 'lBfrtip',
+    dom: 'Bfrtip',
     buttons: [
-      'copy', 'excel', 'pdf', 'csv', 'print'
-      ],
+     'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
+     ],
     "lengthMenu": [[200, 500, 1000], [200, 500, 1000]],
     processing: true,
     serverSide: true,
@@ -71,13 +69,33 @@
      },
 
      dataSrc: function(json) {
-                    // Mengupdate nilai total amount di view
-    // console.log(json); // Log data JSON untuk debugging
-      $('#total').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.total)),
-      $('#total_paid').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.total_paid));
-      $('#unpaid_payment').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.unpaid_payment));
-      $('#cancel_payment').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.cancel_payment));
+      var fmt = new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 });
+      $('#total').text(fmt.format(json.total));
+      $('#total_paid').text(fmt.format(json.total_paid));
+      $('#unpaid_payment').text(fmt.format(json.unpaid_payment));
+      $('#cancel_payment').text(fmt.format(json.cancel_payment));
       $('#fee_counter').text(json.fee_counter);
+
+      // -- Percentages (by amount) --
+      var tot = parseFloat(json.total) || 0;
+      var pPaid   = tot > 0 ? Math.round(json.total_paid      / tot * 1000) / 10 : 0;
+      var pUnpaid = tot > 0 ? Math.round(json.unpaid_payment  / tot * 1000) / 10 : 0;
+      var pCancel = tot > 0 ? Math.round(json.cancel_payment  / tot * 1000) / 10 : 0;
+
+      $('#pct-paid').text(pPaid + '%');
+      $('#pct-unpaid').text(pUnpaid + '%');
+      $('#pct-cancel').text(pCancel + '%');
+
+      $('#bar-paid').css('width', pPaid + '%').attr('title','Paid '+pPaid+'%');
+      $('#bar-unpaid').css('width', pUnpaid + '%').attr('title','Unpaid '+pUnpaid+'%');
+      $('#bar-cancel').css('width', pCancel + '%').attr('title','Cancel '+pCancel+'%');
+
+      $('#pct-paid-leg').text(pPaid);
+      $('#pct-unpaid-leg').text(pUnpaid);
+      $('#pct-cancel-leg').text(pCancel);
+
+      if(tot > 0) $('#inv-progress-wrap').show(); else $('#inv-progress-wrap').hide();
+
       return json.data;
     }
   },

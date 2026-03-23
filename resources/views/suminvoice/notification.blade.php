@@ -1,360 +1,401 @@
 @extends('layout.main')
-@section('title','Customer Notification and jobs process')
+@section('title','Notification & Job Center')
 @section('content')
+
 <section class="content-header">
-
-
-
-
-
-
-
-  <div class="card card-primary card-outline">
-    <div class="card-header">
-      <h5 class="card-title m-0"><strong>Notification</strong></h5>
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-6">
+        <h1><i class="fas fa-bell mr-2"></i>Notification &amp; Job Center</h1>
+      </div>
+      <div class="col-sm-6">
+        <ol class="breadcrumb float-sm-right">
+          <li class="breadcrumb-item"><a href="/home">Home</a></li>
+          <li class="breadcrumb-item active">Notification</li>
+        </ol>
+      </div>
     </div>
-    <div class="card-body">
+  </div>
+</section>
 
+<section class="content">
+  <div class="container-fluid">
 
+    {{-- ====== STAT BOXES ====== --}}
+    <div class="row align-items-stretch">
 
-
-      <div class="row d-flex">
-        <div class="col-lg-3 col-6 d-flex">
-          <div class="small-box card card-info card-outline flex-fill d-flex flex-column">
-            <div class="card-header text-center">
-              <h5 class="card-title m-0">
-                <strong>Number of Tasks Queued in Jobs</strong>
-              </h5>
+      <div class="col-lg-3 col-md-6 col-sm-6 col-12 mb-3 d-flex">
+        <div class="info-box shadow-sm w-100 d-flex" style="align-items:stretch;">
+          <span class="info-box-icon bg-info elevation-1" style="display:flex;align-items:center;justify-content:center;"><i class="fas fa-tasks"></i></span>
+          <div class="info-box-content d-flex flex-column" style="flex:1;">
+            <span class="info-box-text d-flex justify-content-between align-items-center">
+              Jobs in Queue
+              <button id="btn-refresh-queue" type="button" class="btn btn-xs btn-outline-info ml-2" title="Refresh">
+                <i class="fas fa-sync-alt" id="refresh-icon"></i>
+              </button>
+            </span>
+            <span class="info-box-number font-weight-bold" id="queuecount">{{ $queue }}</span>
+            <div class="progress mt-1" style="height:6px;border-radius:3px;">
+              <div class="progress-bar bg-info" id="queuebar" style="width:{{ $queue > 0 ? '0' : '100' }}%; transition:width .5s;"></div>
             </div>
-
-            <div class="card-body text-center">
-              <h3>{{ $queue }} Queue</h3>
-              <i class="fas fa-envelope fa-3x text-info my-2"></i>
+            <span class="progress-description small" id="queuestatus" style="font-size:11px;">{{ $queue > 0 ? 'Memuat...' : 'No pending tasks' }}</span>
+            <span class="small text-muted" id="queueeta" style="font-size:11px;"></span>
+            <div class="mt-auto pt-2">
+              <button id="btn-cancel-jobs" class="btn btn-xs btn-outline-danger" title="Hapus semua job dari antrian">
+                <i class="fas fa-trash-alt mr-1"></i>Cancel All Jobs
+              </button>
             </div>
           </div>
         </div>
-        <div class="col-lg-3 col-6 d-flex">
-          <div class="small-box card card-warning card-outline flex-fill d-flex flex-column">
-            <div class="card-header text-center">
-              <h5 class="card-title m-0">
-                <strong>Send Notifications to Consumers Who Have Invoices</strong>
-              </h5>
-            </div>
+      </div>
 
-            <div class="card-body text-center">
-              <h3><div name="customercountunpaid" id="customercountunpaid"> {{ $custactiveinv }} Customer</div></h3>
-              <p>Ready to sent Notification</p>
-              <i class="fas fa-bullhorn fa-3x text-warning my-2"></i>
+      <div class="col-lg-3 col-md-6 col-sm-6 col-12 mb-3 d-flex">
+        <div class="info-box shadow-sm w-100 d-flex" style="align-items:stretch;">
+          <span class="info-box-icon bg-warning elevation-1" style="display:flex;align-items:center;justify-content:center;"><i class="fas fa-file-invoice-dollar"></i></span>
+          <div class="info-box-content d-flex flex-column" style="flex:1;">
+            <span class="info-box-text">Tagihan Belum Lunas</span>
+            <span class="info-box-number font-weight-bold" id="customercountunpaid">{{ $custactiveinv }}</span>
+            <div class="progress"><div class="progress-bar bg-warning" style="width:100%"></div></div>
+            <span class="progress-description">Siap kirim notifikasi</span>
+            <div class="mt-auto pt-2" style="visibility:hidden;">
+              <button class="btn btn-xs">&nbsp;</button>
             </div>
+          </div>
+        </div>
+      </div>
 
-            <form action="/jobs/notifinv" method="POST" class="mt-auto p-3 d-inline notifblocked-send1">
+      <div class="col-lg-3 col-md-6 col-sm-6 col-12 mb-3 d-flex">
+        <div class="info-box shadow-sm w-100 d-flex" style="align-items:stretch;">
+          <span class="info-box-icon bg-danger elevation-1" style="display:flex;align-items:center;justify-content:center;"><i class="fas fa-ban"></i></span>
+          <div class="info-box-content d-flex flex-column" style="flex:1;">
+            <span class="info-box-text">Pelanggan Diblokir</span>
+            <span class="info-box-number font-weight-bold" id="customercountblock">{{ $custblocked }}</span>
+            <div class="progress"><div class="progress-bar bg-danger" style="width:100%"></div></div>
+            <span class="progress-description">Status blocked</span>
+            <div class="mt-auto pt-2" style="visibility:hidden;">
+              <button class="btn btn-xs">&nbsp;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-md-6 col-sm-6 col-12 mb-3 d-flex">
+        <div class="info-box shadow-sm w-100 d-flex" style="align-items:stretch;">
+          <span class="info-box-icon bg-success elevation-1" style="display:flex;align-items:center;justify-content:center;"><i class="fas fa-users"></i></span>
+          <div class="info-box-content d-flex flex-column" style="flex:1;">
+            <span class="info-box-text">Siap Buat Invoice</span>
+            <span class="info-box-number font-weight-bold" id="customerinvcount">{{ $customerinv }}</span>
+            <div class="progress"><div class="progress-bar bg-success" style="width:100%"></div></div>
+            <span class="progress-description" id="month">–</span>
+            <div class="mt-auto pt-2" style="visibility:hidden;">
+              <button class="btn btn-xs">&nbsp;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {{-- ====== ACTION CARDS ====== --}}
+    <div class="row align-items-stretch">
+
+      {{-- Card 1: Notifikasi Tagihan --}}
+      <div class="col-lg-3 col-md-6 col-12 mb-4 d-flex">
+        <div class="card card-warning card-outline w-100 shadow-sm">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-bullhorn mr-2 text-warning"></i>Notifikasi Tagihan</h3>
+          </div>
+          <div class="card-body d-flex flex-column">
+            <p class="text-muted small">Kirim notifikasi WhatsApp ke pelanggan yang memiliki tagihan belum dibayar.</p>
+            <form action="/jobs/notifinv" method="POST" class="notifblocked-send1 mt-auto">
               @method('post')
               @csrf
-
               <div class="form-group">
-                <label for="id_merchant_unpaid" class="fw-bold">Merchant</label>
-                <select name="id_merchant_unpaid" id="id_merchant_unpaid" class="form-control select2" onchange="getSelectedunpaidnotif()">
-                  <option value="">All</option> <!-- Tambahkan opsi All -->
+                <label class="font-weight-bold small">Merchant</label>
+                <select name="id_merchant_unpaid" id="id_merchant_unpaid" class="form-control form-control-sm select2" onchange="getSelectedunpaidnotif()">
+                  <option value="">Semua Merchant</option>
                   @foreach ($merchant as $id => $name)
-                  <option value="{{ $id }}">{{ $name }}</option>
+                    <option value="{{ $id }}">{{ $name }}</option>
                   @endforeach
                 </select>
               </div>
-
-              <div class="text-center mt-3">
-                <button type="submit" class="btn btn-warning btn-sm px-4">
-                  SEND <i class="fas fa-arrow-circle-right"></i>
+              <div class="text-right">
+                <button type="submit" class="btn btn-warning btn-sm">
+                  <i class="fas fa-paper-plane mr-1"></i>Kirim
                 </button>
               </div>
             </form>
           </div>
         </div>
-
-<!-- <div class="col-lg-3 col-6">
-
-<div class="small-box bg-success">
-<div class="inner">
-<h3>53<sup style="font-size: 20px">%</sup></h3>
-<p>Bounce Rate</p>
-</div>
-<div class="icon">
-<i class="ion ion-stats-bars"></i>
-</div>
-<a href="#" class="small-box-footer">More info <i class="fas fa-arrow-circle-right"></i></a>
-</div>
-</div> -->
-<div class="col-lg-3 col-6 d-flex">
-  <div class="small-box card card-danger card-outline flex-fill d-flex flex-column">
-    <div class="card-header text-center">
-      <h5 class="card-title m-0">
-        <strong>Send Notifications to Consumers with Blocked Status</strong>
-      </h5>
-    </div>
-    
-    <div class="card-body text-center">
-      <h3><div name="customercountblock" id="customercountblock">  {{ $custblocked }} Customer</div></h3>
-      <i class="fas fa-bullhorn fa-3x text-danger my-2"></i>
-    </div>
-
-    <form action="/jobs/customerblockednotifjob" method="POST" class="mt-auto p-3 d-inline notifblocked-send1">
-      @method('get')
-      @csrf
-      
-      <div class="form-group">
-        <label for="id_merchant_block" class="fw-bold">Merchant</label>
-        <select name="id_merchant_block" id="id_merchant_block" class="form-control select2" onchange="getSelectedblocknotif()">
-          <option value="">All</option> <!-- Tambahkan opsi All -->
-          @foreach ($merchant as $id => $name)
-          <option value="{{ $id }}">{{ $name }}</option>
-          @endforeach
-        </select>
       </div>
 
-      <div class="text-center mt-3">
-        <button type="submit" class="btn btn-danger btn-sm px-4">
-          SEND <i class="fas fa-arrow-circle-right"></i>
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
-
-
-<div class="col-lg-3 col-6">
-  <div class="small-box card card-success card-outline flex-fill d-flex flex-column">
-    <div class="card-header text-center">
-      <h5 class="card-title m-0">
-        <strong>Create Monthly Invoice</strong></h5>
-      </div>
-
-      <div class="card-body text-center">
-        <h3><div  id="customerinvcount" nama="customerinvcount">{{ $customerinv }} Customer</div></h3>
-        <p><h4> Customers</h4></p>
-        <div  id="month" nama="month">{{ $customerinv }} </div>
-
-        <p>Ready to Create Invoice</p>
-        <i class="fas fa-file-invoice fa-3x text-success my-2"></i>
-      </div>
-
-      <form action="/jobs/customerinvjob" method="POST" class="mt-auto p-3 d-inline createmonthlyinv-send1">
-        @method('post')
-        @csrf
-
-        <div class="form-group">
-          <label for="date" class="fw-bold">Invoice Date</label>
-          <input class="form-control" id="inv_date" onchange="getSelectedcustomermerchant()" name="inv_date" type="date" value="{{ \Carbon\Carbon::now()->format('Y-m-d') }}">
-
+      {{-- Card 2: Notifikasi Diblokir --}}
+      <div class="col-lg-3 col-md-6 col-12 mb-4 d-flex">
+        <div class="card card-danger card-outline w-100 shadow-sm">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-bell-slash mr-2 text-danger"></i>Notifikasi Diblokir</h3>
+          </div>
+          <div class="card-body d-flex flex-column">
+            <p class="text-muted small">Kirim notifikasi WhatsApp ke pelanggan dengan status blocked / isolir.</p>
+            <form action="/jobs/customerblockednotifjob" method="POST" class="notifblocked-send1 mt-auto">
+              @method('get')
+              @csrf
+              <div class="form-group">
+                <label class="font-weight-bold small">Merchant</label>
+                <select name="id_merchant_block" id="id_merchant_block" class="form-control form-control-sm select2" onchange="getSelectedblocknotif()">
+                  <option value="">Semua Merchant</option>
+                  @foreach ($merchant as $id => $name)
+                    <option value="{{ $id }}">{{ $name }}</option>
+                  @endforeach
+                </select>
+              </div>
+              <div class="text-right">
+                <button type="submit" class="btn btn-danger btn-sm">
+                  <i class="fas fa-paper-plane mr-1"></i>Kirim
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
+      </div>
 
-        <div class="form-group">
-          <label for="id_merchant" class="fw-bold">Merchant</label>
-          <select name="id_merchant" id="id_merchant" onchange="getSelectedcustomermerchant()" class="form-control select2">
-            <option value="">All</option> <!-- Tambahkan opsi All -->
-            @foreach ($merchant as $id => $name)
-            <option value="{{ $id }}">{{ $name }}</option>
-            @endforeach
-          </select>
+      {{-- Card 3: Buat Invoice Bulanan --}}
+      <div class="col-lg-3 col-md-6 col-12 mb-4 d-flex">
+        <div class="card card-success card-outline w-100 shadow-sm">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-file-invoice mr-2 text-success"></i>Invoice Bulanan</h3>
+          </div>
+          <div class="card-body d-flex flex-column">
+            <p class="text-muted small">
+              Generate invoice bulanan untuk pelanggan aktif.
+              <a href="/invoice/createinv" class="text-success ml-1"><i class="fas fa-external-link-alt"></i> Halaman Invoice</a>
+            </p>
+            <form action="/jobs/customerinvjob" method="POST" class="createmonthlyinv-send1 mt-auto">
+              @method('post')
+              @csrf
+              <div class="form-group">
+                <label class="font-weight-bold small">Tanggal Invoice</label>
+                <input class="form-control form-control-sm" id="inv_date" name="inv_date" type="date"
+                  value="{{ \Carbon\Carbon::now()->format('Y-m-d') }}" onchange="getSelectedcustomermerchant()">
+              </div>
+              <div class="form-group">
+                <label class="font-weight-bold small">Merchant</label>
+                <select name="id_merchant" id="id_merchant" class="form-control form-control-sm select2" onchange="getSelectedcustomermerchant()">
+                  <option value="">Semua Merchant</option>
+                  @foreach ($merchant as $id => $name)
+                    <option value="{{ $id }}">{{ $name }}</option>
+                  @endforeach
+                </select>
+              </div>
+              <div class="text-right">
+                <button type="submit" class="btn btn-success btn-sm">
+                  <i class="fas fa-plus-circle mr-1"></i>Buat Invoice
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
+      </div>
 
-        <div class="text-center mt-3">
-          <button type="submit" class="btn btn-success btn-sm px-4">
-            CREATE <i class="fas fa-arrow-circle-right"></i>
-          </button>
+      {{-- Card 4: Isolir Pelanggan --}}
+      <div class="col-lg-3 col-md-6 col-12 mb-4 d-flex">
+        <div class="card card-secondary card-outline w-100 shadow-sm">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-lock mr-2"></i>Isolir Pelanggan</h3>
+          </div>
+          <div class="card-body d-flex flex-column">
+            <p class="text-muted small">Blokir / isolir pelanggan berdasarkan tanggal jatuh tempo pembayaran.</p>
+            <div class="text-center mb-2">
+              <span class="text-muted small">Jatuh tempo hari ini:</span><br>
+              <strong class="text-danger" style="font-size:1.4rem;" id="customercount">–</strong>
+              <p class="text-muted small mb-0" id="result"></p>
+            </div>
+            <form action="/jobs/customerisolirjob" method="POST" class="blocked-customer1 mt-auto">
+              @method('post')
+              @csrf
+              <div class="form-group">
+                <label class="font-weight-bold small">Tanggal Isolir</label>
+                <select name="isolir_date" id="isolir_date" class="form-control form-control-sm select2" onchange="getSelectedisolirdate()">
+                  @php
+                    for ($i = 1; $i <= 29; $i++) {
+                      $d = sprintf('%02d', $i);
+                      $sel = ($d == date('d')) ? 'selected' : '';
+                      echo "<option value=\"$d\" $sel>$d</option>";
+                    }
+                  @endphp
+                </select>
+              </div>
+              <div class="text-right">
+                <button type="submit" class="btn btn-secondary btn-sm">
+                  <i class="fas fa-lock mr-1"></i>Jalankan Isolir
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </form>
-    </div>
+      </div>
+
+    </div>{{-- /row action cards --}}
+
   </div>
-
-
-  <div class="col-lg-3 col-6">
-
-    <div class="small-box card card-danger card-outline flex-fill d-flex flex-column">
-     <div class="card-header">
-      <h5 class="card-title m-0"><strong>Customer Isolir</strong></h5>
-    </div>
-    <div class="card-body text-center">
-      <h3> <div id="customercount" name="customercount"></div>
-      </h3>
-
-      <div id="result" name="result"></div>
-      <i class="ion ion-locked fa-3x text-danger my-2"></i>
-    </div>
-    <form  action="/jobs/customerisolirjob" method="POST" class="mt-auto p-3 d-inline blocked-customer1" >
-     @method('post')
-     @csrf
-     <div class="form-group">
-       <label for="id_merchant" class="fw-bold">Select Isolir Date</label>
-
-       <select name="isolir_date" id="isolir_date" onchange="getSelectedisolirdate()" class="form-control select2">
-        @php
-        $numbers = [];
-        for ($i = 1; $i <= 29; $i++) {
-          $numbers[] = sprintf('%02d', $i);
-
-        }
-        @endphp
-        @foreach ($numbers as $numbers)
-        @if ($numbers == date('d'))
-        <option selected value="{{$numbers}}">{{ $numbers }}</option>
-
-
-        @else
-
-
-        <option value="{{ $numbers}}">{{ $numbers }}</option>
-
-        @endif
-
-        @endforeach
-        @php
-        echo '<script type="text/javascript">';
-        echo   'getSelectedisolirdate();';
-      echo '</script>';
-      @endphp
-    </select>
-  </div>
-<!-- 
-<div class="icon">
-  <i class="ion ion-locked"></i>
-</div>
--->
-
-<div class="text-center mt-3">
-  <button  type="submit"  class="btn  bg-danger btn-sm bg-danger  btn-sm px-4"> BLOCK | ISOLIR <i class="fas fa-arrow-circle-right"></i> </button>
-</div>
-</form>
-</div>
-
-
-</div>
-
-
-
-
-
-</div>
-</div>
-</div>
-
-
-
-
 </section>
 
 @endsection
 
-<script type="text/javascript">
+@section('footer-scripts')
+<script>
+  // ── Cancel all jobs ────────────────────────────────────────────────────────
+  document.getElementById('btn-cancel-jobs').addEventListener('click', function () {
+    var count = parseInt($('#queuecount').text()) || 0;
+    if (count === 0) {
+      Swal.fire({ icon: 'info', title: 'Antrian kosong', text: 'Tidak ada job yang perlu dihapus.', timer: 2000, showConfirmButton: false });
+      return;
+    }
+    Swal.fire({
+      title: 'Hapus semua job?',
+      html: 'Terdapat <strong>' + count + '</strong> job di antrian.<br>Semua job akan dihapus permanen.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Ya, hapus semua!',
+      cancelButtonText: 'Batal'
+    }).then(function (result) {
+      if (result.isConfirmed) {
+        $.ajax({
+          url: '/jobs/canceljobs',
+          type: 'POST',
+          data: { _token: $('meta[name="csrf-token"]').attr('content') },
+          success: function (response) {
+            Swal.fire({ icon: 'success', title: 'Berhasil', text: response.message, timer: 2500, showConfirmButton: false });
+            refreshQueueCount(true);
+          },
+          error: function () {
+            Swal.fire({ icon: 'error', title: 'Gagal', text: 'Terjadi kesalahan saat menghapus job.' });
+          }
+        });
+      }
+    });
+  });
 
-  function getSelectedisolirdate()
-  {
-    var isolirdate = $('#isolir_date').val();
+  // ── Live queue counter (polls every 5 seconds) ─────────────────────────────
+  function refreshQueueCount(spin) {
+    if (spin) {
+      $('#refresh-icon').addClass('fa-spin');
+    }
+    $.ajax({
+      url: '/jobs/queuecount',
+      type: 'GET',
+      success: function(r) {
+        var remaining  = parseInt(r.count)     || 0;
+        var total      = parseInt(r.total)     || 0;
+        var processed  = parseInt(r.processed) || 0;
+        var percent    = parseInt(r.percent)   || 0;
+        var eta        = r.eta || null;
+
+        $('#queuecount').text(remaining);
+
+        if (remaining === 0) {
+          // Semua selesai
+          $('#queuebar').css('width', '100%').removeClass('bg-info').addClass('bg-success');
+          $('#queuestatus').text(total > 0 ? '✅ Semua selesai (' + total + ' job)' : 'No pending tasks');
+          $('#queueeta').text('');
+          $('#queuecount').removeClass('text-info');
+        } else {
+          $('#queuebar').css('width', percent + '%').removeClass('bg-success').addClass('bg-info');
+          var statusText = total > 0
+            ? (processed + ' / ' + total + ' selesai (' + percent + '%)')
+            : (remaining + ' tasks running...');
+          $('#queuestatus').text(statusText);
+          $('#queueeta').text(eta ? '⏱ ETA: ' + eta : '');
+          $('#queuecount').addClass('text-info');
+        }
+      },
+      complete: function() {
+        $('#refresh-icon').removeClass('fa-spin');
+      }
+    });
+  }
+
+  function getSelectedisolirdate() {
     $.ajax({
       url: '/jobs/isolirdata',
       type: 'GET',
-      data: { isolirdate: isolirdate },
+      data: { isolirdate: $('#isolir_date').val() },
       success: function(response) {
         $('#result').html(response.message);
         $('#customercount').html(response.customercount);
       }
     });
   }
-</script>
-<script type="text/javascript">
 
-  function getSelectedcustomermerchant()
-  {
-
-    var id_merchant = $('#id_merchant').val();
-    var inv_date = $('#inv_date').val();
-
+  function getSelectedcustomermerchant() {
     $.ajax({
       url: '/jobs/getSelectedcustomermerchant',
-  type: 'POST', // Ubah menjadi POST
-  data: { 
-    id_merchant: $('#id_merchant').val(), // Bisa kosong untuk semua data
-    inv_date: $('#inv_date').val() // Kirim tanggal dalam format YYYY-MM-DD
-  },
-  dataType: 'json',
-  headers: {
-    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') // Laravel CSRF token
-  },
-  success: function(response) {
-
-    $('#customerinvcount').text(response.customercount);
-    $('#month').text(response.month);
-
-  },
-  error: function(xhr, status, error) {
-    console.error('AJAX Error:', error);
-    alert('Terjadi kesalahan saat mengambil data.');
+      type: 'POST',
+      data: { id_merchant: $('#id_merchant').val(), inv_date: $('#inv_date').val() },
+      dataType: 'json',
+      headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+      success: function(response) {
+        $('#customerinvcount').text(response.customercount);
+        $('#month').text(response.month);
+      }
+    });
   }
-});
 
-  }
-</script>
-
-<script type="text/javascript">
-
-  function getSelectedblocknotif()
-  {
-    var id_merchant_block = $('#id_merchant_block').val();
+  function getSelectedblocknotif() {
     $.ajax({
       url: '/jobs/getSelectedblocknotif',
       type: 'GET',
-      data: { id_merchant_block: id_merchant_block },
+      data: { id_merchant_block: $('#id_merchant_block').val() },
       success: function(response) {
-
         $('#customercountblock').html(response.customercount);
       }
     });
   }
-</script>
-<script type="text/javascript">
 
-  function getSelectedunpaidnotif()
-  {
-    var id_merchant_unpaid = $('#id_merchant_unpaid').val();
+  function getSelectedunpaidnotif() {
     $.ajax({
       url: '/jobs/getSelectedunpaidnotif',
       type: 'GET',
-      data: { id_merchant_unpaid: id_merchant_unpaid },
+      data: { id_merchant_unpaid: $('#id_merchant_unpaid').val() },
       success: function(response) {
-       // alert(response.customercount);
         $('#customercountunpaid').html(response.customercount);
       }
     });
   }
-</script>
-<script>
-   // Panggil fungsi saat halaman dimuat
- document.addEventListener("DOMContentLoaded", function() {
-  getSelectedcustomermerchant();
-  getSelectedblocknotif();
-  getSelectedunpaidnotif();
-});
-</script>
 
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    // Pilih semua form yang membutuhkan konfirmasi
+  // Gunakan jQuery ready — DOMContentLoaded sudah lewat saat footer-scripts dieksekusi
+  $(function () {
+    // Manual refresh button
+    $('#btn-refresh-queue').on('click', function() {
+      refreshQueueCount(true);
+    });
+
+    getSelectedisolirdate();
+    getSelectedblocknotif();
+    getSelectedunpaidnotif();
+    getSelectedcustomermerchant();
+    refreshQueueCount(true);
+    setInterval(function() { refreshQueueCount(false); }, 5000);
+
     document.querySelectorAll('.notifblocked-send1, .createmonthlyinv-send1, .blocked-customer1').forEach(function (form) {
       form.addEventListener("submit", function (event) {
-        event.preventDefault(); // Mencegah submit langsung
-
+        event.preventDefault();
         Swal.fire({
-          title: "Are you sure?",
-          text: "This action will proceed with the job!",
+          title: "Konfirmasi",
+          text: "Proses ini akan dijalankan. Lanjutkan?",
           icon: "warning",
           showCancelButton: true,
           confirmButtonColor: "#3085d6",
           cancelButtonColor: "#d33",
-          confirmButtonText: "Yes, proceed!",
+          confirmButtonText: "Ya, lanjutkan!",
+          cancelButtonText: "Batal"
         }).then((result) => {
-          if (result.isConfirmed) {
-            form.submit(); // Kirim form setelah konfirmasi
-          }
+          if (result.isConfirmed) form.submit();
         });
       });
     });
   });
 </script>
+@endsection

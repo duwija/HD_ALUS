@@ -292,3 +292,7 @@
   </section>
 
   @endsection
+
+@push('summernote-script')
+<script src="{{ url('dashboard/plugins/summernote/summernote-bs4.min.js') }}"></script>
+@endpush

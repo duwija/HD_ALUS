@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Kencana: Tema Ungu -->
+    <color name="purple_primary">#667eea</color>
+    <color name="purple_secondary">#764ba2</color>
+    <color name="colorPrimary">#667eea</color>
+    <color name="colorPrimaryDark">#5a6fd6</color>
+    <color name="colorAccent">#764ba2</color>
+    <color name="colorOnPrimary">#FFFFFF</color>
+    <color name="gradient_start">#667eea</color>
+    <color name="gradient_end">#764ba2</color>
+    <color name="statusBarColor">#5a6fd6</color>
+    <color name="navBadgeBackground">#FF6B6B</color>
+    <color name="navItemChecked">#667eea</color>
+    <color name="navItemUnchecked">#9E9E9E</color>
+    <color name="white">#FFFFFF</color>
+    <color name="textPrimary">#212121</color>
+    <color name="textSecondary">#757575</color>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="nav_item_unselected">#999999</color>
+    <color name="purple_dark">#764ba2</color>
+    <color name="purple_primary">#667eea</color>
+    <color name="white">#FFFFFF</color>
+    <string name="app_name">Kencana Billing</string>
+    <string name="gcm_defaultSenderId" translatable="false">99706567270</string>
+    <string name="google_api_key" translatable="false">AIzaSyD8kuWUzNGrUjSioCTWAKj91V4YMLJ9SZ4</string>
+    <string name="google_app_id" translatable="false">1:99706567270:android:e2ecc641421720abf3cba7</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyD8kuWUzNGrUjSioCTWAKj91V4YMLJ9SZ4</string>
+    <string name="google_storage_bucket" translatable="false">lubax-bill-2-0.firebasestorage.app</string>
+    <string name="login_subtitle">Akses tagihan dan informasi akun Anda</string>
+    <string name="login_title">Login Pelanggan</string>
+    <string name="project_id" translatable="false">lubax-bill-2-0</string>
+    <style name="Theme.KencanaBilling" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/purple_primary</item>
+        <item name="colorPrimaryVariant">@color/purple_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="android:statusBarColor">@color/purple_dark</item>
+    </style>
+</resources>

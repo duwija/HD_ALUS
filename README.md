@@ -1,53 +1,173 @@
 <p align="center"><img src="https://res.cloudinary.com/dtfbvvkyp/image/upload/v1566331377/laravel-logolockup-cmyk-red.svg" width="400"></p>
 
-<p align="center">
-<a href="https://travis-ci.org/laravel/framework"><img src="https://travis-ci.org/laravel/framework.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://poser.pugx.org/laravel/framework/d/total.svg" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://poser.pugx.org/laravel/framework/v/stable.svg" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://poser.pugx.org/laravel/framework/license.svg" alt="License"></a>
-</p>
+# ISP Management System - Multi-Tenant
 
-## About Laravel
+Laravel-based ISP (Internet Service Provider) management system with **database-driven multi-tenancy**.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 🚀 Features
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### Multi-Tenant Architecture
+- ✅ **Database Master System**: Central tenant management via `isp_master` database
+- ✅ **Dynamic Config Override**: Runtime configuration per tenant domain
+- ✅ **Separate Admin Auth**: Isolated authentication for tenant management
+- ✅ **Per-Tenant Database**: Each tenant has independent database
+- ✅ **Per-Tenant Storage**: Isolated file storage structure
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### Environment Variables Management ⭐ NEW
+- ✅ **Database JSON Storage**: Custom ENV variables per tenant
+- ✅ **Priority System**: Database → .env → Default fallback
+- ✅ **Admin UI**: User-friendly interface for managing variables
+- ✅ **Helper Function**: `tenant_env()` for easy access
+- ✅ **Use Cases**: WhatsApp, Payment Gateway, SMTP per tenant
 
-## Learning Laravel
+### Core ISP Features
+- Customer management with topology
+- Invoice & payment tracking
+- Ticketing system
+- Device & OLT management
+- WhatsApp integration
+- Payment gateway integration (Xendit)
+- Accounting & financial reports
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## 📚 Documentation
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains over 1500 video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### Quick Start Guides
+- **[QUICK_START_TENANT_UI.md](QUICK_START_TENANT_UI.md)** - Tenant management via Admin UI
+- **[QUICK_START_ENV_VARIABLES.md](QUICK_START_ENV_VARIABLES.md)** - ENV variables quick reference
 
-## Laravel Sponsors
+### Comprehensive Guides
+- **[DATABASE_TENANT_GUIDE.md](DATABASE_TENANT_GUIDE.md)** - Multi-tenant architecture
+- **[ENV_VARIABLES_DATABASE_GUIDE.md](ENV_VARIABLES_DATABASE_GUIDE.md)** - ENV variables system
+- **[ADMIN_AUTH_GUIDE.md](ADMIN_AUTH_GUIDE.md)** - Admin authentication
+- **[TENANT_MANAGEMENT_UI_GUIDE.md](TENANT_MANAGEMENT_UI_GUIDE.md)** - Full UI guide
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the Laravel [Patreon page](https://patreon.com/taylorotwell).
+### Reference
+- **[ADMIN_QUICK_REF.md](ADMIN_QUICK_REF.md)** - Admin commands reference
+- **[ENV_VARIABLES_SUMMARY.md](ENV_VARIABLES_SUMMARY.md)** - ENV system summary
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Cubet Techno Labs](https://cubettech.com)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[Many](https://www.many.co.uk)**
-- **[Webdock, Fast VPS Hosting](https://www.webdock.io/en)**
-- **[DevSquad](https://devsquad.com)**
-- [UserInsights](https://userinsights.com)
-- [Fragrantica](https://www.fragrantica.com)
-- [SOFTonSOFA](https://softonsofa.com/)
-- [User10](https://user10.com)
-- [Soumettre.fr](https://soumettre.fr/)
-- [CodeBrisk](https://codebrisk.com)
-- [1Forge](https://1forge.com)
-- [TECPRESSO](https://tecpresso.co.jp/)
+## 🔧 System Requirements
+
+- PHP 8.2+
+- MySQL 5.7+ / MariaDB 10.3+
+- Nginx / Apache
+- Composer
+- Node.js & NPM (for assets)
+
+## 🎯 Admin Access
+
+```
+URL: https://your-domain.com/admin/login
+Default Admin: admin@kencana.alus.co.id
+Password: Admin123!@#
+```
+
+## 📖 Environment Variables Usage
+
+### Basic Usage
+```php
+// Anywhere in code
+$whatsappToken = tenant_env('WHATSAPP_TOKEN');
+$xenditSecret = tenant_env('XENDIT_SECRET', 'default');
+```
+
+### Blade Templates
+```blade
+<p>WhatsApp: {{ tenant_env('WHATSAPP_NUMBER', '628xxx') }}</p>
+```
+
+### Priority Order
+```
+1. Database JSON (tenant-specific) ← FIRST
+2. Global .env file (shared)       ← FALLBACK  
+3. Default value                   ← LAST
+```
+
+## 🛠️ Artisan Commands
+
+```bash
+# Tenant Management
+php artisan tenant:list              # List all tenants
+php artisan tenant:create           # Create new tenant (interactive)
+php artisan tenant:fix-permissions  # Fix storage permissions
+
+# Admin Management
+php artisan admin:create            # Create admin user (interactive)
+```
+
+## 🗄️ Database Structure
+
+### Master Database (`isp_master`)
+- `tenants` - Tenant configurations with JSON env_variables
+
+### Admin Database (`isp_admin`)
+- `admin_users` - Admin authentication
+
+### Tenant Databases
+- `adiyasa_2.2`, `kencana`, etc. - Per-tenant data
+
+## 📁 Directory Structure
+
+```
+storage/tenants/[RESCODE]/
+  ├── logs/
+  │   └── laravel.log
+  └── app/public/
+
+public/tenants/[RESCODE]/
+  ├── storage/
+  ├── upload/
+  ├── backup/
+  └── users/
+```
+
+## 🔐 Security
+
+- ✅ Separate admin authentication guard
+- ✅ Per-tenant database isolation
+- ✅ Encrypted passwords & tokens
+- ✅ Database credentials in .env
+- ⚠️ ENV variables in JSON (plain text - OK for tenant keys)
+
+## 🧪 Testing
+
+```bash
+# Test ENV variables system
+./test_env_variables.sh
+
+# Manual testing via Tinker
+php artisan tinker
+```
+
+## 📊 Tech Stack
+
+- **Framework**: Laravel 8.83.27
+- **PHP**: 8.2.29
+- **Web Server**: Nginx 1.20.1
+- **Database**: MySQL
+- **Frontend**: Blade, Bootstrap, jQuery
+- **Caching**: Laravel Cache (1 hour TTL)
+
+## 🎨 Key Features Highlight
+
+### 1. Dynamic Tenant Detection
+Automatic tenant identification from domain with runtime config override.
+
+### 2. Database-Driven Configuration
+No more `.env` files per tenant - all managed via database.
+
+### 3. Admin Panel
+Beautiful, user-friendly interface for tenant management with auto-create features.
+
+### 4. Custom ENV Variables
+Per-tenant environment variables for APIs, integrations, and custom configs.
+
+## 📝 License
+
+This ISP Management System is proprietary software.
+
+## 🤝 Support
+
+For documentation and support, refer to the guides in the `/docs` directory or the markdown files in the root directory.
 - [Runtime Converter](http://runtimeconverter.com/)
 - [WebL'Agence](https://weblagence.com/)
 - [Invoice Ninja](https://www.invoiceninja.com)

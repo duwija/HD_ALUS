@@ -1,0 +1,183 @@
+@extends('layout.main')
+@section('title', 'OLT')
+
+@section('content')
+<section class="content-header">
+  <div class="card card-primary card-outline">
+    <div class="card-header">
+      <h3 class="card-title font-weight-bold">Show Detail Olt</h3>
+    </div>
+
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header">
+              <h5 class="card-title">OLT Details</h5>
+            </div>
+            <div class="card-body">
+              <p><strong>Name:</strong> {{ $olt->name }}</p>
+              <p><strong>IP Address:</strong> {{ $olt->ip }}</p>
+              <p><strong>Type:</strong> {{ $olt->type }}</p>
+              <p><strong>User:</strong> {{ $olt->user }}</p>
+              <p><strong>SNMP Port:</strong> {{ $olt->snmp_port }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header">
+              <h5 class="card-title">Retrieved OLT Information</h5>
+            </div>
+            <div class="card-body">
+              <div id="olt-info">
+                <div id="spinner" style="display:none;">
+                  <p>Loading...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-12">
+          <div class="card mb-3">
+            <div class="card-header">
+              <h5 class="card-title">ONU List</h5>
+            </div>
+            <div class="card-body">
+              <select id="oltPonComboBox" class="form-control">
+                <option value="">Pilih OLT PON</option>
+              </select> 
+              <button id="getOnu" class="btn btn-primary mt-2">Show</button>
+              
+              <div id="snmpTableContainer" style="display:none;" class="mt-3">
+                <table id="onu-table" name="onu-table" class="display" style="width:100%">
+                  <thead>
+                    <tr>
+                      <th>ONU Name</th>
+                      <th>ONU Status</th>
+                      <th>Rx Power</th>
+                      <th>Tx Power</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+
+              <div id="olt-onu-info">
+                <div id="spinnerx" style="display:none;">
+                  <p>Antosss</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+  $(document).ready(function () {
+    // Menampilkan spinner saat data sedang dimuat
+    $('#spinner').show();
+
+    // Request pertama untuk mendapatkan informasi OLT
+    // $.ajax({
+    //   url: '/olt/getoltinfo/{{$olt->id}}',
+    //   type: 'GET',
+    //   success: function (data) {
+    //     $('#spinner').hide();
+    //     if (data.success) {
+    //       // Menampilkan informasi OLT jika berhasil
+    //       $('#olt-info').html(`
+    //         <p><strong>OLT Name:</strong> ${data.oltInfo.oltName}</p>
+    //         <p><strong>OLT Uptime:</strong> ${data.oltInfo.oltUptime}</p>
+    //         <p><strong>OLT Version:</strong> ${data.oltInfo.oltVersion}</p>
+    //         <p><strong>OLT Description:</strong> ${data.oltInfo.oltDesc}</p>
+    //         `);
+    //     } else {
+    //       // Menampilkan pesan error jika tidak berhasil
+    //       $('#olt-info').html('<div class="alert alert-danger">' + data.error + '</div>');
+    //     }
+    //   },
+    //   error: function (xhr, status, error) {
+    //     $('#spinner').hide();
+    //     $('#olt-info').html('<div class="alert alert-danger">Terjadi kesalahan saat mengambil data.</div>');
+    //   }
+    // });
+
+    // Request kedua untuk mendapatkan daftar OLT PON dan mengisi combobox
+    // $.ajax({
+    //   url: '/olt/getoltpon/{{$olt->id}}',
+    //   type: 'GET',
+    //   success: function (response) {
+    //     if (response.data && response.data.length > 0) {
+    //       var selectBox = $('#oltPonComboBox');
+    //       selectBox.empty();
+    //       selectBox.append('<option value="">Pilih OLT PON</option>');
+    //       $.each(response.data, function (index, item) {
+    //         selectBox.append('<option value="' + item.suffix + '">' + item.olt_pon + '</option>');
+    //       });
+    //     } else {
+    //       alert('Data tidak ditemukan');
+    //     }
+    //   },
+    //   error: function (xhr, status, error) {
+    //     alert('Terjadi kesalahan saat mengambil data');
+    //   }
+    // });
+
+    // Request untuk mendapatkan data ONU saat tombol getOnu diklik
+    $('#getOnu').click(function() {
+      var selectedOltPon = $('#oltPonComboBox').val();
+      if (selectedOltPon === "ff") {
+        alert('Silakan pilih OLT PON terlebih dahulu.');
+        return;
+      }
+
+      $('#spinnerx').show(); // Tampilkan spinner saat data sedang dimuat
+
+      if ($.fn.DataTable.isDataTable('#onu-table')) {
+        $('#onu-table').DataTable().clear().destroy(); // Hancurkan tabel dan hapus data sebelumnya
+      }
+
+      var table = $('#onu-table').DataTable({
+        "responsive": true,
+        "autoWidth": false,
+        "searching": false,
+        "processing": true,
+        "serverSide": true,
+        "ajax": {
+          url: '/olt/getoltonu',
+          method: 'GET',
+          // data: {
+          //   olt_id: '{{$olt->id}}',
+          //   olt_pon: selectedOltPon
+          // }
+        },
+        "columns": [
+          { data: 'olt_onu_name', name: 'olt_onu_name' },
+          { data: 'onu_status', name: 'onu_status' }
+          ],
+        "language": {
+          "processing": "<span class='fa-stack fa-lg'><i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i></span>&emsp;Processing ..."
+        },
+        "dom": 'lBfrtip',
+        "buttons": ['copy', 'excel', 'pdf', 'csv', 'print'],
+        "lengthMenu": [[200, 500, 1000], [200, 500, 1000]],
+        "columnDefs": [
+          { "targets": 1, "className": "text-center" },
+          { "targets": 2, "className": "text-center" }
+          ]
+      });
+
+      $('#spinnerx').hide();
+    });
+  });
+</script>
+
+@endsection

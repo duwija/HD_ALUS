@@ -1,0 +1,314 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Process;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Contracts\Encryption\DecryptException;
+use Exception; 
+use Illuminate\Support\Carbon;
+
+class XenditCallbackController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        //
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        //
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        //
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request)
+    {
+        //
+      // $data=response()->json($request);
+      $id_xendit= $request->id;
+      if ($request->status == 'PAID')
+
+      {
+
+        try{
+
+           $query = \App\Suminvoice::where('payment_id', $id_xendit)
+           ->update([
+            'recieve_payment' => $request->paid_amount,
+            'payment_point' => $request->bank_code,
+            'note' => $request->payment_method,
+            'updated_by' => $request->merchant_name,
+            'payment_status' =>1,
+            'payment_date' =>now()->toDateTimeString(),
+
+
+        ]);
+           if($query)
+           {
+
+            $invoice =\App\Suminvoice::where('payment_id', $id_xendit)->first();
+            
+            $customers = \App\Customer::Where('id',$invoice->id_customer)->first();
+            
+            $message ="Yth. ".$customers->name." ";
+            $message .="\n";
+            $message .="\nTerimakasih, Pembayaran tagihan Customer dengan CID ".$customers->customer_id." sudah kami *TERIMA* ";
+            $message .="\nUntuk info lebih lengkap silahkan klik link";
+            $message .="\nhttp://".env("DOMAIN_NAME")."/suminvoice/".$invoice->tempcode."/print";
+
+            $message .="\n* Payment System Trikamedia *";
+
+            $msg = \App\Suminvoice::wa_payment($customers->phone,$message);
+            
+            $notif_group ="Online Payment ";
+            $notif_group .="\n";
+            $notif_group .="\nPembayaran tagihan dari CID ".$customers->customer_id." ( ".$customers->name." )  Sudah DITERIMA";
+            $notif_group .="\nCheck : http://".env("DOMAIN_NAME")."/invoice/".$invoice->tempcode;
+            $notif_group .="\n";
+            $notif_group .="\n* Payment System Trikamedia *";
+            $msg = \App\Suminvoice::wa_payment_g($customers->phone,$notif_group);
+
+
+            $active_invoice = \App\Suminvoice::where('payment_status', '=', '0' )
+            ->where ('id_customer', '=', $invoice->id_customer )
+            ->count();
+            
+            if (($customers->id_status ==4 ) AND ($active_invoice <= 0 ))
+            {
+
+               $distrouter = \App\Distrouter::withTrashed()->Where('id',$customers->id_distrouter)->first();
+               \App\Customer::where('id', $invoice->id_customer)->update([
+                'id_status' => 2 ]);
+               \App\Distrouter::mikrotik_enable($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->customer_id);
+
+           }
+
+
+
+
+
+
+       }
+   }
+   catch (Exception $e)
+   {
+    return $e;
+}
+
+}
+
+}
+
+
+
+public function update_tripay(Request $request)
+{
+
+  $date=date("Y-m-d H:i:s");
+  $number= $request->merchant_ref;
+  if ($request->status == 'PAID')
+
+  {
+
+    try{
+
+       $query = \App\Suminvoice::where('number', $number)
+       ->update([
+        'recieve_payment' => $request->amount_received,
+        'payment_point' => '1-10039',
+        'note' => $request->payment_method .' ('.$request->amount_received.'+'.$request->total_fee.'->'.$request->total_amount.')' ,
+        'updated_by' => 'TRIPAY' ,
+        'payment_status' =>1,
+        'payment_date' =>now()->toDateTimeString(),
+
+
+    ]);
+       if($query)
+       {
+
+        $invoice =\App\Suminvoice::where('number', $number)->first();
+        
+        $customers = \App\Customer::Where('id',$invoice->id_customer)->first();
+
+
+
+
+        
+$jumlah = $request->amount_received; // Ambil jumlah dari request
+$jumlah_rupiah = number_format($jumlah, 0, ',', '.'); // Format menjadi rupiah
+
+
+
+
+$encryptedurl = Crypt::encryptString($customers->id);
+
+$response = qontak_whatsapp_helper_receive_payment_confirmation(
+    $customers->phone,
+    $customers->name,
+    $number,
+    $customers->customer_id,
+    $jumlah,
+    "/invoice/cst/" . $encryptedurl
+);
+
+
+
+
+
+
+
+$notif_group = "[ONLINE PAYMENT]";
+$notif_group .= "\n\nPembayaran dari pelanggan ";
+$notif_group .= "\nCID :" . $customers->customer_id. "" ;
+$notif_group .= "\nNama :" . $customers->name."" ;
+$notif_group .= "\nSUDAH DITERIMA";
+$notif_group .= "\nJumlah: Rp " . $jumlah_rupiah;
+$notif_group .= "\nOleh : TRIPAY | ". $request->payment_method;
+$notif_group .= "\n\nUntuk melihat detail pembayaran, silakan klik tautan berikut:";
+$notif_group .= "\n👉 " . url("/suminvoice/" . $invoice->tempcode);
+$notif_group .= "\n\nTerima kasih";
+$notif_group .= "\n~ " . env("SIGNATURE") . " ~";
+
+$process = new Process(["python3", env("PHYTON_DIR")."telegram_send_to_group.py", env("TELEGRAM_GROUP_PAYMENT"), $notif_group]);
+
+try {
+            // Menjalankan proses
+    $process->run();
+
+            // Memeriksa apakah proses berhasil
+    if (!$process->isSuccessful()) {
+        throw new ProcessFailedException($process);
+    }
+
+            // Mendapatkan output dari proses
+    $output = $process->getOutput();
+    $msg .="\n Send messages to Payment Group : success";
+
+
+          //  return redirect ('/ticket/view/'.$request['id_customer'])->with('success', $output);
+} catch (ProcessFailedException $e) {
+            // Jika proses gagal, kembalikan pesan kesalahan
+    $errorMessage = $e->getMessage();
+          //  return redirect()->back()->with('error', $errorMessage);
+}
+
+
+
+$data = [
+
+    'date' => $date,
+    'reff' =>  $invoice->tempcode.'receive',
+    'type' => 'jumum',
+    'description' => 'Receive Payment  #'.$number,
+    'note' => 'Receive Payment OFFLINR  #'.$number.' | '.$customers->customer_id. ' | '.$customers->name,
+];
+
+
+$data['id_akun'] = '1-10039';
+$data['debet'] = $jumlah;
+\App\Jurnal::create($data);
+
+    unset($data['debet']); // Remove debet key for the credit entry
+
+// Create credit entry
+    $data['id_akun'] = '1-10100';
+    $data['kredit'] = $jumlah;
+    \App\Jurnal::create($data);
+
+
+
+
+
+
+
+    $active_invoice = \App\Suminvoice::where('payment_status', '=', '0' )
+    ->where ('id_customer', '=', $invoice->id_customer )
+    ->count();
+
+    if (($customers->id_status ==4 ) AND ($active_invoice <= 0 ))
+    {
+
+       $distrouter = \App\Distrouter::withTrashed()->Where('id',$customers->id_distrouter)->first();
+       \App\Customer::where('id', $invoice->id_customer)->update([
+        'id_status' => 2 ]);
+       \App\Distrouter::mikrotik_enable($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->customer_id);
+
+   }
+
+
+
+
+
+
+}
+}
+catch (Exception $e)
+{
+    return $e;
+}
+
+}
+}
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        //
+    }
+}

@@ -1,0 +1,86 @@
+body {
+  background: #0d1117;
+  color: #f0f0f0;
+  font-family: 'Poppins', sans-serif;
+}
+
+/* Header Clock */
+#clock {
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(255, 255, 0, 0.7);
+}
+
+/* Summary Cards */
+.summary-card {
+  transition: transform 0.3s ease;
+  box-shadow: 0 0 10px rgba(0,0,0,0.4);
+}
+.summary-card:hover {
+  transform: scale(1.05);
+}
+
+/* Ticket Cards */
+.ticket-card-wrapper {
+  min-height: 220px;
+}
+
+.ticket-card {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.ticket-card:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 0 25px rgba(255,255,255,0.1);
+}
+
+/* Glowing Border Animation */
+.ticket-card::before {
+  content: "";
+  position: absolute;
+  top: -2px; left: -2px;
+  right: -2px; bottom: -2px;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.15);
+  animation: borderGlow 3s infinite linear;
+  z-index: 0;
+}
+@keyframes borderGlow {
+  0% { border-color: rgba(255,255,255,0.2); }
+  50% { border-color: rgba(255,255,255,0.6); }
+  100% { border-color: rgba(255,255,255,0.2); }
+}
+
+/* Progress */
+.progress {
+  border-radius: 10px;
+  background: rgba(255,255,255,0.1);
+}
+.progress-bar {
+  transition: width 1s ease;
+  border-radius: 10px;
+}
+
+/* Background gradients */
+.bg-danger { background: linear-gradient(135deg, #ff5f5f, #cc0000)!important; }
+.bg-warning { background: linear-gradient(135deg, #ffda6a, #ffc107)!important; }
+.bg-info { background: linear-gradient(135deg, #4fc3f7, #0288d1)!important; }
+.bg-success { background: linear-gradient(135deg, #4caf50, #087f23)!important; }
+.bg-secondary { background: linear-gradient(135deg, #a0a0a0, #6c757d)!important; }
+
+/* Scroll Container */
+#ticketPages {
+  height: calc(100vh - 250px);
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .ticket-card { padding: 10px; font-size: 0.9rem; }
+  .summary-card { padding: 8px; }
+  h5 { font-size: 1rem; }
+  .progress { height: 4px; }
+}

@@ -1,0 +1,600 @@
+/**
+ * Financial Reports & Accounting Stylesheet
+ * Unified styling for all financial reports and accounting pages
+ * Version: 1.0
+ * Last Updated: November 9, 2025
+ */
+
+/* ============================================
+   CARD HEADERS - Soft Blue Theme
+   ============================================ */
+.card-header-custom {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  color: white;
+  padding: 1rem 1.25rem;
+  border-bottom: none;
+}
+
+.card-header-custom h3,
+.card-header-custom h4,
+.card-header-custom h5,
+.card-title-custom {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: white;
+}
+
+.card-subtitle {
+  opacity: 0.9;
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+.card-header-custom .btn-light {
+  background-color: rgba(255, 255, 255, 0.9);
+  border: none;
+  color: #4a90e2;
+  font-weight: 500;
+}
+
+.card-header-custom .btn-light:hover {
+  background-color: white;
+  color: #357abd;
+}
+
+/* ============================================
+   FILTER SECTIONS
+   ============================================ */
+.filter-section {
+  background-color: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 0.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.filter-section .form-label,
+.filter-label {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+/* ============================================
+   SUMMARY CARDS
+   ============================================ */
+.summary-card {
+  border: none;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.summary-card .card-body {
+  padding: 1.25rem;
+}
+
+.summary-card h6 {
+  font-size: 0.875rem;
+  color: #6c757d;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-card h3 {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 0;
+}
+
+/* Card Colors */
+.summary-card.debit-card {
+  border-left: 4px solid #28a745;
+}
+
+.summary-card.debit-card h3 {
+  color: #28a745;
+}
+
+.summary-card.kredit-card {
+  border-left: 4px solid #dc3545;
+}
+
+.summary-card.kredit-card h3 {
+  color: #dc3545;
+}
+
+.summary-card.saldo-card,
+.summary-card.balance-card {
+  border-left: 4px solid #4a90e2;
+}
+
+.summary-card.saldo-card h3,
+.summary-card.balance-card h3 {
+  color: #4a90e2;
+}
+
+.summary-card.asset-card {
+  border-left: 4px solid #17a2b8;
+}
+
+.summary-card.asset-card h3 {
+  color: #17a2b8;
+}
+
+.summary-card.liability-card {
+  border-left: 4px solid #ffc107;
+}
+
+.summary-card.liability-card h3 {
+  color: #f39c12;
+}
+
+.summary-card.equity-card {
+  border-left: 4px solid #6f42c1;
+}
+
+.summary-card.equity-card h3 {
+  color: #6f42c1;
+}
+
+/* ============================================
+   TABLES
+   ============================================ */
+.financial-table {
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.financial-table thead th {
+  background-color: #4a90e2;
+  color: white;
+  font-weight: 600;
+  border: none;
+  padding: 0.75rem;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.financial-table tbody td {
+  padding: 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.financial-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Amount columns */
+.amount-column {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+}
+
+/* Hierarchy levels */
+.level-0 { 
+  font-weight: bold; 
+  background-color: #e9ecef;
+}
+
+.level-1 { 
+  padding-left: 1rem; 
+  font-weight: 600;
+}
+
+.level-2 { 
+  padding-left: 2rem; 
+}
+
+.level-3 { 
+  padding-left: 3rem; 
+  font-size: 0.9rem;
+}
+
+/* Total rows */
+.total-row {
+  background-color: #343a40;
+  color: white;
+  font-weight: bold;
+}
+
+.total-row td {
+  padding: 0.875rem 0.75rem;
+  border: none;
+}
+
+.total-row input {
+  background-color: #495057;
+  color: white;
+  border: none;
+  font-weight: bold;
+}
+
+.subtotal-row {
+  background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+  color: white;
+  font-weight: bold;
+}
+
+.grandtotal-row {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+/* Balance differences */
+.text-danger-amount {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.text-success-amount {
+  color: #28a745;
+  font-weight: bold;
+}
+
+/* ============================================
+   RESULT BOXES
+   ============================================ */
+.result-box {
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.result-box.profit {
+  background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+  color: white;
+}
+
+.result-box.loss {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+}
+
+.result-box.neutral {
+  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+  color: white;
+}
+
+.result-box h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  opacity: 0.9;
+}
+
+.result-box h2 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+/* ============================================
+   FORM SECTIONS
+   ============================================ */
+.form-section {
+  background-color: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 0.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.form-section-title {
+  color: #4a90e2;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #4a90e2;
+  font-size: 1.1rem;
+}
+
+.form-section .form-label {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+.btn-add-row {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+}
+
+.btn-add-row:hover {
+  background-color: #218838;
+  color: white;
+}
+
+.btn-export {
+  background-color: white;
+  border: 1px solid #dee2e6;
+  color: #495057;
+  padding: 0.5rem 1rem;
+  margin-left: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-export:hover {
+  background-color: #f8f9fa;
+  border-color: #4a90e2;
+  color: #4a90e2;
+}
+
+.btn-export i {
+  margin-right: 0.5rem;
+}
+
+/* ============================================
+   PERIOD INFO
+   ============================================ */
+.period-info {
+  background-color: #e3f2fd;
+  border-left: 4px solid #4a90e2;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 0.25rem;
+}
+
+.period-info strong {
+  color: #4a90e2;
+}
+
+/* ============================================
+   CHARTS & VISUALIZATIONS
+   ============================================ */
+.chart-container {
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 1.5rem;
+}
+
+.chart-container h5 {
+  color: #495057;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e9ecef;
+}
+
+/* ============================================
+   MODALS
+   ============================================ */
+.modal-header-custom {
+  background-color: #4a90e2;
+  color: white;
+}
+
+.modal-header-custom .modal-title {
+  font-weight: 600;
+}
+
+.modal-header-custom .close {
+  color: white;
+  opacity: 0.8;
+}
+
+.modal-header-custom .close:hover {
+  opacity: 1;
+}
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.loading-content {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+@media (max-width: 768px) {
+  .card-header-custom h3,
+  .card-header-custom h4,
+  .card-header-custom h5 {
+    font-size: 1rem;
+  }
+  
+  .summary-card h3 {
+    font-size: 1.25rem;
+  }
+  
+  .result-box h2 {
+    font-size: 1.5rem;
+  }
+  
+  .financial-table {
+    font-size: 0.875rem;
+  }
+  
+  .financial-table thead th,
+  .financial-table tbody td {
+    padding: 0.5rem 0.25rem;
+  }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+  .card-header-custom {
+    background: #4a90e2 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  .filter-section,
+  .btn,
+  .dropdown {
+    display: none !important;
+  }
+  
+  .financial-table thead th {
+    background-color: #4a90e2 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  .summary-card {
+    page-break-inside: avoid;
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+.text-debit {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.text-kredit {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.text-balance {
+  color: #4a90e2;
+  font-weight: 600;
+}
+
+.bg-soft-blue {
+  background-color: #e3f2fd;
+}
+
+.border-soft-blue {
+  border-color: #4a90e2;
+}
+
+.monospace {
+  font-family: 'Courier New', monospace;
+}
+
+/* ============================================
+   SECTION DIVIDERS
+   ============================================ */
+.section-divider {
+  height: 2px;
+  background: linear-gradient(to right, #4a90e2, transparent);
+  margin: 2rem 0;
+}
+
+.section-title {
+  color: #4a90e2;
+  font-weight: 600;
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #4a90e2;
+}
+
+/* ============================================
+   ACCOUNT HIERARCHY INDICATORS
+   ============================================ */
+.account-code {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #495057;
+}
+
+.account-name {
+  color: #212529;
+}
+
+.account-parent {
+  font-weight: 600;
+  background-color: #f8f9fa;
+}
+
+.account-child {
+  padding-left: 2rem;
+}
+
+.account-grandchild {
+  padding-left: 4rem;
+  font-size: 0.9rem;
+}
+
+/* ============================================
+   ADDITIONAL UTILITY CLASSES
+   ============================================ */
+.info-box {
+  background-color: #e3f2fd;
+  border-left: 4px solid #4a90e2;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 0.25rem;
+}
+
+.balance-section {
+  background-color: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.balance-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.balance-item:last-child {
+  border-bottom: none;
+}
+
+.balance-label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.balance-value {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #212529;
+}
+
+.selisih-warning {
+  background-color: #fff3cd;
+  border-left: 4px solid #ffc107;
+  padding: 1rem;
+  margin-top: 1rem;
+  border-radius: 0.25rem;
+}
+
+.selisih-warning strong {
+  color: #856404;
+}

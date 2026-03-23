@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kencana Billing</string>
+    <string name="login_title">Kencana</string>
+    <string name="login_subtitle">Internet Service Provider</string>
+    <string name="tenant_domain">kencana.alus.co.id</string>
+</resources>

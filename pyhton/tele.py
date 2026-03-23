@@ -1,14 +1,14 @@
 from telethon import TelegramClient, events
 
 # Ganti dengan api_id dan api_hash Anda
-api_id = '27100075'
-api_hash = '8231487461400441459a400320c34cfd'
+api_id = '26874936'
+api_hash = '4e3ed0a504c042cf8e3eff2d9be3351d'
 
 # Ganti dengan nomor telepon Anda
-phone_number = '+6281805360534'
+phone_number = '+6281934331371'
 
 # Ganti dengan username atau ID grup tujuan
-group_username_or_id = '-1002259278918'
+group_username_or_id = '-4670721201'
 
 # Pesan yang ingin dikirim
 message = 'Halo, ini pesan dari Telethon!'

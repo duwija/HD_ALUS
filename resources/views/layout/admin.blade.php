@@ -8,6 +8,14 @@
     </a>
     <ul class="nav nav-treeview">
       <li class="nav-item">
+        <a href="{{ url('admin-status') }}" class="nav-link">
+          <i class="fas fa-shield-alt nav-icon text-danger"></i>
+          <p>System Status</p>
+        </a>
+      </li>
+    </ul>
+    <ul class="nav nav-treeview">
+      <li class="nav-item">
         <a href="{{ url ('user')}}" class="nav-link">
           <i class="fas fa-user nav-icon"></i>
           <p>User Management</p>
@@ -25,7 +33,7 @@
     </ul>
     <ul class="nav nav-treeview">
       <li class="nav-item">
-        <a href="{{ url ('whatsapp/qrcode')}}" class="nav-link">
+        <a href="{{ url ('wa/dashboard')}}" class="nav-link">
           <i class="fab fa-whatsapp nav-icon"></i>
           <p>Wa Gateway</p>
         </a>

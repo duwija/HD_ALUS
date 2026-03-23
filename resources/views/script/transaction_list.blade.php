@@ -1,4 +1,4 @@
-
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 
 
@@ -15,14 +15,12 @@
     "autoWidth": false,
     "searching": false,
     "language": {
-      "processing": "<span class='fa-stack fa-lg'>\n\
-      <i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-      </span>&emsp;Processing ..."
+      "processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
     },
-    dom: 'lBfrtip',
+    dom: 'Bfrtip',
     buttons: [
-      'copy', 'excel', 'pdf', 'csv', 'print'
-      ],
+     'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
+     ],
     "lengthMenu": [[50 ,100, 200, 500, 1000], [50 ,100, 200, 500, 1000]],
     processing: true,
     serverSide: true,
@@ -223,3 +221,37 @@
     "pagingType": "full_numbers", // Optional: Customize pagination controls
   });
 </script> -->
+<script>
+  const dailyData = @json($dailyTransactions);
+  const labels = dailyData.map(item => item.date);
+  const volumes = dailyData.map(item => item.volume);
+  const totals  = dailyData.map(item => item.total_paid);
+
+  new Chart(document.getElementById('dailyTransactionChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+      {
+        label: 'Jumlah Transaksi',
+        data: volumes,
+        backgroundColor: 'rgba(54, 162, 235, 0.6)'
+      },
+      {
+        label: 'Total Pembayaran',
+        data: totals,
+        type: 'line',
+        fill: false,
+        borderColor: 'rgba(255, 99, 132, 0.8)'
+      }
+      ]
+    },
+    options: {
+      scales: {
+        x: { title: { display: true, text: 'Tanggal' } },
+        y: { title: { display: true, text: 'Nilai' }, beginAtZero: true }
+      }
+    }
+  });
+</script>
+

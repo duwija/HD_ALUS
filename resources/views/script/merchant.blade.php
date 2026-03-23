@@ -47,86 +47,56 @@
 				$('#spinner').hide();
 				if (data.success) {
 
-          // Menampilkan informasi OLT jika berhasil
+          // Menampilkan informasi statistik customer
 					$('#merchant-info').html(`
-
-
-
-						<section class="content">
-						<div class="container-fluid">
 						<div class="row">
-
-						<div class="col-lg-4 col-4">
-						<!-- small box -->
-						<div class="small-box bg-warning">
-						<div class="inner">
-						<h4> ${data.count_user_potensial}</h4>
-						<p>Potensial</p>
+						  <div class="col-6 col-md-4 mb-2">
+						    <div class="d-flex align-items-center p-2 rounded" style="background:#fff3cd;border:1px solid #ffc107">
+						      <i class="fas fa-user-clock fa-lg mr-2" style="color:#ffc107"></i>
+						      <div>
+						        <div class="font-weight-bold" style="font-size:1.1rem">${data.count_user_potensial}</div>
+						        <div class="small text-muted">Potensial</div>
+						      </div>
+						    </div>
+						  </div>
+						  <div class="col-6 col-md-4 mb-2">
+						    <div class="d-flex align-items-center p-2 rounded" style="background:#d4edda;border:1px solid #28a745">
+						      <i class="fas fa-user-check fa-lg mr-2" style="color:#28a745"></i>
+						      <div>
+						        <div class="font-weight-bold" style="font-size:1.1rem">${data.count_user_active}</div>
+						        <div class="small text-muted">Active</div>
+						      </div>
+						    </div>
+						  </div>
+						  <div class="col-6 col-md-4 mb-2">
+						    <div class="d-flex align-items-center p-2 rounded" style="background:#f8d7da;border:1px solid #dc3545">
+						      <i class="fas fa-user-slash fa-lg mr-2" style="color:#dc3545"></i>
+						      <div>
+						        <div class="font-weight-bold" style="font-size:1.1rem">${data.count_user_block}</div>
+						        <div class="small text-muted">Blocked</div>
+						      </div>
+						    </div>
+						  </div>
+						  <div class="col-6 col-md-4 mb-2">
+						    <div class="d-flex align-items-center p-2 rounded" style="background:#e9ecef;border:1px solid #6c757d">
+						      <i class="fas fa-user-minus fa-lg mr-2" style="color:#6c757d"></i>
+						      <div>
+						        <div class="font-weight-bold" style="font-size:1.1rem">${data.count_user_inactive}</div>
+						        <div class="small text-muted">Inactive</div>
+						      </div>
+						    </div>
+						  </div>
+						  <div class="col-6 col-md-4 mb-2">
+						    <div class="d-flex align-items-center p-2 rounded" style="background:#cce5ff;border:1px solid #007bff">
+						      <i class="fas fa-building fa-lg mr-2" style="color:#007bff"></i>
+						      <div>
+						        <div class="font-weight-bold" style="font-size:1.1rem">${data.count_user_c_properti}</div>
+						        <div class="small text-muted">Company Property</div>
+						      </div>
+						    </div>
+						  </div>
 						</div>
-						<div class="icon">
-						<i class="fas fa-user"></i>
-						</div>
-						</div>
-						</div>
-						<!-- ./col -->
-						<div class="col-lg-4 col-4">
-						<!-- small box -->
-						<div class="small-box bg-success">
-						<div class="inner">
-						<h4> ${data.count_user_active}</h4>
-						<p>Active</p>
-						</div>
-						<div class="icon">
-						<i class="fas fa-user"></i>
-						</div>
-						</div>
-						</div>
-
-						<div class="col-lg-4 col-4">
-						<!-- small box -->
-						<div class="small-box bg-danger">
-						<div class="inner">
-						<h4> ${data.count_user_block}</h4>
-						<p>Blocked</p>
-						</div>
-						<div class="icon">
-						<i class="fas fa-user"></i>
-						</div>
-						</div>
-						</div>
-
-						<div class="col-lg-4 col-4">
-						<!-- small box -->
-						<div class="small-box bg-secondary">
-						<div class="inner">
-						<h4> ${data.count_user_inactive}</h4>
-						<p>Inactive</p>
-						</div>
-						<div class="icon">
-						<i class="fas fa-user"></i>
-						</div>
-						</div>
-						</div>
-						<div class="col-lg-4 col-4">
-						<!-- small box -->
-						<div class="small-box bg-primary">
-						<div class="inner">
-						<h4> ${data.count_user_c_properti}</h4>
-						<p>Company Property</p>
-						</div>
-						<div class="icon">
-						<i class="fas fa-user"></i>
-						</div>
-						</div>
-						</div>
-
-
-						</div>
-						</div>
-						</section
-
-
-						`);
+					`);
 				} else {
           // Menampilkan pesan error jika tidak berhasil
 					$('#disrouter-info').html('<div class="alert alert-danger">' + data.error + '</div>');
@@ -155,9 +125,7 @@
 		"autoWidth": false,
 		"searching": false,
 		"language": {
-			"processing": "<span class='fa-stack fa-lg'>\n\
-			<i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-			</span>&emsp;Processing ..."
+			"processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
 		},
 		dom: 'lBfrtip',
 		buttons: [
@@ -228,9 +196,7 @@
 		"autoWidth": false,
 		"searching": false,
 		"language": {
-			"processing": "<span class='fa-stack fa-lg'>\n\
-			<i class='fa fa-spinner fa-spin fa-stack-2x fa-fw'></i>\n\
-			</span>&emsp;Processing ..."
+			"processing": "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..."
 		},
 		// dom: 'lBfrtip',
 		// buttons: [

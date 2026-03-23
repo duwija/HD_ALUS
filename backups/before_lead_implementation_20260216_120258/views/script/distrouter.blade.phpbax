@@ -1,0 +1,183 @@
+<script>
+
+
+ $(document).ready(function () {
+    // Menampilkan spinner saat data sedang dimuat
+  $('#spinner').show();
+
+    // Request pertama untuk mendapatkan informasi OLT
+  $.ajax({
+    url: '/distrouter/getrouterinfo/{{$distrouter->id}}',
+    type: 'GET',
+    success: function (data) {
+      $('#spinner').hide();
+      if (data.success) {
+
+          // Menampilkan informasi OLT jika berhasil
+        $('#distrouter-info').html(`
+
+          <p><strong>Router Board-name:</strong>  ${data.routerInfo[0]["board-name"]}</p>
+          <p><strong>Router uptime:</strong>  ${data.routerInfo[0].uptime}</p>
+          <p><strong>Router Platform:</strong>  ${data.routerInfo[0].platform}</p>
+          <p><strong>Router Version:</strong>  ${data.routerInfo[0].version}</p>
+          <p><strong>CPU Count:</strong>  ${data.routerInfo[0]["cpu-count"]}</p>
+          <p><strong>CPU Load:</strong>  ${data.routerInfo[0]["cpu-load"]} %</p>
+          
+          <section class="content">
+          <div class="container-fluid">
+          <div class="row">
+
+          <div class="col-lg-2 col-6">
+          <!-- small box -->
+          <div class="small-box bg-info">
+          <div class="inner">
+          <h4> ${data.pppUserCount}</h4>
+          <p>PPP User</p>
+          </div>
+          <div class="icon">
+          <i class="fas fa-user"></i>
+          </div>
+
+          </div>
+          </div>
+          <!-- ./col -->
+          <div class="col-lg-3 col-6">
+          <!-- small box -->
+          <div class="small-box bg-success">
+          <div class="inner">
+          <h4> ${data.pppActiveCount}</h4>
+          <p>PPP Active Connection</p>
+          </div>
+          <div class="icon">
+          <i class="fas fa-chart-line"></i>
+          </div>
+          </div>
+          </div>
+          </div
+          </div
+          </section
+
+
+
+
+
+
+
+
+
+          `);
+      } else {
+          // Menampilkan pesan error jika tidak berhasil
+        $('#disrouter-info').html('<div class="alert alert-danger">' + data.error + '</div>');
+      }
+    },
+    error: function (xhr, status, error) {
+      $('#spinner').hide();
+      $('#distrouter-info').html('<div class="alert alert-danger">Terjadi kesalahan saat mengambil data.</div>');
+    }
+  });
+
+
+  function fetchInterfaceMonitor() {
+    $.ajax({
+      url: '/distrouter/getrouterinterfaces/{{$distrouter->id}}',
+      type: 'GET',
+      success: function(response) {
+      // Ambil daftar interfaces dari respons
+        const interfaces = response.routerInterfaces;
+
+      // Pastikan bahwa interfaces adalah array
+        if (Array.isArray(interfaces)) {
+          var rows = '';
+        var sizes = ['bps', 'kbps', 'Mbps', 'Gbps', 'Tbps']; // Ukuran kecepatan
+
+        interfaces.forEach(function(interface) {
+          // Ambil nilai default untuk data interface
+          var name = interface.name || 'N/A';
+          var comment = interface.comment || 'N/A';
+          var running = interface.running || 'N/A';
+          var speed = interface.speed || 'N/A';
+          rows += '<tr>';
+          rows += '<td>' + name + '</td>';
+          rows += '<td>' + comment + '</td>';
+          rows += '<td>' + running + '</td>';
+          rows += '<td>' + speed + '</td>';
+          rows += '<td id="' + name + 'tx"></td>';  // Tampilkan Tx
+          rows += '<td id="' + name + 'rx"></td>';  // Tampilkan Rx
+          rows += '</tr>';
+        });
+
+        // Tambahkan baris ke tabel
+        $('#interface-table tbody').html(rows);
+
+        // Loop again to fetch and update Tx/Rx values
+        interfaces.forEach(function(interface) {
+          var name = interface.name || 'N/A';
+          
+          $.ajax({
+            url: '/distrouter/interface_monitor/{{$distrouter->id}}',
+            type: 'GET',
+            data: {
+              interface: name // Kirim nama interface sebagai parameter
+            },
+            success: function(trafficResponse) {
+              // Ambil nilai Tx dan Rx dari trafficResponse
+              var tx = trafficResponse[0].data[0] || 0;
+              var rx = trafficResponse[1].data[0] || 0;
+
+              // Konversi bytes menjadi ukuran yang lebih mudah dibaca
+              var txBytes = parseInt(tx) || 0;
+              var rxBytes = parseInt(rx) || 0;
+
+              if (txBytes == 0) tx = '0 bps';
+              else {
+                var iTx = parseInt(Math.floor(Math.log(txBytes) / Math.log(1024)));
+                tx = parseFloat((txBytes / Math.pow(1024, iTx)).toFixed(2)) + ' ' + sizes[iTx];
+              }
+
+              if (rxBytes == 0) rx = '0 bps';
+              else {
+                var iRx = parseInt(Math.floor(Math.log(rxBytes) / Math.log(1024)));
+                rx = parseFloat((rxBytes / Math.pow(1024, iRx)).toFixed(2)) + ' ' + sizes[iRx];
+              }
+
+              // Update table cells with Tx and Rx values
+              $('#' + name + 'tx').text(tx);
+              $('#' + name + 'rx').text(rx);
+            },
+            error: function(xhr, status, error) {
+              console.error('Error in interface monitor request:', error);
+            }
+          });
+        });
+      } else {
+        console.error('Expected an array but got:', interfaces);
+        alert('Error: Data returned is not in the expected format.');
+      }
+    },
+    error: function(xhr, status, error) {
+      alert('Error: ' + xhr.responseText);
+    }
+  });
+  }
+
+  setInterval(fetchInterfaceMonitor, 10000);
+  fetchInterfaceMonitor();
+
+
+  $('#spinnerx').hide();
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+</script>

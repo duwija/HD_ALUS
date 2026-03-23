@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Map Layers API</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.0/jquery.min.js"></script>
+</head>
+<body>
+    <h1>Test Map Layers API</h1>
+    <button onclick="testGetLayers()">Test GET /map/layers</button>
+    <button onclick="testDatabase()">Check Database</button>
+    
+    <h2>Results:</h2>
+    <pre id="results"></pre>
+    
+    <script>
+        function testGetLayers() {
+            $('#results').text('Loading...');
+            $.ajax({
+                url: '/map/layers',
+                method: 'GET',
+                success: function(data) {
+                    $('#results').text('SUCCESS!\n\n' + JSON.stringify(data, null, 2));
+                    console.log('Layers:', data);
+                },
+                error: function(xhr) {
+                    $('#results').text('ERROR!\n\nStatus: ' + xhr.status + '\n' + xhr.responseText);
+                    console.error('Error:', xhr);
+                }
+            });
+        }
+        
+        function testDatabase() {
+            $('#results').text('Database check:\n\n' + 
+                'Check terminal output for database query results.');
+        }
+    </script>
+</body>
+</html>

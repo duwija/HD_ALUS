@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app_name, login_title, login_subtitle, tenant_domain
+         didefinisikan per-flavor di src/kencana/ & src/perumnet/ -->
+
+    <!-- String bersama / shared antar semua tenant -->
+    <string name="email_hint">Email</string>
+    <string name="password_hint">Password</string>
+    <string name="login_button">Masuk</string>
+    <string name="logout_confirm">Keluar dari aplikasi?</string>
+    <string name="yes">Ya</string>
+    <string name="no">Tidak</string>
+    <string name="nav_home">Beranda</string>
+    <string name="nav_invoice">Tagihan</string>
+    <string name="nav_ticket">Tiket</string>
+    <string name="nav_logout">Keluar</string>
+    <string name="loading">Memuat...</string>
+    <string name="error_login">Email atau password salah</string>
+    <string name="error_network">Tidak dapat terhubung ke server</string>
+</resources>

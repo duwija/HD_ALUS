@@ -1,0 +1,123 @@
+@extends('layout.main')
+@section('title','BUKU BESAR')
+@section('content')
+<section class="content-header">
+
+  <div class="card card-primary card-outline">
+    <div class="card-header">
+      <h3 class="card-title font-weight-bold">BUKU BESAR</h3>
+      <br>
+
+      <form role="form" method="post" action="/jurnal/bukubesar">
+        @csrf
+        <div class="row pt-2 pl-2">
+          <label class="pt-2">Show From:</label>
+          <div class="input-group p-1 col-md-2 date" id="reservationdate_from" data-target-input="nearest">
+            <input type="text" name="date_from" class="form-control datetimepicker-input" data-target="#reservationdate_from" value="{{ $date_from }}" />
+            <div class="input-group-append" data-target="#reservationdate_from" data-toggle="datetimepicker">
+              <div class="input-group-text"><i class="fa fa-calendar"></i></div>
+            </div>
+          </div>
+
+          <label class="pt-2">To:</label>
+          <div class="input-group p-1 col-md-2 date" id="reservationdate_to" data-target-input="nearest">
+            <input type="text" name="date_end" class="form-control datetimepicker-input" data-target="#reservationdate_to" value="{{ $date_to }}" />
+            <div class="input-group-append" data-target="#reservationdate_to" data-toggle="datetimepicker">
+              <div class="input-group-text"><i class="fa fa-calendar"></i></div>
+            </div>
+          </div>
+          <select name="akun" id="akun" class="form-control m-1 col-md-2">
+            @foreach ($akun as $akun_code => $name)
+            <option value="{{ $akun_code }}" {{ $akun_code == $selected_akun ? 'selected' : '' }}>
+              {{ $name }}
+            </option>
+            @endforeach
+          </select>
+
+          <div class="input-group p-1 col-md-3">
+            <button type="submit" class="btn btn-primary">Show</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="text-center bg-primary p-2">
+      {{ $date_msg }}
+    </div>
+
+    <div class="card-body">
+      <table id="example1" class="table table-bordered table-striped">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>Akun</th>
+            <th>Debet</th>
+            <th>Kredit</th>
+            <!-- <th>Reff</th> -->
+            <th>Description</th>
+            <th>Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          @php
+          $debet = 0;
+          $kredit = 0;
+          $number = 1;
+          @endphp
+
+          <!-- Saldo Awal -->
+          <tr>
+            <th class="text-center">{{ $number++ }}</th>
+            <td>{{ $date_from }}</td>
+            <td>Saldo Awal</td>
+            <td>{{ number_format($saldo_awal > 0 ? $saldo_awal : 0, 0, ',', ',') }}</td>
+            <td>{{ number_format($saldo_awal < 0 ? abs($saldo_awal) : 0, 0, ',', ',') }}</td>
+            <!-- <td>0000000000</td> -->
+            <td>Saldo Awal</td>
+            <td class="text-center"><span class="badge badge-info">Saldo</span></td>
+          </tr>
+
+          <!-- Transaksi Jurnal -->
+          @foreach ($jurnal as $item)
+          @php
+          $debet += $item->debet;
+          $kredit += $item->kredit;
+          $badge_class = $item->type === 'jumum' ? 'badge-success' : ($item->type === 'closed' ? 'badge-secondary' : 'badge-warning');
+          $msg = $item->type === 'jumum' ? 'Jurnal Umum' : ($item->type === 'closed' ? 'Jurnal Penutup' : $item->type);
+          @endphp
+
+          <tr>
+            <th class="text-center">{{ $number++ }}</th>
+            <td>{{ $item->date }}</td>
+            <td>{{ $item->akun_name->name }}</td>
+            <td>{{ number_format($item->debet, 0, ',', ',') }}</td>
+            <td>{{ number_format($item->kredit, 0, ',', ',') }}</td>
+            <!-- <td>{{ $item->reff }}</td> -->
+            <td>{{ $item->description }}</td>
+            <td class="text-center"><span class="badge {{ $badge_class }}">{{ $msg }}</span></td>
+          </tr>
+          @endforeach
+
+          <!-- Total -->
+          <tr class="bg-primary">
+            <td class="text-center">{{ $number++ }}</td>
+            <td colspan="2"><strong>Total:</strong></td>
+            <td><strong>{{ number_format($debet, 0, ',', ',') }}</strong></td>
+            <td><strong>{{ number_format($kredit, 0, ',', ',') }}</strong></td>
+            <td colspan="3"></td>
+          </tr>
+
+          <!-- Saldo Akhir -->
+          <tr class="bg-primary">
+            <td class="text-center">{{ $number++ }}</td>
+            <td colspan="2"><strong>Saldo Akhir:</strong></td>
+            <td colspan="2"><strong>{{ number_format($saldo_awal + $debet - $kredit, 0, ',', ',') }}</strong></td>
+            <td colspan="3"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+@endsection

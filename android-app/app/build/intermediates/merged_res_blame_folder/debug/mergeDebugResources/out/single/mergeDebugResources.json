@@ -1,0 +1,46 @@
+[
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\drawable_circle_white.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\drawable\\circle_white.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\layout_activity_dashboard.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\layout\\activity_dashboard.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\drawable_ic_home.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\drawable\\ic_home.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\drawable_ic_ticket.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\drawable\\ic_ticket.xml"
+    },
+    {
+        "merged": "com.kencana.billing.app-debug-42:/layout_activity_login.xml.flat",
+        "source": "com.kencana.billing.app-main-44:/layout/activity_login.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\drawable_ic_invoice.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\drawable\\ic_invoice.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\menu_bottom_nav_menu.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\menu\\bottom_nav_menu.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\layout_activity_login.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\layout\\activity_login.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\drawable_ic_notification.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\drawable\\ic_notification.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\drawable_ic_logout.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\drawable\\ic_logout.xml"
+    },
+    {
+        "merged": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-debug-42:\\color_nav_item_color.xml.flat",
+        "source": "C:\\Users\\duwij\\.gradle\\daemon\\9.0.0\\com.kencana.billing.app-main-44:\\color\\nav_item_color.xml"
+    }
+]

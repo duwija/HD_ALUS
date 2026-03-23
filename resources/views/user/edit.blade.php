@@ -58,7 +58,7 @@
            <label for="job_title"> Job Title </label>
            <select name="job_title" id="job_title" class="form-control">
             @php
-            $job_title = array("Network Engineer", "NOC", "Inventory", "Accounting", "Marketing", "HRD", "GA", "Management");
+            $job_title = array("Network Engineer", "NOC", "Inventory", "Accounting", "Marketing", "HRD", "GA","Vendor","Management");
 
             @endphp
 
@@ -82,6 +82,7 @@
            <option value="Marketing">Marketing</option>
            <option value="HRD">HRD</option>
            <option value="GA">GA</option>
+           <option value="GA">Vedor</option>
            <option value="Management">Management</option> --}}
            
          </select>
@@ -126,12 +127,28 @@
       <label for="address">Privilege</label>
       <select name="privilege" id="privilege" class="form-control" onchange="toggleMerchantInput()">
         @php
-        $privileges = ["admin", "accounting", "marketing", "payment", "noc", "user", "merchant", "vendor"];
+        $privileges = ["admin", "hrd", "management", "accounting", "marketing", "payment", "noc", "user", "merchant", "vendor"];
         @endphp
         @foreach ($privileges as $item)
         <option value="{{ $item }}" {{ $item == $user->privilege ? 'selected' : '' }}>{{ ucfirst($item) }}</option>
         @endforeach
       </select>
+    </div>
+    {{-- Dashboard Preference (disembunyikan untuk merchant/vendor) --}}
+    <div class="form-group col-sm-3" id="dashboardPrefInput">
+      <label for="dashboard_preference">
+        <i class="fas fa-tachometer-alt mr-1 text-primary"></i>Dashboard Default
+      </label>
+      <select name="dashboard_preference" id="dashboard_preference" class="form-control">
+        <option value="" {{ !$user->dashboard_preference ? 'selected' : '' }}>— Default (/) —</option>
+        <option value="home-v2" {{ $user->dashboard_preference === 'home-v2' ? 'selected' : '' }}>Dashboard V2 (Teknisi)</option>
+        <option value="home-v3" {{ $user->dashboard_preference === 'home-v3' ? 'selected' : '' }}>Dashboard V3 (NOC + Network)</option>
+        <option value="home-v4" {{ $user->dashboard_preference === 'home-v4' ? 'selected' : '' }}>Dashboard V4 (Marketing)</option>
+        <option value="home-v5" {{ $user->dashboard_preference === 'home-v5' ? 'selected' : '' }}>Dashboard V5 (Accounting)</option>
+        <option value="home-admin" {{ $user->dashboard_preference === 'home-admin' ? 'selected' : '' }}>Dashboard Admin (Summary)</option>
+        <option value="attendance/dashboard" {{ $user->dashboard_preference === 'attendance/dashboard' ? 'selected' : '' }}>Dashboard HRD</option>
+      </select>
+      <small class="text-muted">Halaman dashboard saat pertama login</small>
     </div>
     <div class="form-group col-sm-3" id="merchantInput" style="display: none;">
       <label for="id_merchant">Merchant</label>
@@ -158,6 +175,18 @@
     @error('groups')
     <div class="invalid-feedback d-block">{{ $message }}</div>
     @enderror
+  </div>
+
+  <div class="form-group col-sm-3">
+    <label for="supervisor_id">Supervisor / Atasan</label>
+    <select name="supervisor_id" id="supervisor_id" class="form-control select2">
+      <option value="">-- Tidak Ada --</option>
+      @foreach ($supervisors as $sup)
+      <option value="{{ $sup->id }}" {{ $sup->id == $user->supervisor_id ? 'selected' : '' }}>
+        {{ $sup->name }}{{ $sup->job_title ? ' - '.$sup->job_title : '' }}
+      </option>
+      @endforeach
+    </select>
   </div>
 
   <div class="form-group col-sm-3">
@@ -207,13 +236,33 @@
 </div>
 </div>
 <div class="form-group">
-  <label>Photo</label></br>
-  <img class="m-3" style="width: 128px; height: 128px" 
+  <label>Photo (Square Format)</label></br>
+  <img class="m-3" style="width: 128px; height: 128px; border-radius: 8px; border: 2px solid #ddd;" 
   src="../../storage/users/{{$user->photo}}"
   alt="User profile picture" onerror="this.onerror=null;this.src='../../storage/users/default_profile.png';" />
-  <input type="file" class="form-control-file" name="photo" id="photo">
+  <input type="file" class="form-control-file" name="photo" id="photo" accept="image/*">
+  <input type="hidden" name="cropped_photo" id="cropped_photo">
+  <small class="text-muted d-block mb-2">Photo will be cropped to square format (1:1)</small>
+  
+  <!-- Preview Area -->
+  <div id="preview-container" style="display: none;" class="mt-3">
+    <div class="row">
+      <div class="col-md-6">
+        <h6>Original Image</h6>
+        <div style="max-width: 100%; overflow: hidden;">
+          <img id="image-preview" style="max-width: 100%;">
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h6>Cropped Preview</h6>
+        <div id="cropped-preview" style="width: 200px; height: 200px; border: 2px solid #ddd; overflow: hidden; background: #f5f5f5;"></div>
+        <button type="button" class="btn btn-success btn-sm mt-2" id="crop-button">
+          <i class="fas fa-crop"></i> Apply Crop
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
-
 
 
 
@@ -234,9 +283,10 @@
 
 <div class="card-footer">
   <button type="submit" class="btn btn-primary">Update</button>
-</form>
-<a href="{{url('user')}}" class="btn btn-secondary  float-right">Cancel</a>
+  <a href="{{url('user')}}" class="btn btn-secondary  float-right">Cancel</a>
 </div>
+
+</form>
 
 </div>
 <!-- /.card -->
@@ -250,21 +300,138 @@
 
 @endsection
 @section('footer-scripts')
+<!-- Cropper.js CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+<!-- Cropper.js JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const photoInput = document.getElementById('photo');
+  const imagePreview = document.getElementById('image-preview');
+  const previewContainer = document.getElementById('preview-container');
+  const croppedPreview = document.getElementById('cropped-preview');
+  const cropButton = document.getElementById('crop-button');
+  const croppedPhotoInput = document.getElementById('cropped_photo');
+  const form = photoInput.closest('form');
+  let cropper = null;
+  let isCropped = false;
+
+  photoInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+      isCropped = false;
+      croppedPhotoInput.value = '';
+      
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        imagePreview.src = event.target.result;
+        previewContainer.style.display = 'block';
+        
+        if (cropper) {
+          cropper.destroy();
+        }
+        
+        cropper = new Cropper(imagePreview, {
+          aspectRatio: 1,
+          viewMode: 1,
+          autoCropArea: 1,
+          responsive: true,
+          guides: true,
+          center: true,
+          highlight: true,
+          cropBoxResizable: true,
+          cropBoxMovable: true,
+          crop: function(event) {
+            updateCroppedPreview();
+          },
+          ready: function() {
+            updateCroppedPreview();
+          }
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  function updateCroppedPreview() {
+    if (!cropper) return;
+    const canvas = cropper.getCroppedCanvas({
+      width: 200,
+      height: 200
+    });
+    croppedPreview.innerHTML = '';
+    if (canvas) {
+      croppedPreview.appendChild(canvas);
+    }
+  }
+
+  cropButton.addEventListener('click', function() {
+    if (!cropper) return;
+    const canvas = cropper.getCroppedCanvas({
+      width: 500,
+      height: 500
+    });
+    
+    if (canvas) {
+      canvas.toBlob(function(blob) {
+        const reader = new FileReader();
+        reader.onloadend = function() {
+          croppedPhotoInput.value = reader.result;
+          isCropped = true;
+          console.log('Cropped photo set:', croppedPhotoInput.value.substring(0, 50));
+          
+          Swal.fire({
+            icon: 'success',
+            title: 'Photo Cropped!',
+            text: 'Your photo has been cropped and ready to upload.',
+            timer: 2000,
+            showConfirmButton: false
+          });
+        };
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.9);
+    }
+  });
+
+  form.addEventListener('submit', function(e) {
+    if (photoInput.files.length > 0 && !isCropped && !croppedPhotoInput.value) {
+      e.preventDefault();
+      Swal.fire({
+        icon: 'warning',
+        title: 'Please Crop Your Photo',
+        text: 'You need to click "Apply Crop" button before submitting.',
+        confirmButtonText: 'OK'
+      });
+      return false;
+    }
+  });
+});
+</script>
+
 <script>
   function toggleMerchantInput() {
     var privilege = document.getElementById("privilege").value;
     var merchantInput = document.getElementById("merchantInput");
+    var dashboardPrefInput = document.getElementById("dashboardPrefInput");
 
+    // Show merchant selector only for merchant privilege
     if (privilege === "merchant") {
       merchantInput.style.display = "block";
     } else {
       merchantInput.style.display = "none";
     }
+
+    // Hide dashboard preference for merchant and vendor (they have fixed redirects)
+    if (privilege === "merchant" || privilege === "vendor") {
+      dashboardPrefInput.style.display = "none";
+    } else {
+      dashboardPrefInput.style.display = "block";
+    }
   }
 
-    // Panggil saat halaman pertama kali dimuat untuk menangani kasus edit
   document.addEventListener("DOMContentLoaded", function() {
     toggleMerchantInput();
   });
 </script>
-@endsection 
+@endsection
