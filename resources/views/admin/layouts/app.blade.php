@@ -128,6 +128,13 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.github-sync*') ? 'active' : '' }}" 
+                               href="{{ route('admin.github-sync') }}">
+                                <i class="fas fa-code-branch"></i>
+                                GitHub Sync
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <hr class="bg-secondary my-3">
                         </li>
                         <li class="nav-item">

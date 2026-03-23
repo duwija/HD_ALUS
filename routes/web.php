@@ -48,6 +48,7 @@ use App\Http\Controllers\WhatsappController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\TenantManagementController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\GitHubSyncController;
 use App\Http\Controllers\CustomerAuthController;
 use App\Http\Controllers\SalesAuthController;
 use App\Http\Controllers\AppPortalController;
@@ -239,6 +240,13 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
             'content' => $content
         ]);
     })->name('admin.documentation.show');
+    
+    // GitHub Sync Management
+    Route::get('/github-sync', [GitHubSyncController::class, 'index'])->name('admin.github-sync');
+    Route::post('/github-sync/pull', [GitHubSyncController::class, 'pull'])->name('admin.github-sync.pull');
+    Route::post('/github-sync/push', [GitHubSyncController::class, 'push'])->name('admin.github-sync.push');
+    Route::get('/github-sync/refresh', [GitHubSyncController::class, 'refresh'])->name('admin.github-sync.refresh');
+    Route::get('/github-sync/changes', [GitHubSyncController::class, 'getChanges'])->name('admin.github-sync.changes');
 });
 
 //s
