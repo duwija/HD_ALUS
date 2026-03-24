@@ -41,9 +41,9 @@ class GitHubSyncController extends Controller
             'github_repo'     => 'required|string',
         ]);
 
-        $token    = $request->github_token;
-        $username = $request->github_username;
-        $repo     = $request->github_repo;
+        $token    = trim($request->github_token);
+        $username = trim($request->github_username);
+        $repo     = trim($request->github_repo);
         $bp       = $this->basePath;
         $git      = $this->git;
 
@@ -52,15 +52,20 @@ class GitHubSyncController extends Controller
 
         $output = shell_exec("cd $bp && $git remote set-url origin " . escapeshellarg($newUrl) . " 2>&1");
 
-        // Store token info (without token) in .git/github_config for display
-        file_put_contents(
+        // Store config info (without token) in .git/github_config for display
+        @file_put_contents(
             $bp . '/.git/github_config',
-            json_encode(['username' => $username, 'repo' => $repo, 'token_set' => true, 'updated_at' => now()->toDateTimeString()])
+            json_encode([
+                'username'   => $username,
+                'repo'       => $repo,
+                'token_set'  => true,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ])
         );
 
         return response()->json([
             'success' => true,
-            'message' => 'GitHub token saved successfully. Push & Pull should now work.',
+            'message' => 'GitHub token saved. Push & Pull now active.',
         ]);
     }
 
