@@ -24,8 +24,91 @@ class GitHubSyncController extends Controller
      */
     public function index()
     {
-        $status = $this->getGitStatus();
-        return view('admin.github-sync', compact('status'));
+        $status      = $this->getGitStatus();
+        $hasToken    = $this->hasToken();
+        $tokenMasked = $this->getMaskedToken();
+        return view('admin.github-sync', compact('status', 'hasToken', 'tokenMasked'));
+    }
+
+    /**
+     * Save GitHub token — update remote URL to embed the token
+     */
+    public function saveToken(Request $request)
+    {
+        $request->validate([
+            'github_token'    => 'required|string|min:10',
+            'github_username' => 'required|string',
+            'github_repo'     => 'required|string',
+        ]);
+
+        $token    = $request->github_token;
+        $username = $request->github_username;
+        $repo     = $request->github_repo;
+        $bp       = $this->basePath;
+        $git      = $this->git;
+
+        // Build URL with embedded token
+        $newUrl = "https://{$username}:{$token}@github.com/{$username}/{$repo}";
+
+        $output = shell_exec("cd $bp && $git remote set-url origin " . escapeshellarg($newUrl) . " 2>&1");
+
+        // Store token info (without token) in .git/github_config for display
+        file_put_contents(
+            $bp . '/.git/github_config',
+            json_encode(['username' => $username, 'repo' => $repo, 'token_set' => true, 'updated_at' => now()->toDateTimeString()])
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'GitHub token saved successfully. Push & Pull should now work.',
+        ]);
+    }
+
+    /**
+     * Check if token is already embedded in remote URL
+     */
+    private function hasToken(): bool
+    {
+        $bp  = $this->basePath;
+        $git = $this->git;
+        $url = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
+        return str_contains($url, '@github.com');
+    }
+
+    /**
+     * Return masked remote info for display (hide token)
+     */
+    private function getMaskedToken(): array
+    {
+        $bp  = $this->basePath;
+        $git = $this->git;
+        $url = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
+
+        if (preg_match('#https://([^:]+):([^@]+)@github\.com/([^/]+)/(.+)#', $url, $m)) {
+            return [
+                'username' => $m[1],
+                'repo'     => $m[4],
+                'token'    => substr($m[2], 0, 6) . '***',
+            ];
+        }
+
+        // Try to read config file
+        $configFile = $bp . '/.git/github_config';
+        if (file_exists($configFile)) {
+            $cfg = json_decode(file_get_contents($configFile), true);
+            return [
+                'username' => $cfg['username'] ?? '',
+                'repo'     => $cfg['repo'] ?? '',
+                'token'    => '(saved)',
+            ];
+        }
+
+        // Extract from plain URL
+        if (preg_match('#github\.com/([^/]+)/(.+)#', $url, $m)) {
+            return ['username' => $m[1], 'repo'  => rtrim($m[2], '.git'), 'token' => null];
+        }
+
+        return ['username' => '', 'repo' => '', 'token' => null];
     }
 
     /**
@@ -38,7 +121,9 @@ class GitHubSyncController extends Controller
 
         try {
             $branch     = trim(shell_exec("cd $bp && $git rev-parse --abbrev-ref HEAD 2>&1") ?? '');
-            $remote     = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
+            // Mask token from remote URL before displaying
+            $rawRemote  = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
+            $remote     = preg_replace('#(https://)([^:]+):([^@]+)@#', '$1$2:***@', $rawRemote);
             $lastCommit = trim(shell_exec("cd $bp && $git log -1 --oneline 2>&1") ?? '');
             $gitStatus  = shell_exec("cd $bp && $git status --porcelain 2>&1") ?? '';
 

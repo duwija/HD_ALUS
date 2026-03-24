@@ -6,11 +6,82 @@
         <div class="col-md-12">
             <!-- Header -->
             <div class="card border-primary mb-4">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h3 class="mb-0"><i class="fas fa-code-branch"></i> GitHub Sync</h3>
+                    <button class="btn btn-light btn-sm" onclick="$('#tokenCard').toggle()">
+                        <i class="fas fa-key"></i>
+                        @if($hasToken)
+                            <span class="text-success">Token Configured</span>
+                        @else
+                            <span class="text-danger">Configure Token</span>
+                        @endif
+                    </button>
                 </div>
                 <div class="card-body">
                     <p class="mb-0">Manage repository synchronization with GitHub</p>
+                </div>
+            </div>
+
+            <!-- Token Config Card -->
+            <div class="card border-{{ $hasToken ? 'success' : 'danger' }} mb-4" id="tokenCard" style="{{ $hasToken ? 'display:none' : '' }}">
+                <div class="card-header bg-{{ $hasToken ? 'success' : 'danger' }} text-white">
+                    <h5 class="mb-0"><i class="fas fa-key"></i>
+                        {{ $hasToken ? 'GitHub Token Configured' : 'GitHub Token Required' }}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if($hasToken)
+                    <div class="alert alert-success mb-3">
+                        <i class="fas fa-check-circle"></i>
+                        Token aktif: <strong>{{ $tokenMasked['username'] }}</strong> /
+                        <strong>{{ $tokenMasked['repo'] }}</strong>
+                        &nbsp;|&nbsp; Token: <code>{{ $tokenMasked['token'] }}</code>
+                    </div>
+                    @else
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Push/Pull akan gagal tanpa GitHub Personal Access Token.
+                        <a href="https://github.com/settings/tokens/new" target="_blank" class="alert-link">Generate token di sini</a>
+                        (scope: <code>repo</code>)
+                    </div>
+                    @endif
+
+                    <form id="tokenForm">
+                        @csrf
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>GitHub Username <span class="text-danger">*</span></label>
+                                    <input type="text" name="github_username" class="form-control"
+                                           placeholder="duwija" value="{{ $tokenMasked['username'] }}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Repository Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="github_repo" class="form-control"
+                                           placeholder="HD_ALUS" value="{{ $tokenMasked['repo'] }}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Personal Access Token <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="password" name="github_token" id="tokenInput" class="form-control"
+                                               placeholder="ghp_xxxxxxxxxxxx" required minlength="10">
+                                        <div class="input-group-append">
+                                            <button type="button" class="btn btn-outline-secondary" onclick="toggleTokenVisibility()">
+                                                <i class="fas fa-eye" id="tokenEyeIcon"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="saveTokenBtn">
+                            <i class="fas fa-save"></i> Save Token
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -200,9 +271,56 @@
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-function showPushModal() {
-    $('#pushModal').modal('show');
+// ── Token Form ──────────────────────────────────────────────────────
+document.getElementById('tokenForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('saveTokenBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+    const data = {
+        github_username: this.github_username.value,
+        github_repo:     this.github_repo.value,
+        github_token:    this.github_token.value,
+    };
+
+    fetch('{{ route("admin.github-sync.token") }}', {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showResponse(true, data.message);
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showResponse(false, data.message || 'Failed to save token');
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Save Token';
+    })
+    .catch(err => {
+        showResponse(false, 'Error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Save Token';
+    });
+});
+
+function toggleTokenVisibility() {
+    const inp  = document.getElementById('tokenInput');
+    const icon = document.getElementById('tokenEyeIcon');
+    if (inp.type === 'password') {
+        inp.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+    } else {
+        inp.type = 'password';
+        icon.className = 'fas fa-eye';
+    }
 }
+
+// ── Pull ────────────────────────────────────────────────────────────
+function showPushModal() { $('#pushModal').modal('show'); }
 
 function pullFromGitHub() {
     if (!confirm('Are you sure you want to pull from GitHub? Any local uncommitted changes may be affected.')) {

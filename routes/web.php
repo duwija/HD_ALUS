@@ -249,6 +249,7 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
     Route::post('/github-sync/push', [GitHubSyncController::class, 'push'])->name('admin.github-sync.push');
     Route::get('/github-sync/refresh', [GitHubSyncController::class, 'refresh'])->name('admin.github-sync.refresh');
     Route::get('/github-sync/changes', [GitHubSyncController::class, 'getChanges'])->name('admin.github-sync.changes');
+    Route::post('/github-sync/token', [GitHubSyncController::class, 'saveToken'])->name('admin.github-sync.token');
 });
 
 //s
