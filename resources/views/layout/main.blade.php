@@ -814,11 +814,18 @@
           <a class="dropdown-item" href="{{ url('my-team') }}">
             <i class="fas fa-users mr-1"></i>{{ " My Team" }}
             @php
-              $mySubIds = Auth::user()->subordinates()->pluck('id');
-              $teamPending = $mySubIds->isNotEmpty()
-                ? \App\LeaveRequest::whereIn('user_id',$mySubIds)->where('status','pending')->count()
-                + \App\OvertimeRequest::whereIn('user_id',$mySubIds)->where('status','pending')->count()
-                : 0;
+              try {
+                $mySubIds = \Illuminate\Support\Facades\Schema::hasColumn('users', 'supervisor_id')
+                  ? Auth::user()->subordinates()->pluck('id')
+                  : collect([]);
+                $teamPending = $mySubIds->isNotEmpty()
+                  ? \App\LeaveRequest::whereIn('user_id',$mySubIds)->where('status','pending')->count()
+                  + \App\OvertimeRequest::whereIn('user_id',$mySubIds)->where('status','pending')->count()
+                  : 0;
+              } catch(\Exception $e) {
+                $mySubIds = collect([]);
+                $teamPending = 0;
+              }
             @endphp
             @if($teamPending > 0) <span class="badge badge-warning ml-1">{{ $teamPending }}</span> @endif
           </a>

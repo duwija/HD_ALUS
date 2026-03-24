@@ -67,22 +67,48 @@ class TenantManagementController extends Controller
             // Create database if requested
             if ($request->create_database) {
                 DB::statement("CREATE DATABASE IF NOT EXISTS {$request->db_database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-                
-                // Import structure from existing database
-                $sourceTenant = Tenant::first();
-                if ($sourceTenant) {
-                    $sourceDb = $sourceTenant->db_database;
-                    $dumpFile = storage_path('app/temp_structure.sql');
-                    
-                    // Export structure
-                    exec("mysqldump -u {$request->db_username} -p'{$request->db_password}' --no-data {$sourceDb} > {$dumpFile}");
-                    
-                    // Import to new database
-                    exec("mysql -u {$request->db_username} -p'{$request->db_password}' {$request->db_database} < {$dumpFile}");
-                    
-                    // Clean up
-                    @unlink($dumpFile);
+
+                // ── Clone structure from `kencana` (model database) ──────────
+                // Selalu gunakan `kencana` sebagai template, bukan Tenant::first()
+                $sourceDb   = 'kencana';
+                $rootUser   = env('DB_USERNAME', 'root');
+                $rootPass   = env('DB_PASSWORD', '');
+                $dbHost     = env('DB_HOST', '127.0.0.1');
+                $dumpFile   = storage_path('app/temp_structure_' . $request->db_database . '.sql');
+
+                // Export structure only (no data) dari database kencana
+                $dumpCmd = sprintf(
+                    'mysqldump -h%s -u%s -p%s --no-data --routines --triggers %s > %s 2>&1',
+                    escapeshellarg($dbHost),
+                    escapeshellarg($rootUser),
+                    escapeshellarg($rootPass),
+                    escapeshellarg($sourceDb),
+                    escapeshellarg($dumpFile)
+                );
+                exec($dumpCmd, $dumpOutput, $dumpReturn);
+
+                if ($dumpReturn !== 0 || !file_exists($dumpFile) || filesize($dumpFile) < 100) {
+                    throw new \Exception('Gagal export struktur dari database kencana: ' . implode(' ', $dumpOutput));
                 }
+
+                // Import ke database baru
+                $importCmd = sprintf(
+                    'mysql -h%s -u%s -p%s %s < %s 2>&1',
+                    escapeshellarg($dbHost),
+                    escapeshellarg($rootUser),
+                    escapeshellarg($rootPass),
+                    escapeshellarg($request->db_database),
+                    escapeshellarg($dumpFile)
+                );
+                exec($importCmd, $importOutput, $importReturn);
+
+                @unlink($dumpFile);
+
+                if ($importReturn !== 0) {
+                    throw new \Exception('Gagal import struktur ke database baru: ' . implode(' ', $importOutput));
+                }
+
+                \Log::info("Tenant DB created: {$request->db_database} cloned from {$sourceDb}");
             }
 
             // Create tenant

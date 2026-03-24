@@ -35,7 +35,16 @@ class TenantMiddleware
 
         // Cek status aktif tenant sebelum apapun!
         if (array_key_exists('is_active', $tenant) && ($tenant['is_active'] === false || $tenant['is_active'] === 0 || $tenant['is_active'] === '0')) {
-            return response()->view('errors.tenant_inactive', [], 403);
+            // Hapus session cookie agar saat tenant di-aktifkan kembali,
+            // browser tidak membawa session stale yang menyebabkan 500 error.
+            // (TenantMiddleware jalan sebelum StartSession, jadi session belum
+            //  di-load — cookie harus dihapus langsung dari response header.)
+            $sessionCookie = config('session.cookie', 'laravel_session');
+            $response = response()->view('errors.tenant_inactive', [], 403);
+            $response->headers->setCookie(
+                \Symfony\Component\HttpFoundation\Cookie::create($sessionCookie, '', 1, '/')
+            );
+            return $response;
         }
 
         // Set tenant ke app instance untuk digunakan globally
@@ -97,7 +106,6 @@ class TenantMiddleware
         try {
             $tenantDb = \DB::connection('isp_master')->table('tenants')
                 ->where('domain', $tenant['domain'])
-                ->where('is_active', 1)
                 ->first();
         } catch (\Exception $e) {
             // Jika gagal query, biarkan tenantDb null (fallback ke default)

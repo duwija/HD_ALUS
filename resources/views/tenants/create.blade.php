@@ -120,6 +120,11 @@
                                                    id="create_database" value="1" checked>
                                             <label class="form-check-label" for="create_database">
                                                 <strong>Create database dan import struktur otomatis</strong>
+                                                <br>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-copy"></i> Struktur tabel akan di-clone dari database <code>kencana</code> (model/template default).
+                                                    Hanya struktur yang di-copy, data tidak ikut.
+                                                </small>
                                             </label>
                                         </div>
                                     </div>

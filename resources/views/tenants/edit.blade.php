@@ -420,6 +420,15 @@
                                                         <span class="text-muted">Contoh: <code>isp@12345</code> &nbsp;|&nbsp; Digunakan sebagai nilai default field PPPOE Password di form tambah customer.</span>
                                                     </li>
                                                     <li class="mt-1">
+                                                        <code>cid_use_rescode</code> - Apakah Customer ID dan PPPoE User menggunakan prefix rescode
+                                                        <span class="badge badge-warning badge-sm">Baru</span>
+                                                        <br>
+                                                        <span class="text-muted">
+                                                            Nilai: <code>1</code> = pakai rescode (default) &nbsp;|&nbsp; <code>0</code> = tanpa rescode.<br>
+                                                            Contoh: <code>cid_use_rescode = 0</code> → Customer ID format <code>2603241234</code> (tanpa prefix).
+                                                        </span>
+                                                    </li>
+                                                    <li class="mt-1">
                                                         <code>router_host</code> - IP/hostname Mikrotik router utama
                                                     </li>
                                                     <li>

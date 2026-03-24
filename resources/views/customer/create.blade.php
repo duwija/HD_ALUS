@@ -38,34 +38,42 @@
             <label for="customer_id"> Customer Id (CID) </label>
             @php
             
-            $rescode  = config("app.rescode");
-            $pppoepassword = tenant_config('pppoe_password');
+            $rescode         = config("app.rescode");
+            $pppoepassword   = tenant_config('pppoe_password');
+            // cid_use_rescode: 1 = pakai rescode (default), 0 = tanpa rescode
+            $cidUseRescode   = tenant_config('cid_use_rescode', '1');
+            $useRescode      = ($cidUseRescode !== '0');
             $year =date('Y', time())-2000;
             $md =date('md', time());
             $ran =substr(str_shuffle("0123456789"), 0, 3);
+            $cidDefault      = $useRescode ? ($rescode.$year.$md.$ran) : ($year.$md.$ran);
 
             @endphp
             <div class="input-group mb-3">
 
-              <input type="text"  class="form-control @error('customer_id') is-invalid @enderror" name="customer_id"  id="customer_id" placeholder="Customer ID" value="{{$rescode.$year.$md.$ran}}">
+              <input type="text"  class="form-control @error('customer_id') is-invalid @enderror" name="customer_id"  id="customer_id" placeholder="Customer ID" value="{{ $cidDefault }}">
               @error('customer_id')
               <div class="error invalid-feedback">{{ $message }}</div>
               @enderror
               <div class="input-group-append">
-               <button type="button" class="btn btn-primary"  onclick="toggle_custid()" ><i class="fa fa-unlock" aria-hidden="true"></i></button>
+               <button type="button" class="btn btn-primary"  onclick="toggle_custid()" title="Lock/Unlock"><i class="fa fa-unlock" aria-hidden="true"></i></button>
              </div>
+           </div>
+           <div class="custom-control custom-switch mt-1">
+             <input type="checkbox" class="custom-control-input" id="toggleRescode" onchange="toggleRescodePrefix()" {{ $useRescode ? '' : 'checked' }}>
+             <label class="custom-control-label text-muted small" for="toggleRescode">Tanpa Rescode</label>
            </div>
          </div>
          <div class="form-group col-md-2">
           <label for="pppoe">PPPOE User</label>
-          <input type="text" class="form-control @error('pppoe') is-invalid @enderror" name="pppoe" id="pppoe" placeholder="User PPPOE" value="{{ request('pppoe') ?? ($rescode.$year.$md.$ran) }}">
+          <input type="text" class="form-control @error('pppoe') is-invalid @enderror" name="pppoe" id="pppoe" placeholder="User PPPOE" value="{{ request('pppoe') ?? $cidDefault }}">
           @error('pppoe')
           <div class="error invalid-feedback">{{ $message }}</div>
           @enderror
         </div>
         <div class="form-group col-md-2">
           <label for="password">PPPOE Password</label>
-          <input type="text" class="form-control @error('password') is-invalid @enderror" name="password" id="password" placeholder="Password" value="{{ $pppoepassword ?? ($rescode.$year.$md.$ran) }}">
+          <input type="text" class="form-control @error('password') is-invalid @enderror" name="password" id="password" placeholder="Password" value="{{ $pppoepassword ?? $cidDefault }}">
           @error('password')
           <div class="error invalid-feedback">{{ $message }}</div>
           @enderror
@@ -506,12 +514,32 @@
     document.getElementById("coordinate").value = newLat + ',' + newLng;
   }
 
+  const RESCODE = '{{ config("app.rescode") }}';
+
   function toggle_custid() {
-    if (document.getElementById("customer_id").disabled == true) {
-      document.getElementById("customer_id").disabled = false;
-    } else {
-      document.getElementById("customer_id").disabled = true;
-    }
+    const el = document.getElementById("customer_id");
+    el.disabled = !el.disabled;
+  }
+
+  function toggleRescodePrefix() {
+    const useRescode = !document.getElementById('toggleRescode').checked;
+    const cidEl   = document.getElementById('customer_id');
+    const pppoeEl = document.getElementById('pppoe');
+    const passEl  = document.getElementById('password');
+
+    // Generate fresh base value (without rescode)
+    const now  = new Date();
+    const yy   = String(now.getFullYear()).slice(-2);
+    const mm   = String(now.getMonth() + 1).padStart(2, '0');
+    const dd   = String(now.getDate()).padStart(2, '0');
+    const ran  = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+    const base = yy + mm + dd + ran;
+
+    const newVal = useRescode ? RESCODE + base : base;
+
+    cidEl.value   = newVal;
+    pppoeEl.value = newVal;
+    if (passEl) passEl.value = newVal;
   }
 </script>
 <script>

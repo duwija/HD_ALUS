@@ -188,6 +188,7 @@ class Tenant extends Model
         $data = [
             'tenant_id' => $this->id,
             'domain' => $this->domain,
+            'is_active' => (int) $this->is_active,
             'app_name' => $this->app_name,
             'signature' => $this->signature,
             'rescode' => $this->rescode,
