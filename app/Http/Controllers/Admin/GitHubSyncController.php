@@ -4,24 +4,77 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Symfony\Component\Process\Process;
-use Symfony\Component\Process\Exception\ProcessFailedException;
 
 class GitHubSyncController extends Controller
 {
     private $basePath;
     private $git;
 
+    /** Path to credentials file (stored in storage/app — writable by apache) */
+    private $credFile;
+
     public function __construct()
     {
         $this->basePath = base_path();
-        // Use -c safe.directory=* to bypass ownership check (web user ≠ repo owner)
-        $this->git = "git -c safe.directory={$this->basePath}";
+        $this->git      = "git -c safe.directory={$this->basePath}";
+        $this->credFile = storage_path('app/github_credentials.json');
     }
 
-    /**
-     * Show GitHub sync page
-     */
+    // ──────────────────────────────────────────────────────────────────────────
+    // Credential helpers
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /** Read stored credentials. Returns array or null. */
+    private function getCredentials(): ?array
+    {
+        if (!file_exists($this->credFile)) {
+            return null;
+        }
+        $data = json_decode(file_get_contents($this->credFile), true);
+        return (is_array($data) && !empty($data['token'])) ? $data : null;
+    }
+
+    /** Build authenticated git remote URL from stored credentials. */
+    private function getAuthUrl(): ?string
+    {
+        $creds = $this->getCredentials();
+        if (!$creds) {
+            return null;
+        }
+        return "https://{$creds['username']}:{$creds['token']}@github.com/{$creds['username']}/{$creds['repo']}";
+    }
+
+    private function hasToken(): bool
+    {
+        return $this->getCredentials() !== null;
+    }
+
+    private function getMaskedToken(): array
+    {
+        $creds = $this->getCredentials();
+        if ($creds) {
+            return [
+                'username' => $creds['username'],
+                'repo'     => $creds['repo'],
+                'token'    => substr($creds['token'], 0, 6) . '***',
+            ];
+        }
+
+        // Fall back to plain remote URL info
+        $bp  = $this->basePath;
+        $git = $this->git;
+        $url = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
+        if (preg_match('#github\.com/([^/]+)/(.+?)(?:\.git)?$#', $url, $m)) {
+            return ['username' => $m[1], 'repo' => $m[2], 'token' => null];
+        }
+
+        return ['username' => '', 'repo' => '', 'token' => null];
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Pages & actions
+    // ──────────────────────────────────────────────────────────────────────────
+
     public function index()
     {
         $status      = $this->getGitStatus();
@@ -31,7 +84,8 @@ class GitHubSyncController extends Controller
     }
 
     /**
-     * Save GitHub token — update remote URL to embed the token
+     * Save GitHub credentials — stored in storage/app (writable by apache).
+     * Does NOT write to .git/config (owned by root, not writable by apache).
      */
     public function saveToken(Request $request)
     {
@@ -43,98 +97,56 @@ class GitHubSyncController extends Controller
 
         $token    = trim($request->github_token);
         $username = trim($request->github_username);
-        $repo     = trim($request->github_repo);
-        $bp       = $this->basePath;
-        $git      = $this->git;
+        $repo     = trim(trim($request->github_repo), '/');
 
-        // Build URL with embedded token
-        $newUrl = "https://{$username}:{$token}@github.com/{$username}/{$repo}";
+        $data = json_encode([
+            'username'   => $username,
+            'repo'       => $repo,
+            'token'      => $token,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ], JSON_PRETTY_PRINT);
 
-        $output = shell_exec("cd $bp && $git remote set-url origin " . escapeshellarg($newUrl) . " 2>&1");
+        if (file_put_contents($this->credFile, $data) === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan: storage/app tidak bisa ditulis.',
+            ], 500);
+        }
 
-        // Store config info (without token) in .git/github_config for display
-        @file_put_contents(
-            $bp . '/.git/github_config',
-            json_encode([
-                'username'   => $username,
-                'repo'       => $repo,
-                'token_set'  => true,
-                'updated_at' => date('Y-m-d H:i:s'),
-            ])
-        );
+        // Make sure the file is not world-readable
+        chmod($this->credFile, 0640);
 
         return response()->json([
             'success' => true,
-            'message' => 'GitHub token saved. Push & Pull now active.',
+            'message' => 'Token tersimpan. Push & Pull sekarang aktif.',
         ]);
     }
 
-    /**
-     * Check if token is already embedded in remote URL
-     */
-    private function hasToken(): bool
-    {
-        $bp  = $this->basePath;
-        $git = $this->git;
-        $url = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
-        return str_contains($url, '@github.com');
-    }
+    // ──────────────────────────────────────────────────────────────────────────
+    // Git operations
+    // ──────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Return masked remote info for display (hide token)
-     */
-    private function getMaskedToken(): array
-    {
-        $bp  = $this->basePath;
-        $git = $this->git;
-        $url = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
-
-        if (preg_match('#https://([^:]+):([^@]+)@github\.com/([^/]+)/(.+)#', $url, $m)) {
-            return [
-                'username' => $m[1],
-                'repo'     => $m[4],
-                'token'    => substr($m[2], 0, 6) . '***',
-            ];
-        }
-
-        // Try to read config file
-        $configFile = $bp . '/.git/github_config';
-        if (file_exists($configFile)) {
-            $cfg = json_decode(file_get_contents($configFile), true);
-            return [
-                'username' => $cfg['username'] ?? '',
-                'repo'     => $cfg['repo'] ?? '',
-                'token'    => '(saved)',
-            ];
-        }
-
-        // Extract from plain URL
-        if (preg_match('#github\.com/([^/]+)/(.+)#', $url, $m)) {
-            return ['username' => $m[1], 'repo'  => rtrim($m[2], '.git'), 'token' => null];
-        }
-
-        return ['username' => '', 'repo' => '', 'token' => null];
-    }
-
-    /**
-     * Get current git status
-     */
-    private function getGitStatus()
+    private function getGitStatus(): array
     {
         $bp  = $this->basePath;
         $git = $this->git;
 
         try {
             $branch     = trim(shell_exec("cd $bp && $git rev-parse --abbrev-ref HEAD 2>&1") ?? '');
-            // Mask token from remote URL before displaying
-            $rawRemote  = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
-            $remote     = preg_replace('#(https://)([^:]+):([^@]+)@#', '$1$2:***@', $rawRemote);
             $lastCommit = trim(shell_exec("cd $bp && $git log -1 --oneline 2>&1") ?? '');
             $gitStatus  = shell_exec("cd $bp && $git status --porcelain 2>&1") ?? '';
 
-            // Detect if git commands still failed
             if (str_contains($branch, 'fatal:') || str_contains($branch, 'error:')) {
                 return ['success' => false, 'error' => $branch];
+            }
+
+            // Display remote: prefer stored creds (masked), fall back to .git/config
+            $creds = $this->getCredentials();
+            if ($creds) {
+                $remote = "https://github.com/{$creds['username']}/{$creds['repo']}";
+            } else {
+                $rawRemote = trim(shell_exec("cd $bp && $git config --get remote.origin.url 2>&1") ?? '');
+                $remote    = preg_replace('#(https://)([^:]+):([^@]+)@#', '$1$2:***@', $rawRemote);
             }
 
             $changedFiles = array_values(array_filter(array_map('trim', explode("\n", $gitStatus))));
@@ -153,28 +165,26 @@ class GitHubSyncController extends Controller
         }
     }
 
-    /**
-     * Pull from GitHub
-     */
     public function pull(Request $request)
     {
-        $bp  = $this->basePath;
-        $git = $this->git;
+        $bp      = $this->basePath;
+        $git     = $this->git;
+        $authUrl = $this->getAuthUrl();
 
-        $output = shell_exec("cd $bp && $git pull origin main 2>&1");
+        if (!$authUrl) {
+            return response()->json(['success' => false, 'message' => 'Token belum dikonfigurasi.']);
+        }
 
+        $output  = shell_exec("cd $bp && $git pull " . escapeshellarg($authUrl) . " main 2>&1");
         $success = !str_contains($output, 'fatal:') && !str_contains($output, 'error:');
 
         return response()->json([
             'success' => $success,
-            'message' => $success ? 'Successfully pulled from GitHub' : 'Pull failed',
+            'message' => $success ? 'Berhasil pull dari GitHub' : 'Pull gagal',
             'output'  => $output,
         ]);
     }
 
-    /**
-     * Push to GitHub
-     */
     public function push(Request $request)
     {
         $request->validate([
@@ -183,39 +193,38 @@ class GitHubSyncController extends Controller
 
         $bp      = $this->basePath;
         $git     = $this->git;
+        $authUrl = $this->getAuthUrl();
         $message = escapeshellarg($request->message);
+
+        if (!$authUrl) {
+            return response()->json(['success' => false, 'message' => 'Token belum dikonfigurasi.']);
+        }
 
         shell_exec("cd $bp && $git add . 2>&1");
         $commitOutput = shell_exec("cd $bp && $git commit -m $message 2>&1");
-        $pushOutput   = shell_exec("cd $bp && $git push origin main 2>&1");
+        $pushOutput   = shell_exec("cd $bp && $git push " . escapeshellarg($authUrl) . " main 2>&1");
 
         $success = !str_contains($pushOutput, 'fatal:') && !str_contains($pushOutput, 'error:');
 
         return response()->json([
             'success'       => $success,
-            'message'       => $success ? 'Successfully pushed to GitHub' : 'Push failed',
+            'message'       => $success ? 'Berhasil push ke GitHub' : 'Push gagal',
             'commit_output' => $commitOutput,
             'push_output'   => $pushOutput,
         ]);
     }
 
-    /**
-     * Refresh status (returns JSON for AJAX)
-     */
     public function refresh()
     {
         return response()->json($this->getGitStatus());
     }
 
-    /**
-     * Get detailed file changes
-     */
     public function getChanges()
     {
         $bp  = $this->basePath;
         $git = $this->git;
 
-        $output  = shell_exec("cd $bp && $git diff --name-status 2>&1") ?? '';
+        $output  = shell_exec("cd $bp && $git diff --name-status HEAD 2>&1") ?? '';
         $changes = [];
 
         foreach (explode("\n", $output) as $line) {
