@@ -1260,7 +1260,7 @@ public function table_invoice(Request $request)
         $olt = \App\Olt::pluck('name', 'id');
         $sale = \App\Sale::pluck('name', 'id');
         $merchant = \App\Merchant::pluck('name', 'id');
-        $plan = \App\Plan::select('name', 'id', 'price')
+        $plan = \App\Plan::select('name', 'id', 'price', 'is_active')
         ->orderBy('price', 'ASC')
         ->get();
         //
@@ -1411,7 +1411,7 @@ public function table_invoice(Request $request)
     // Override customer attribute with lists for conversion modal
     private function addListsToCustomer($customer)
     {
-        $customer->plan_list = \App\Plan::select('name', 'id', 'price')
+        $customer->plan_list = \App\Plan::select('name', 'id', 'price', 'is_active')
             ->orderBy('price', 'ASC')
             ->get();
         $customer->router_list = \App\Distrouter::pluck('name', 'id');
@@ -1524,7 +1524,7 @@ public function table_invoice(Request $request)
         $distpoint = \App\Distpoint::pluck('name', 'id');
         $distrouter = \App\Distrouter::pluck('name', 'id');
         $sale = \App\Sale::pluck('name', 'id');
-        $plan = \App\Plan::select('name', 'id', 'price')
+        $plan = \App\Plan::select('name', 'id', 'price', 'is_active')
         ->orderBy('price', 'ASC')
         ->get();
         $merchant = \App\Merchant::pluck('name', 'id');
