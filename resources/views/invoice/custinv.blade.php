@@ -39,9 +39,6 @@
         }
         .page-header img {
             height: 50px; width: auto;
-            background: #fff;
-            border-radius: 8px;
-            padding: 4px 8px;
             margin-bottom: 8px;
         }
         .page-header .company-name { font-size: 13px; opacity: .85; margin-bottom: 2px; }
@@ -285,13 +282,30 @@
             text-align: center; color: var(--gray-400);
         }
         .empty-state i { font-size: 36px; margin-bottom: 10px; display: block; }
+        /* Pagination */
+        .pager {
+            display: flex; align-items: center; justify-content: center;
+            gap: 6px; margin-top: 14px; flex-wrap: wrap;
+        }
+        .pager-btn {
+            min-width: 34px; height: 34px; padding: 0 10px;
+            border-radius: 8px; border: 1.5px solid var(--gray-200);
+            background: #fff; font-size: 13px; font-weight: 600;
+            color: var(--gray-600); cursor: pointer; font-family: inherit;
+            display: flex; align-items: center; justify-content: center;
+            transition: border-color .15s, background .15s;
+        }
+        .pager-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+        .pager-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .pager-btn:disabled { opacity: .35; cursor: default; }
+        .pager-info { font-size: 11px; color: var(--gray-400); text-align: center; margin-top: 6px; }
     </style>
 </head>
 <body>
 
 {{-- Header --}}
 <div class="page-header">
-    <img src="/dashboard/dist/img/logoinv.png" alt="Logo">
+    <img src="{{ tenant_img('logoinv.png', 'dashboard/dist/img/logoinv.png') }}" alt="Logo">
     <div class="company-name">{{ $companyName }}</div>
     <h1>Data Tagihan</h1>
 </div>
@@ -360,7 +374,7 @@
     @endif
 
     {{-- Invoice Cards --}}
-    <div class="invoice-list">
+    <div class="invoice-list" id="invoiceList">
         @foreach($suminvoice as $inv)
         @php
             $sc       = match((int)$inv->payment_status) { 1=>'paid', 2=>'cancel', default=>'unpaid' };
@@ -393,7 +407,7 @@
                                 <i class="fas fa-eye"></i> Lihat
                             </a>
                             @if($isUnpaid)
-                            <button type="button" class="btn-action btn-pay"
+                            <button type="button" class="btn-action btn-pay btn-pay-single"
                                 onclick="quickPay({{ $inv->id }}, {{ $inv->total_amount }}, '{{ $inv->number }}')">
                                 <i class="fas fa-credit-card"></i> Bayar
                             </button>
@@ -405,6 +419,8 @@
         </div>
         @endforeach
     </div>
+    <div id="invPager" class="pager"></div>
+    <div id="invPagerInfo" class="pager-info"></div>
 
     @endif
 
@@ -541,6 +557,13 @@
         }
         const hint = document.getElementById('selectHint');
         if (hint) hint.textContent = selectedIds.length + ' dipilih';
+
+        // Sembunyikan tombol Bayar hanya pada invoice yang sedang dicentang
+        document.querySelectorAll('.inv-select').forEach(cb => {
+            const btn = document.querySelector('#card-' + cb.dataset.id + ' .btn-pay-single');
+            if (btn) btn.style.display = cb.checked ? 'none' : '';
+        });
+
         refreshPayBar();
     }
 
@@ -562,6 +585,8 @@
     }
 
     function quickPay(id, amount, number) {
+        // Pastikan tombol bayar muncul kembali sebelum update agar tidak hilang saat modal terbuka
+        document.querySelectorAll('.btn-pay-single').forEach(btn => btn.style.display = '');
         document.querySelectorAll('.inv-select').forEach(cb => cb.checked = (cb.dataset.id == id));
         updateSelection();
         openPayModal();
@@ -603,6 +628,49 @@
         });
         document.getElementById('bundleForm').submit();
     }
+
+    // ── Pagination ──
+    const PER_PAGE = 5;
+    let currentPage = 1;
+
+    function initPager() {
+        const cards  = document.querySelectorAll('#invoiceList .inv-card');
+        const total  = cards.length;
+        const pages  = Math.ceil(total / PER_PAGE);
+        if (pages <= 1) return; // tidak perlu pager kalau ≤5
+        goToPage(1);
+    }
+
+    function goToPage(page) {
+        const cards  = document.querySelectorAll('#invoiceList .inv-card');
+        const total  = cards.length;
+        const pages  = Math.ceil(total / PER_PAGE);
+        currentPage  = Math.max(1, Math.min(page, pages));
+
+        cards.forEach((card, i) => {
+            const inPage = i >= (currentPage - 1) * PER_PAGE && i < currentPage * PER_PAGE;
+            card.style.display = inPage ? '' : 'none';
+        });
+
+        // Build pager buttons
+        const pager = document.getElementById('invPager');
+        if (!pager) return;
+        let html = `<button class="pager-btn" onclick="goToPage(${currentPage-1})" ${currentPage===1?'disabled':''}>&#8249;</button>`;
+        for (let p = 1; p <= pages; p++) {
+            html += `<button class="pager-btn ${p===currentPage?'active':''}" onclick="goToPage(${p})">${p}</button>`;
+        }
+        html += `<button class="pager-btn" onclick="goToPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>&#8250;</button>`;
+        pager.innerHTML = html;
+
+        const info = document.getElementById('invPagerInfo');
+        if (info) {
+            const from = (currentPage - 1) * PER_PAGE + 1;
+            const to   = Math.min(currentPage * PER_PAGE, total);
+            info.textContent = `Menampilkan ${from}–${to} dari ${total} tagihan`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', initPager);
 </script>
 
 </body>

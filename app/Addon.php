@@ -11,7 +11,7 @@ class Addon extends Model
 
     protected $table = 'addons';
 
-    protected $fillable = ['name', 'price', 'description'];
+    protected $fillable = ['name', 'price', 'description', 'is_active'];
 
     /**
      * Customers that have this add-on.

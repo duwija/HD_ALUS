@@ -21,13 +21,6 @@
 <section class="content">
   <div class="container-fluid">
 
-    @if(session('success'))
-      <div class="alert alert-success alert-dismissible fade show">
-        <button type="button" class="close" data-dismiss="alert">&times;</button>
-        {{ session('success') }}
-      </div>
-    @endif
-
     <div class="card card-primary card-outline shadow-sm">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h3 class="card-title mb-0">Daftar Add-on</h3>
@@ -56,9 +49,11 @@
               <td>{{ $addon->description ?: '-' }}</td>
               <td>
                 @if($addon->trashed())
-                  <span class="badge badge-secondary">Nonaktif</span>
-                @else
+                  <span class="badge badge-secondary">Dihapus</span>
+                @elseif($addon->is_active)
                   <span class="badge badge-success">Aktif</span>
+                @else
+                  <span class="badge badge-warning">Nonaktif</span>
                 @endif
               </td>
               <td class="text-center">

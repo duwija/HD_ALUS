@@ -20,6 +20,7 @@
       <th scope="col">Speed</th>
       <th scope="col">Price</th>
       <th scope="col">Description</th>
+      <th scope="col">Status</th>
       <th scope="col">Action</th>
     </tr>
   </thead>
@@ -31,6 +32,13 @@
       <td>{{ $plan->speed }}</td>
       <td>{{ $plan->price }}</td>
       <td>{{ $plan->description }}</td>
+      <td>
+        @if($plan->is_active)
+          <span class="badge badge-success">Active</span>
+        @else
+          <span class="badge badge-secondary">Inactive</span>
+        @endif
+      </td>
       <td >
         <div class="" >
         <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modal-detail{{ $plan->id }}">Detail </button>

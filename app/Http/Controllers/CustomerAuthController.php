@@ -33,8 +33,10 @@ class CustomerAuthController extends Controller
         if (Auth::guard('customer')->check()) {
             return redirect('/tagihan');
         }
-        
-        return view('tagihan.login');
+
+        $promos = \App\AppPromo::active()->latest()->get();
+
+        return view('tagihan.login', compact('promos'));
     }
 
     /**

@@ -118,20 +118,31 @@
 
 @section('footer-scripts')
 <script>
+var _csrfToken = '{{ csrf_token() }}';
 document.querySelectorAll('.toggle-active').forEach(function(el) {
     el.addEventListener('change', function() {
         var id = this.dataset.id;
+        var checkbox = this;
         var label = this.nextElementSibling;
         fetch('/marketing/promos/' + id + '/toggle', {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'X-CSRF-TOKEN': _csrfToken,
                 'Accept': 'application/json',
             }
         })
-        .then(r => r.json())
-        .then(data => {
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(data) {
             label.textContent = data.is_active ? 'Aktif' : 'Non-aktif';
+        })
+        .catch(function(err) {
+            console.error('Toggle gagal:', err);
+            // Kembalikan state checkbox jika gagal
+            checkbox.checked = !checkbox.checked;
+            alert('Gagal mengubah status promo. Silakan coba lagi.');
         });
     });
 });

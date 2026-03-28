@@ -26,7 +26,10 @@ class AddonController extends Controller
             'description' => 'nullable|string|max:191',
         ]);
 
-        Addon::create($request->only('name', 'price', 'description'));
+        Addon::create(array_merge(
+            $request->only('name', 'price', 'description'),
+            ['is_active' => $request->input('is_active', 1)]
+        ));
 
         return redirect()->route('addon.index')->with('success', 'Add-on berhasil ditambahkan.');
     }
@@ -47,7 +50,10 @@ class AddonController extends Controller
             'description' => 'nullable|string|max:191',
         ]);
 
-        $addon->update($request->only('name', 'price', 'description'));
+        $addon->update(array_merge(
+            $request->only('name', 'price', 'description'),
+            ['is_active' => (int) $request->input('is_active', 1)]
+        ));
 
         return redirect()->route('addon.index')->with('success', 'Add-on berhasil diperbarui.');
     }

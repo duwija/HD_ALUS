@@ -29,6 +29,13 @@
                     <label for="description">Description  </label>
                     <input type="text" class="form-control @error('description') is-invalid @enderror" name="description" id="description" placeholder="Plan Descrition" value="{{ $plan->description }}">
                   </div>
+                  <div class="form-group">
+                    <label for="is_active">Status</label>
+                    <select class="form-control" name="is_active" id="is_active">
+                      <option value="1" {{ ($plan->is_active ?? 1) ? 'selected' : '' }}>Active</option>
+                      <option value="0" {{ ($plan->is_active ?? 1) ? '' : 'selected' }}>Inactive</option>
+                    </select>
+                  </div>
                   
                 </div>
                 <!-- /.card-body -->

@@ -317,7 +317,9 @@ class SalesAuthController extends Controller
             ->with('addons')
             ->firstOrFail();
 
-        $plan     = \App\Plan::pluck('name', 'id');
+        $plan     = \App\Plan::orderBy('price', 'ASC')->get()->mapWithKeys(function($p) {
+            return [$p->id => $p->name . ($p->is_active ? '' : ' (inactive)')];
+        });
         $merchant = \App\Merchant::pluck('name', 'id');
         $addons   = \App\Addon::orderBy('name')->get();
 
@@ -389,7 +391,9 @@ class SalesAuthController extends Controller
     public function showCreateCustomer()
     {
         $sales = Auth::guard('sales')->user();
-        $plan     = \App\Plan::pluck('name', 'id');
+        $plan     = \App\Plan::orderBy('price', 'ASC')->get()->mapWithKeys(function($p) {
+            return [$p->id => $p->name . ($p->is_active ? '' : ' (inactive)')];
+        });
         $merchant = \App\Merchant::pluck('name', 'id');
         $addons   = \App\Addon::orderBy('name')->get();
         $status   = \App\Statuscustomer::pluck('name', 'id');

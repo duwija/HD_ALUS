@@ -200,7 +200,7 @@
       <label for="id_plan"> Plan </label>
       <select name="id_plan" id="id_plan" class="form-control select2">
         @foreach ($plan as $plan )
-        <option value="{{ $plan->id }}" {{ request('id_plan') == $plan->id ? 'selected' : '' }}>{{ $plan->name }} (Rp. {{number_format($plan->price, 0, ',', '.')}})</option>
+        <option value="{{ $plan->id }}" {{ request('id_plan') == $plan->id ? 'selected' : '' }}>{{ $plan->name }}{{ $plan->is_active ? '' : ' (inactive)' }} (Rp. {{number_format($plan->price, 0, ',', '.')}})</option>
         @endforeach
       </select>
     </div>
@@ -216,7 +216,7 @@
           data-price="{{ $addon->price }}"
           data-desc="{{ $addon->description }}"
           {{ in_array($addon->id, old('addons', [])) ? 'selected' : '' }}>
-          {{ $addon->name }} (+Rp {{ number_format($addon->price, 0, ',', '.') }})
+          {{ $addon->name }}{{ $addon->is_active ? '' : ' (inactive)' }} (+Rp {{ number_format($addon->price, 0, ',', '.') }})
         </option>
         @endforeach
       </select>

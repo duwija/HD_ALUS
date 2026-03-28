@@ -339,7 +339,7 @@
                                            data-price="{{ $addon->price }}"
                                            {{ $checked ? 'checked' : '' }}>
                                     <i class="pill-icon fas {{ $checked ? 'fa-check-circle' : 'fa-plus-circle' }}"></i>
-                                    <span class="pill-name">{{ $addon->name }}</span>
+                                    <span class="pill-name">{{ $addon->name }}{{ $addon->is_active ? '' : ' (inactive)' }}</span>
                                     <span class="pill-price">Rp {{ number_format($addon->price, 0, ',', '.') }}</span>
                                 </label>
                                 @empty

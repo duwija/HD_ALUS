@@ -279,9 +279,9 @@
     <select name="id_plan" id="id_plan" class="form-control select2">
       @foreach ($plan as $plan)
       @if ($plan->id == $customer->id_plan)
-       <option selected value="{{ $plan->id }}">{{ $plan->name }} ( Rp. {{number_format($plan->price, 0, ',', '.')}} )</option>
+       <option selected value="{{ $plan->id }}">{{ $plan->name }}{{ $plan->is_active ? '' : ' (inactive)' }} ( Rp. {{number_format($plan->price, 0, ',', '.')}} )</option>
      @else
-      <option value="{{ $plan->id }}">{{ $plan->name }} ( Rp. {{number_format($plan->price, 0, ',', '.')}} )</option>
+      <option value="{{ $plan->id }}">{{ $plan->name }}{{ $plan->is_active ? '' : ' (inactive)' }} ( Rp. {{number_format($plan->price, 0, ',', '.')}} )</option>
     @endif
     @endforeach
     </select>
@@ -301,7 +301,7 @@
       data-price="{{ $addon->price }}"
       data-desc="{{ $addon->description }}"
       {{ in_array($addon->id, $customerAddons) ? 'selected' : '' }}>
-      {{ $addon->name }} (+Rp {{ number_format($addon->price, 0, ',', '.') }})
+      {{ $addon->name }}{{ $addon->is_active ? '' : ' (inactive)' }} (+Rp {{ number_format($addon->price, 0, ',', '.') }})
     </option>
     @endforeach
   </select>

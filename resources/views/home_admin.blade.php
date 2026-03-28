@@ -81,32 +81,12 @@
   body.dark-mode .adm-inv-legend { color: #bbb; }
   .adm-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
-  .adm-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-  .adm-chip {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 5px 12px; border-radius: 20px;
-    font-size: 11px; font-weight: 600;
-    text-decoration: none; color: #555;
-    border: 1px solid #dde1e7;
-    background: #fff;
-    transition: background .15s, color .15s;
-  }
-  .adm-chip:hover { background: #f0f4ff; color: #1e88e5; border-color: #c5d5f9; text-decoration: none; }
-  body.dark-mode .adm-chip { background: #1e1e2d; border-color: #333; color: #ccc; }
-  body.dark-mode .adm-chip:hover { background: #252540; color: #90b8ff; }
   h5.mb-0 { color: var(--text-primary, #333) !important; }
 </style>
 
 <div class="container-fluid">
   <div class="row justify-content-center">
     <div class="col-12 col-md-11">
-
-      <div class="adm-chips">
-        <a href="{{ url('home-v2') }}" class="adm-chip"><i class="fas fa-tools text-primary"></i> Teknisi</a>
-        <a href="{{ url('home-v3') }}" class="adm-chip"><i class="fas fa-network-wired" style="color:#00897b"></i> Network</a>
-        <a href="{{ url('home-v4') }}" class="adm-chip"><i class="fas fa-funnel-dollar text-warning"></i> Marketing</a>
-        <a href="{{ url('home-v5') }}" class="adm-chip"><i class="fas fa-file-invoice-dollar text-success"></i> Accounting</a>
-      </div>
 
       {{-- ROW 1: 3-column --}}
       <div class="row">

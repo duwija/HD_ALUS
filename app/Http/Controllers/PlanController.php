@@ -117,9 +117,8 @@ class PlanController extends Controller
             'name' => $request->name,
             'speed' => $request->speed,
             'price' => $request->price,
-            'description' => $request->description
-
-
+            'description' => $request->description,
+            'is_active' => (int) $request->input('is_active', 1),
         ]);
         return redirect ('/plan')->with('success','Item updated successfully!');
     }
