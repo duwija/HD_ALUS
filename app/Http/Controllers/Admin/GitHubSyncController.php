@@ -16,7 +16,7 @@ class GitHubSyncController extends Controller
     public function __construct()
     {
         $this->basePath = base_path();
-        $this->git      = "git -c safe.directory={$this->basePath}";
+        $this->git      = "git -c safe.directory={$this->basePath} -c user.name='Admin' -c user.email='admin@kencana.alus.co.id'";
         $this->credFile = storage_path('app/github_credentials.json');
     }
 
