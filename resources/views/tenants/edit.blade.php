@@ -390,6 +390,7 @@
                                                     <li><code>MAIL_ENCRYPTION</code> - tls/ssl</li>
                                                     <li><code>MAIL_FROM_ADDRESS</code> - From email</li>
                                                     <li><code>MAIL_FROM_NAME</code> - From name</li>
+                                                    <li><code>MARKETING_EMAIL</code> - Email tujuan order add-on portal pelanggan</li>
                                                 </ul>
                                             </div>
 

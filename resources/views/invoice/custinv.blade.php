@@ -74,6 +74,22 @@
         }
         .info-item span { font-size: 13px; font-weight: 600; color: var(--gray-800); }
         .info-item.full { grid-column: 1 / -1; }
+        .addon-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 4px;
+        }
+        .addon-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: var(--gray-100);
+            color: var(--gray-600);
+            font-size: 11px;
+            font-weight: 600;
+        }
         .status-badge {
             display: inline-block; padding: 3px 10px;
             border-radius: 20px; font-size: 11px; font-weight: 700;
@@ -329,6 +345,29 @@
             <div class="info-item full">
                 <label>Nama</label>
                 <span>{{ $customer->name }}</span>
+            </div>
+            <div class="info-item full">
+                <label>Plan Aktif</label>
+                <span>
+                    {{ $customer->plan_name ?? '-' }}
+                    @if(isset($customer->plan_price))
+                        · Rp {{ number_format($customer->plan_price, 0, ',', '.') }}
+                    @endif
+                </span>
+            </div>
+            <div class="info-item full">
+                <label>Add-on Aktif</label>
+                @if(isset($customerAddons) && $customerAddons->count() > 0)
+                    <div class="addon-list">
+                        @foreach($customerAddons as $addon)
+                            <span class="addon-pill">
+                                {{ $addon->name }} · Rp {{ number_format($addon->price ?? 0, 0, ',', '.') }}
+                            </span>
+                        @endforeach
+                    </div>
+                @else
+                    <span>-</span>
+                @endif
             </div>
             <div class="info-item">
                 <label>Telepon</label>

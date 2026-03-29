@@ -642,6 +642,11 @@ class TenantManagementController extends Controller
                 $envVariables[$cleanKey] = $value;
             }
         }
+
+        // Ensure marketing destination email exists per tenant env.
+        if (!array_key_exists('MARKETING_EMAIL', $envVariables) && !array_key_exists('marketing_email', $envVariables)) {
+            $envVariables['MARKETING_EMAIL'] = 'duwija@trikamedia.com';
+        }
         
         return $envVariables;
     }

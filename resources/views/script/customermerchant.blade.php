@@ -24,7 +24,8 @@
   });
 
   var table = $('#table-customer').DataTable({
-    "responsive": true,
+    "responsive": false,
+    "scrollX": true,
     "autoWidth": false,
     "searching": false,
     "language": {
@@ -38,6 +39,7 @@
     processing: true,
     serverSide: true,
     pageLength: 50,
+    "order": [],
     ajax: {
       url: '/customer/table_customermerchant',
       method: 'POST',

@@ -91,6 +91,7 @@ Route::prefix('tagihan')->group(function() {
         Route::get('/select-customer', [CustomerAuthController::class, 'selectCustomer'])->name('customer.select');
         Route::get('/view-invoice/{customerId}', [CustomerAuthController::class, 'viewInvoice'])->name('customer.view-invoice');
         Route::get('/tickets/{customerId}', [CustomerAuthController::class, 'viewTickets'])->name('customer.tickets');
+        Route::post('/addons/order/{customerId}', [CustomerAuthController::class, 'orderAddons'])->name('customer.addons.order');
         Route::get('/logout', [CustomerAuthController::class, 'logout'])->name('customer.logout');
 
         // ── App-only pages (WebView Android) ──────────────────────────────

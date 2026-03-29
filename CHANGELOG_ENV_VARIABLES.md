@@ -1,5 +1,19 @@
 # CHANGELOG - Environment Variables Database System
 
+## [1.2.1] - 2026-03-29
+
+### 📧 Marketing Email Tenant Env
+
+#### Added
+- `MARKETING_EMAIL` sebagai env tenant untuk tujuan email order add-on portal pelanggan.
+- Tombol cepat **Set MARKETING_EMAIL** di halaman admin tenant create/edit.
+
+#### Changed
+- `TenantManagementController::processEnvVariables()` sekarang otomatis mengisi default `MARKETING_EMAIL=duwija@trikamedia.com` jika key belum diinput.
+
+#### Notes
+- Nilai ini bisa dioverride per tenant dari menu **Custom Environment Variables** di admin tenant.
+
 ## [1.2.0] - 2026-02-27
 
 ### 🔔 Notification Delay Variables

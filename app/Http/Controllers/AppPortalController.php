@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
+use App\Addon;
 use App\Customer;
 use App\AppPromo;
 use App\AppCustomerNotification;
@@ -25,7 +26,7 @@ class AppPortalController extends Controller
     private function getCustomers(): \Illuminate\Database\Eloquent\Collection
     {
         $email = Auth::guard('customer')->user()->email;
-        return Customer::where('email', $email)->get();
+        return Customer::with(['plan', 'addons', 'status_name'])->where('email', $email)->get();
     }
 
     private function getCustomer(int $customerId): ?Customer
@@ -47,6 +48,7 @@ class AppPortalController extends Controller
 
         $customers = $this->getCustomers();
         $promos    = AppPromo::active()->latest()->get();
+        $availableAddons = Addon::where('is_active', 1)->orderBy('name')->get();
 
         // Total tagihan belum bayar (semua customer email ini)
         $unpaidTotal = Suminvoice::whereIn('id_customer', $customers->pluck('id'))
@@ -59,7 +61,7 @@ class AppPortalController extends Controller
             ->where('created_at', '>=', now()->subDays(30))
             ->count();
 
-        return view('app.home', compact('customers', 'promos', 'unpaidTotal', 'unreadCount'));
+        return view('app.home', compact('customers', 'promos', 'unpaidTotal', 'unreadCount', 'availableAddons'));
     }
 
     // =====================================================================
@@ -71,24 +73,50 @@ class AppPortalController extends Controller
             return redirect('/tagihan/login');
         }
 
-        $customers = $this->getCustomers();
+        $customers = $this->getCustomers()->load(['plan_name', 'addons']);
 
-        // Ambil semua invoice (maks 50 terbaru) dari seluruh customer
-        $invoices = Suminvoice::whereIn('id_customer', $customers->pluck('id'))
-            ->orderByDesc('created_at')
-            ->limit(50)
-            ->get()
-            ->map(function ($inv) {
-                // Tambah encrypted customer id untuk link bayar
+        $customerIds = $customers->pluck('id');
+        $filter = $request->input('filter', 'all');
+
+        $baseInvoiceQuery = Suminvoice::whereIn('id_customer', $customerIds);
+
+        $statusCounts = (clone $baseInvoiceQuery)
+            ->selectRaw('payment_status, COUNT(*) as total')
+            ->groupBy('payment_status')
+            ->pluck('total', 'payment_status');
+
+        $unpaidCountsByCustomer = (clone $baseInvoiceQuery)
+            ->where('payment_status', 0)
+            ->selectRaw('id_customer, COUNT(*) as total')
+            ->groupBy('id_customer')
+            ->pluck('total', 'id_customer');
+
+        // Maksimal 5 tagihan per customer (sesuai filter)
+        $customerInvoices = collect();
+        foreach ($customers as $customer) {
+            $customerQuery = Suminvoice::where('id_customer', $customer->id)->orderByDesc('created_at');
+
+            if ($filter === 'unpaid') {
+                $customerQuery->where('payment_status', 0);
+            } elseif ($filter === 'paid') {
+                $customerQuery->where('payment_status', 1);
+            } elseif ($filter === 'cancel') {
+                $customerQuery->where('payment_status', 2);
+            }
+
+            $items = $customerQuery->limit(5)->get()->map(function ($inv) {
                 $inv->encrypted_customer_id = Crypt::encryptString($inv->id_customer);
                 return $inv;
             });
 
+            $customerInvoices->put($customer->id, $items);
+        }
+
         $customerMap = $customers->keyBy('id');
-        $unreadCount = AppCustomerNotification::whereIn('customer_id', $customers->pluck('id'))
+        $unreadCount = AppCustomerNotification::whereIn('customer_id', $customerIds)
             ->where('is_read', false)->where('created_at', '>=', now()->subDays(30))->count();
 
-        return view('app.tagihan', compact('invoices', 'customerMap', 'unreadCount'));
+        return view('app.tagihan', compact('customers', 'customerInvoices', 'customerMap', 'unreadCount', 'statusCounts', 'unpaidCountsByCustomer'));
     }
 
     // =====================================================================

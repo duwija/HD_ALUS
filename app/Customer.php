@@ -43,6 +43,12 @@ class Customer extends Authenticatable
     {
         return $this->hasMany('\App\Suminvoice', 'id_customer');
     }
+
+    public function plan()
+    {
+        return $this->belongsTo('\App\Plan', 'id_plan')->withTrashed();
+    }
+
     public function plan_name()
     {
         return $this->belongsTo('\App\Plan', 'id_plan')->withTrashed();

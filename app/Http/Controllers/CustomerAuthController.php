@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Mail;
+use App\Addon;
 use App\Customer;
 
 class CustomerAuthController extends Controller
@@ -20,9 +22,14 @@ class CustomerAuthController extends Controller
         }
 
         $email = Auth::guard('customer')->user()->email;
-        $customers = Customer::where('email', $email)->get();
+        $customers = Customer::with(['plan', 'addons'])->where('email', $email)->get();
+        $availableAddons = Addon::where('is_active', 1)->orderBy('name')->get();
 
-        return view('tagihan.select-customer', compact('customers', 'email'));
+        $unpaidTotal = \App\Suminvoice::whereIn('id_customer', $customers->pluck('id'))
+            ->where('payment_status', 0)
+            ->sum('total_amount');
+
+        return view('tagihan.select-customer', compact('customers', 'email', 'unpaidTotal', 'availableAddons'));
     }
 
     /**
@@ -53,7 +60,7 @@ class CustomerAuthController extends Controller
         ]);
 
         // Find all customers with this email
-        $customers = Customer::where('email', $request->email)->get();
+        $customers = Customer::with(['plan', 'addons'])->where('email', $request->email)->get();
 
         if ($customers->isEmpty()) {
             return back()->withErrors(['email' => 'Email tidak terdaftar'])->withInput();
@@ -103,10 +110,79 @@ class CustomerAuthController extends Controller
         }
 
         $email = Auth::guard('customer')->user()->email;
-        $customers = Customer::where('email', $email)->get();
+        $customers = Customer::with(['plan', 'addons'])->where('email', $email)->get();
+        $availableAddons = Addon::where('is_active', 1)->orderBy('name')->get();
+
+        $unpaidTotal = \App\Suminvoice::whereIn('id_customer', $customers->pluck('id'))
+            ->where('payment_status', 0)
+            ->sum('total_amount');
 
         // Always show selection page with logout button
-        return view('tagihan.select-customer', compact('customers', 'email'));
+        return view('tagihan.select-customer', compact('customers', 'email', 'unpaidTotal', 'availableAddons'));
+    }
+
+    public function orderAddons(Request $request, $customerId)
+    {
+        if (!Auth::guard('customer')->check()) {
+            return redirect('/tagihan/login');
+        }
+
+        $request->validate([
+            'addons' => 'required|array|min:1',
+            'addons.*' => 'integer|exists:addons,id',
+        ], [
+            'addons.required' => 'Silakan pilih minimal satu add-on.',
+            'addons.min' => 'Silakan pilih minimal satu add-on.',
+        ]);
+
+        $email = Auth::guard('customer')->user()->email;
+        $customer = Customer::with(['plan', 'addons'])
+            ->where('id', $customerId)
+            ->where('email', $email)
+            ->first();
+
+        if (!$customer) {
+            abort(403, 'Unauthorized access');
+        }
+
+        $selectedAddons = Addon::where('is_active', 1)
+            ->whereIn('id', $request->input('addons', []))
+            ->orderBy('name')
+            ->get();
+
+        if ($selectedAddons->isEmpty()) {
+            return back()->withErrors(['addons' => 'Add-on yang dipilih tidak valid atau sudah tidak aktif.'])->withInput();
+        }
+
+        $recipientEmail = tenant_config(
+            'MARKETING_EMAIL',
+            tenant_config(
+                'marketing_email',
+                env('MARKETING_EMAIL', config('mail.from.address', env('MAIL_FROM_ADDRESS')))
+            )
+        );
+        if (empty($recipientEmail)) {
+            return back()->withErrors(['addons' => 'Alamat email tujuan belum dikonfigurasi.'])->withInput();
+        }
+
+        $payload = [
+            'customer' => $customer,
+            'selectedAddons' => $selectedAddons,
+            'portalUser' => Auth::guard('customer')->user(),
+            'orderMessage' => 'Tim kami akan segera menghubungi Anda untuk konfirmasi pesanan Anda.',
+        ];
+
+        Mail::send('email.addon-order', $payload, function ($mailMessage) use ($customer, $recipientEmail) {
+            $mailMessage->to($recipientEmail)
+                ->replyTo($customer->email, $customer->name)
+                ->subject('Order Add-on Portal Pelanggan - ' . $customer->name);
+        });
+
+        $successMessage = 'Pesanan add-on berhasil dikirim. Tim kami akan segera menghubungi Anda untuk konfirmasi pesanan Anda.';
+
+        return back()
+            ->with('success', $successMessage)
+            ->with('addon_order_popup', $successMessage);
     }
 
     /**
@@ -265,9 +341,10 @@ class CustomerAuthController extends Controller
             'password' => 'required|min:6|confirmed',
         ]);
 
-        $customers = Customer::where('email', $request->email)
-                            ->where('phone', $request->phone)
-                            ->get();
+        $customers = Customer::with(['plan', 'addons'])
+                    ->where('email', $request->email)
+                    ->where('phone', $request->phone)
+                    ->get();
 
         if ($customers->isEmpty()) {
             return back()->withErrors(['email' => 'Data tidak ditemukan. Periksa kembali email dan nomor telepon Anda.'])->withInput();

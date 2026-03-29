@@ -756,6 +756,11 @@ public function custinv($encrypted)
     ->Join('plans', 'customers.id_plan', '=', 'plans.id')
     ->select('customers.*','statuscustomers.name as status_name','plans.name as plan_name','plans.price as plan_price')->first();
 
+    $customerAddons = \App\Customer::find($id)
+        ?->addons()
+        ->orderBy('name')
+        ->get() ?? collect();
+
     // Ambil gateway aktif untuk pilihan pembayaran di custinv
     $gateways = \App\PaymentGateway::where('enabled', 1)
         ->orderBy('sort_order')
@@ -764,6 +769,7 @@ public function custinv($encrypted)
     return view('invoice/custinv', [
         'suminvoice'    => $suminvoice,
         'customer'      => $customer,
+        'customerAddons' => $customerAddons,
         'companyName'   => $companyName,
         'companyAddress1' => $companyAddress1,
         'companyAddress2' => $companyAddress2,

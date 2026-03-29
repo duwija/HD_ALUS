@@ -309,10 +309,18 @@ class HomeController extends Controller
 
 public function network(Request $request)
 {
-    $userPrivilege = Auth::user()->privilege;
+    $userPrivilege = strtolower(trim((string) Auth::user()->privilege));
+
+    if ($userPrivilege === 'merchant') {
+        return redirect('/payment');
+    }
+
+    if ($userPrivilege === 'vendor') {
+        return redirect('/vendorticket');
+    }
 
     // Redirect ke dashboard pilihan jika sudah di-set
-    if (!in_array($userPrivilege, ['vendor', 'merchant'])) {
+    if (!in_array($userPrivilege, ['vendor', 'merchant'], true)) {
         $pref = Auth::user()->fresh()->dashboard_preference;
         if ($pref && in_array($pref, ['home-v2', 'home-v3', 'home-v4', 'home-v5', 'home-admin', 'attendance/dashboard'])) {
             return redirect('/' . $pref);
@@ -362,7 +370,7 @@ public function network(Request $request)
     $distrouter = \App\Distrouter::orderBy('name', 'asc')->get();
     $olts = \App\Olt::orderBy('name', 'asc')->get();
 
-    if (!in_array($userPrivilege, $dashboardRoles)) {
+    if (!in_array($userPrivilege, $dashboardRoles, true)) {
         return abort(403, 'You do not have permission to access this page.');
     }
 
@@ -419,7 +427,7 @@ public function network(Request $request)
 
 public function index(Request $request)
 {
-    $userPrivilege = Auth::user()->privilege;
+    $userPrivilege = strtolower(trim((string) Auth::user()->privilege));
 
     // Redirect ke dashboard preference jika user mengakses /home (default)
     // dan sudah diset preferensinya — kecuali vendor/merchant yang punya aturan sendiri

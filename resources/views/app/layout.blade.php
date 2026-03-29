@@ -192,6 +192,7 @@
     </a>
 </nav> -->
 
+<script src="{{ url('dashboard/plugins/sweetalert2/sweetalert2.all.js') }}"></script>
 @stack('scripts')
 </body>
 </html>

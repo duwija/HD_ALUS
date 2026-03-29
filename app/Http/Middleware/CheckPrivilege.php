@@ -14,8 +14,13 @@ class CheckPrivilege
         }
 
         $user = Auth::user();
-        
-        if (!in_array($user->privilege, $privileges)) {
+
+        $userPrivilege = strtolower(trim((string) $user->privilege));
+        $allowedPrivileges = array_map(function ($privilege) {
+            return strtolower(trim((string) $privilege));
+        }, $privileges);
+
+        if (!in_array($userPrivilege, $allowedPrivileges, true)) {
             abort(403, 'Anda tidak memiliki hak akses ke halaman ini.');
         }
 

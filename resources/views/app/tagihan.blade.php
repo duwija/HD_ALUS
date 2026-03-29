@@ -58,6 +58,36 @@
         color: var(--gray-500);
         margin-top: 1px;
     }
+    .customer-plan-info {
+        margin-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .customer-plan-line {
+        font-size: 11px;
+        color: var(--gray-700);
+        line-height: 1.4;
+    }
+    .customer-plan-line strong {
+        color: var(--gray-900);
+    }
+    .addon-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 2px;
+    }
+    .addon-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: var(--gray-100);
+        color: var(--gray-700);
+        font-size: 10px;
+        font-weight: 600;
+    }
 
     /* Individual invoice row inside group */
     .inv-row {
@@ -107,41 +137,66 @@
 
 @php
     $filter  = request('filter', 'all');
-    $grouped = $invoices->groupBy('id_customer');
+    $unpaidTotal = (int) ($statusCounts[0] ?? 0);
+    $cancelTotal = (int) ($statusCounts[2] ?? 0);
+
+    $visibleCustomers = $customers->filter(function ($cust) use ($customerInvoices) {
+        return isset($customerInvoices[$cust->id]) && $customerInvoices[$cust->id]->isNotEmpty();
+    });
 @endphp
 
 <div class="filter-tabs">
     <a href="?filter=all"    class="filter-tab {{ $filter === 'all'    ? 'active' : '' }}">Semua</a>
     <a href="?filter=unpaid" class="filter-tab {{ $filter === 'unpaid' ? 'active' : '' }}">
-        Belum Bayar ({{ $invoices->where('payment_status', 0)->count() }})
+        Belum Bayar ({{ $unpaidTotal }})
     </a>
     <a href="?filter=paid"   class="filter-tab {{ $filter === 'paid'   ? 'active' : '' }}">Lunas</a>
     <a href="?filter=cancel" class="filter-tab {{ $filter === 'cancel' ? 'active' : '' }}">
-        Dibatalkan ({{ $invoices->where('payment_status', 2)->count() }})
+        Dibatalkan ({{ $cancelTotal }})
     </a>
 </div>
 
-@forelse($grouped as $custId => $custInvoices)
+@forelse($visibleCustomers as $cust)
 @php
-    // Apply filter within this customer group
-    $shown = match($filter) {
-        'unpaid' => $custInvoices->where('payment_status', 0),
-        'paid'   => $custInvoices->where('payment_status', 1),
-        'cancel' => $custInvoices->where('payment_status', 2),
-        default  => $custInvoices,
-    };
-    $cust           = $customerMap->get($custId);
-    $firstInv       = $custInvoices->first();
+    $shown          = $customerInvoices[$cust->id] ?? collect();
+    $firstInv       = $shown->first();
     $encryptedCstId = $firstInv->encrypted_customer_id ?? null;
-    $unpaidCount    = $custInvoices->where('payment_status', 0)->count();
+    $unpaidCount    = (int) ($unpaidCountsByCustomer[$cust->id] ?? 0);
+    $plan           = optional($cust)->plan_name;
+    $addons         = optional($cust)->addons ?? collect();
 @endphp
-@if($shown->isEmpty()) @continue @endif
 <div class="customer-card">
     {{-- Header --}}
     <div class="customer-card-header">
         <div>
             <div class="customer-card-name">{{ $cust->name ?? '-' }}</div>
             <div class="customer-card-id">{{ $cust->customer_id ?? $custId }}</div>
+            <div class="customer-plan-info">
+                <div class="customer-plan-line">
+                    <strong>Plan:</strong>
+                    {{ $plan->name ?? 'Belum ada plan' }}
+                    @if($plan && isset($plan->price))
+                        · Rp {{ number_format($plan->price, 0, ',', '.') }}
+                    @endif
+                </div>
+                <div class="customer-plan-line">
+                    <strong>Add-on:</strong>
+                    @if($addons->isNotEmpty())
+                        <div class="addon-list">
+                            @foreach($addons as $addon)
+                                <span class="addon-chip">
+                                    {{ $addon->name }}
+                                    @if(isset($addon->price))
+                                        · Rp {{ number_format($addon->price, 0, ',', '.') }}
+                                    @endif
+                                </span>
+                            @endforeach
+                        </div>
+                    @else
+                        Tidak ada add-on aktif
+                    @endif
+                </div>
+            </div>
         </div>
         @if($unpaidCount > 0)
             <span class="badge badge-warning">{{ $unpaidCount }} belum bayar</span>

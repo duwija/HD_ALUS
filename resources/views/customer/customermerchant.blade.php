@@ -71,7 +71,8 @@
   <form role="form" method="post" action="/customer/update/status">
    @method('patch')
    @csrf
-   <table id="table-customer" class="table table-bordered table-striped table-responsive">
+    <div class="table-responsive w-100">
+    <table id="table-customer" class="table table-bordered table-striped w-100">
 
     <thead >
       <tr>
@@ -95,6 +96,7 @@
   </select>
 
 </table>
+</div>
 
 
 </form>

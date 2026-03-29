@@ -164,6 +164,11 @@
     </style>
 </head>
 <body>
+@php
+    $companyName = tenant_config('APP_NAME', config('app.name', 'INTERNET SERVICE PROVIDER'));
+    $companyAddress1 = tenant_config('COMPANY_ADDRESS1', tenant_config('company_address1', ''));
+    $companyAddress2 = tenant_config('COMPANY_ADDRESS2', tenant_config('company_address2', ''));
+@endphp
 <div class="container">
 <div class="page-wrap">
 
@@ -298,6 +303,17 @@
         </div>
 
     </div>{{-- /two-col --}}
+
+    <div class="text-center mt-3">
+        <p class="mb-1 text-white" style="font-size: 0.85rem; opacity: 0.95;">
+            <strong>{{ $companyName }}</strong>
+        </p>
+        @if(!empty($companyAddress1) || !empty($companyAddress2))
+            <p class="mb-0 text-white" style="font-size: 0.8rem; opacity: 0.85; line-height: 1.4;">
+                {{ trim($companyAddress1 . ' ' . $companyAddress2) }}
+            </p>
+        @endif
+    </div>
 
 </div>{{-- /page-wrap --}}
 </div>{{-- /container --}}

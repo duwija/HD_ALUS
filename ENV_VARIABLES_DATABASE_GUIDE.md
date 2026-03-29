@@ -163,6 +163,7 @@ $tenant->env_variables = [
     'SMTP_ENCRYPTION' => 'tls',
     'MAIL_FROM_ADDRESS' => 'noreply@tenantdomain.com',
     'MAIL_FROM_NAME' => 'Tenant Name',
+    'MARKETING_EMAIL' => 'duwija@trikamedia.com',
 ];
 
 // Di mail config atau saat kirim email

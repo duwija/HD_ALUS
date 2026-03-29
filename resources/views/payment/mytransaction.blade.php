@@ -65,7 +65,8 @@
     <hr>
 
     {{-- Table --}}
-    <table id="example3" class="table table-bordered table-striped mt-4 table-responsive">
+    <div class="table-responsive w-100 mt-4">
+    <table id="payment-mytransaction-table" class="table table-bordered table-striped w-100">
       <thead class="bg-light">
         <tr>
           <th>#</th>
@@ -115,6 +116,7 @@
         </tr>
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 </section>
@@ -151,6 +153,25 @@
         x: { title: { display: true, text: 'Tanggal' } }
       }
     }
+  });
+
+  $(function () {
+    if ($.fn.DataTable.isDataTable('#payment-mytransaction-table')) {
+      $('#payment-mytransaction-table').DataTable().destroy();
+    }
+
+    $('#payment-mytransaction-table').DataTable({
+      paging: false,
+      lengthChange: false,
+      searching: true,
+      ordering: true,
+      info: false,
+      autoWidth: false,
+      responsive: false,
+      scrollX: true,
+      dom: 'Bfrtip',
+      buttons: ['copyHtml5', 'excelHtml5', 'csvHtml5', 'pdfHtml5']
+    });
   });
 </script>
 @endsection

@@ -245,6 +245,7 @@ class TenantMiddleware
             'mail_encryption',
             'mail_from_address',
             'mail_from_name',
+            'marketing_email',
             // Payment gateway - Tripay
             'tripay_endpoint',
             'tripay_apikey',

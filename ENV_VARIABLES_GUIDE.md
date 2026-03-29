@@ -65,6 +65,7 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
 | 49 | `phyton_dir` | System | Tidak |
 | 50 | `report_email` | System | Tidak |
 | 51 | `whatsapp_noc` | Perusahaan | Tidak |
+| 52 | `marketing_email` | Mail | Tidak |
 
 ---
 
@@ -78,7 +79,8 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
   "mail_password": "mailpassword",
   "mail_encryption": "ssl",
   "mail_from_address": "noreply@example.com",
-  "mail_from_name": "Nama ISP Anda"
+  "mail_from_name": "Nama ISP Anda",
+  "marketing_email": "duwija@trikamedia.com"
 }
 ```
 **Kegunaan:** Konfigurasi SMTP untuk pengiriman email notifikasi, invoice, reset password per tenant.
@@ -93,6 +95,7 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
 | `mail_encryption` | Ya | `ssl` atau `tls` |
 | `mail_from_address` | Tidak | Alamat pengirim, fallback ke `mail_from` kolom |
 | `mail_from_name` | Tidak | Nama pengirim, fallback ke nama aplikasi |
+| `marketing_email` | Tidak | Email tujuan notifikasi order add-on dari portal pelanggan |
 
 #### 2. **WhatsApp Business API**
 ```json

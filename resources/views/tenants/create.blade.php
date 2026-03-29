@@ -198,7 +198,7 @@
                                 
                                 <div class="alert alert-info mt-3 mb-0">
                                     <small>
-                                        <strong>Contoh:</strong> WHATSAPP_TOKEN, WHATSAPP_NUMBER, XENDIT_SECRET, XENDIT_PUBLIC_KEY, SMTP_USERNAME, SMTP_PASSWORD, FTP_USER, FTP_PASSWORD, dll.
+                                        <strong>Contoh:</strong> MARKETING_EMAIL, WHATSAPP_TOKEN, WHATSAPP_NUMBER, XENDIT_SECRET, XENDIT_PUBLIC_KEY, SMTP_USERNAME, SMTP_PASSWORD, FTP_USER, FTP_PASSWORD, dll.
                                     </small>
                                 </div>
                             </div>
@@ -245,8 +245,7 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Add new environment variable row
-    document.getElementById('add-env-var').addEventListener('click', function() {
+    function addEnvVarRow(key, value) {
         const container = document.getElementById('env-variables-container');
         const newRow = document.createElement('div');
         newRow.className = 'row mb-2 env-variable-row';
@@ -255,13 +254,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 <input type="text" 
                        class="form-control form-control-sm" 
                        name="env_variables_keys[]" 
-                       placeholder="VARIABLE_NAME">
+                       placeholder="VARIABLE_NAME"
+                       value="${key || ''}">
             </div>
             <div class="col-md-7">
                 <input type="text" 
                        class="form-control form-control-sm" 
                        name="env_variables_values[]" 
-                       placeholder="value">
+                       placeholder="value"
+                       value="${value || ''}">
             </div>
             <div class="col-md-1">
                 <button type="button" class="btn btn-sm btn-danger remove-env-var">
@@ -270,6 +271,11 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
         container.appendChild(newRow);
+    }
+
+    // Add new environment variable row
+    document.getElementById('add-env-var').addEventListener('click', function() {
+        addEnvVarRow('', '');
     });
 
     // Remove environment variable row (event delegation)
