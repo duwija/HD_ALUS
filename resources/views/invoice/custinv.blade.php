@@ -319,6 +319,17 @@
 </head>
 <body>
 
+@if(session('error'))
+<div style="background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;padding:12px 16px;margin:8px;border-radius:6px;font-size:14px;position:sticky;top:0;z-index:9999;">
+    <strong>&#9888; Gagal:</strong> {{ session('error') }}
+</div>
+@endif
+@if(session('success'))
+<div style="background:#d4edda;color:#155724;border:1px solid #c3e6cb;padding:12px 16px;margin:8px;border-radius:6px;font-size:14px;position:sticky;top:0;z-index:9999;">
+    <strong>&#10003;</strong> {{ session('success') }}
+</div>
+@endif
+
 {{-- Header --}}
 <div class="page-header">
     <img src="{{ tenant_img('logoinv.png', 'dashboard/dist/img/logoinv.png') }}" alt="Logo">

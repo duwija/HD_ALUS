@@ -593,6 +593,17 @@ a button {
 </head>
 <body>
 
+@if(session('error'))
+<div style="background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;padding:12px 16px;margin:8px;border-radius:6px;font-size:14px;">
+    <strong>&#9888; Gagal:</strong> {{ session('error') }}
+</div>
+@endif
+@if(session('success'))
+<div style="background:#d4edda;color:#155724;border:1px solid #c3e6cb;padding:12px 16px;margin:8px;border-radius:6px;font-size:14px;">
+    <strong>&#10003;</strong> {{ session('success') }}
+</div>
+@endif
+
     <div class="container" id="invoice_pr">
      <div  >
         <button style="float:right;" class="btn no-print" onclick="window.print()">Print</button>
@@ -1021,7 +1032,7 @@ a button {
                             <form id="gw_duitku_form" action="{{ url('/create-duitku-va') }}" method="POST" style="display:inline;">
                                 @csrf
                                 <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-                                <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="document.getElementById('gw_duitku_form').submit();" style="cursor:pointer;">
+                                <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="this.style.opacity='0.6';document.getElementById('gw_duitku_form').submit();" style="cursor:pointer;">
                                     <i class="{{ $gw->icon }}"></i>
                                     <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
                                     <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
@@ -1113,7 +1124,7 @@ a button {
                         <form id="gw2_duitku_form" action="{{ url('/create-duitku-va') }}" method="POST" style="display:inline;">
                             @csrf
                             <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-                            <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="document.getElementById('gw2_duitku_form').submit();" style="cursor:pointer;">
+                            <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="this.style.opacity='0.6';document.getElementById('gw2_duitku_form').submit();" style="cursor:pointer;">
                                 <i class="{{ $gw->icon }}"></i>
                                 <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
                                 <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
