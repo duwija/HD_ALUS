@@ -726,6 +726,8 @@ a button {
         <tr bgcolor="#CBCAC7"  >
             <th style="border: 1px solid #333">#</th>
             <th style="border: 1px solid #333">Description</th>
+            <th style="border: 1px solid #333">Period</th>
+            <th style="border: 1px solid #333">Type</th>
             <th style="border: 1px solid #333">Price</th>
             <th style="border: 1px solid #333">Qty</th>
             <th style="border: 1px solid #333">Sub Total</th>
@@ -752,22 +754,22 @@ a button {
         $pph = $totalwutax * $suminvoice_number->pph/100;
         $taxitem = $invoice->amount * $taxfee;
         $subtotal = $subtotal + ($totalwutax + $totaltax) - $pph;
-        $strmonth = substr( $invoice->periode, -6, 2);
-        $stryear = substr( $invoice->periode, -4, 4);
 
+        $periodLabel = '-';
+        if (!empty($invoice->periode) && strlen($invoice->periode) >= 6) {
+            $strmonth = substr($invoice->periode, -6, 2);
+            $stryear = substr($invoice->periode, -4, 4);
 
-        $month_num = $strmonth;
+            if (is_numeric($strmonth) && (int) $strmonth >= 1 && (int) $strmonth <= 12) {
+                $periodLabel = date("F", mktime(0, 0, 0, (int) $strmonth, 10)).' '.$stryear;
+            }
+        }
 
-
-        $month_name = date("F", mktime(0, 0, 0, $month_num, 10)); 
-        if ( $invoice->monthly_fee == 1 )
-        {
-          $description = $invoice->description.' - '.$month_name.' '.$stryear;
-      }
-      else
-      {
-          $description = $invoice->description;
-      }
+        $monthlyLabel = ((int) $invoice->monthly_fee === 1) ? 'Monthly' : 'General';
+        $description = $invoice->description;
+        if ((int) $invoice->monthly_fee === 1 && $periodLabel !== '-') {
+            $description .= ' - '.$periodLabel;
+        }
 
 
 
@@ -778,9 +780,9 @@ a button {
           <th style="border: 1px solid #333" scope="row">{{ $loop->iteration }}</th>
           {{--   <td>{{ $invoice->created_at }}</td> --}}
           <td style="border: 1px solid #333">{{ $description }}</td>
-
+          <td style="border: 1px solid #333">{{ $periodLabel }}</td>
+          <td align="center" style="border: 1px solid #333">{{ $monthlyLabel }}</td>
           <td style="border: 1px solid #333">{{ number_format($invoice->amount + $taxitem, 0, ',', '.') }}</td>
-          {{--  <td>{{ $invoice->periode }}</td> --}}
           <input type="hidden" name="invoice_item[]" value={{ $invoice->id }}>
 
           <td align="center" style="border: 1px solid #333">{{ $invoice->qty }}</td>
@@ -822,12 +824,12 @@ a button {
             @if ( $pph != 0)
 
             <tr>
-                <td colspan="4" style="border: 1px solid #333" >Pph 23</td>
+                <td colspan="6" style="border: 1px solid #333" >Pph 23</td>
                 <td style="border: 1px solid #333" align="right"><strong id="total">Rp. -{{ number_format($pph, 0, ',', '.') }} </strong></td>
                 <tr>
                     @else
                     @endif
-                    <td colspan="4" style="border: 1px solid #333" >Total Tagihan Bulan ini / Current Charges <br> <p >Harga yang tertera pada invoice sudah termasuk PPN</p></td>
+                    <td colspan="6" style="border: 1px solid #333" >Total Tagihan Bulan ini / Current Charges <br> <p >Harga yang tertera pada invoice sudah termasuk PPN</p></td>
                     <td style="border: 1px solid #333" align="right"><strong id="total">Rp. {{ number_format($subtotal, 0, ',', '.') }} </strong></td>
                     {{--  <td colspan="2" style="border: 1px solid #333"> <strong> Tax Ppn ({{$taxfee}}%)</strong> --}}
                         {{-- <input type="text" name="subtotal" id="subtotal" value={{$subtotal}} >--}}

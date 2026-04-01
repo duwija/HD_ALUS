@@ -223,9 +223,9 @@
               <th scope="col">#</th>
               <th scope="col">Created At</th>
               <th scope="col">Description</th>
+              <th scope="col">Period</th>
+              <th scope="col">Type</th>
               <th scope="col">Price @</th>
-              {{-- <th scope="col">Periode</th>
-              <th scope="col">Payment Status</th> --}}
               <th scope="col">Qty</th>
               <th scope="col">Total</th>
 
@@ -243,21 +243,20 @@
             @php 
             $subtotal = $subtotal + $invoice->amount * $invoice->qty ;
 
-            $strmonth = substr(  $invoice->periode, -6, 2);
-            $stryear = substr( $invoice->periode, -4, 4);
+            $periodLabel = '-';
+            if (!empty($invoice->periode) && strlen($invoice->periode) >= 6) {
+              $strmonth = substr($invoice->periode, -6, 2);
+              $stryear = substr($invoice->periode, -4, 4);
 
-
-            $month_num = $strmonth;
-
-
-            $month_name = date("F", mktime(0, 0, 0, $month_num, 10)); 
-            if ( $invoice->monthly_fee == 1 )
-            {
-              $description = $invoice->description.' - '.$month_name.' '.$stryear;
+              if (is_numeric($strmonth) && (int) $strmonth >= 1 && (int) $strmonth <= 12) {
+                $periodLabel = date("F", mktime(0, 0, 0, (int) $strmonth, 10)).' '.$stryear;
+              }
             }
-            else
-            {
-              $description = $invoice->description;
+
+            $monthlyLabel = ((int) $invoice->monthly_fee === 1) ? 'Monthly' : 'General';
+            $description = $invoice->description;
+            if ((int) $invoice->monthly_fee === 1 && $periodLabel !== '-') {
+              $description .= ' - '.$periodLabel;
             }
 
             @endphp
@@ -265,9 +264,9 @@
               <th scope="row">{{ $loop->iteration }}</th>
               <td>{{ $invoice->created_at }}</td>
               <td>{{ $description }}</td>
-
+              <td>{{ $periodLabel }}</td>
+              <td>{{ $monthlyLabel }}</td>
               <td>{{ number_format($invoice->amount, 0, ',', '.') }}</td>
-              {{--  <td>{{ $invoice->periode }}</td> --}}
               <input type="hidden" name="invoice_item[]" value={{ $invoice->id }}>
               {{--  @if($invoice->payment_status == 0)
 
@@ -285,8 +284,8 @@
             </tr>
 
             @endforeach
-            <tr> <td colspan="5"> <strong> Subtotal</strong></td>
-              <td colspan="2">
+            <tr> <td colspan="7"> <strong> Subtotal</strong></td>
+              <td>
                <strong> {{ number_format($subtotal, 0, ',', '.') }} </strong> </td></tr>
                @php 
 
@@ -308,11 +307,11 @@
                $total = (float)$subtotal + (float)$tax - (float)$pph + (float)$admin_fee;
                @endphp
 
-               <tr> <td colspan="5"> <strong> Tax Ppn ({{$taxfee}}%)</strong>
+               <tr> <td colspan="7"> <strong> Tax Ppn ({{$taxfee}}%)</strong>
 
                 <input type="hidden" name="tax" id="tax" value={{$taxfee}} ></td> 
 
-                <td colspan="2">
+                <td>
                  <strong> 
 
                   {{ number_format($tax, 0, ',', '.') }}
@@ -322,8 +321,8 @@
               {{-- Hanya tampil jika UNPAID dan ada biaya admin --}}
               @if ($status == 0 && !is_null(Auth::user()->admin_fee))
               <tr>
-                <td colspan="5"><strong>Biaya Admin</strong></td>
-                <td colspan="2">
+                <td colspan="7"><strong>Biaya Admin</strong></td>
+                <td>
                   <strong>{{ number_format(Auth::user()->admin_fee, 0, ',', '.') }}</strong>
                 </td>
               </tr>
@@ -331,13 +330,13 @@
 
 
               @if ( $pph != 0)
-              <tr> <td colspan="5"> <strong> Pph 23</strong></td>
-                <td colspan="2">
+              <tr> <td colspan="7"> <strong> Pph 23</strong></td>
+                <td>
                  <strong id="total"> {{ number_format(-$pph, 0, ',', '.') }} </strong> </td></tr>
                  @else
                  @endif
-                 <tr> <td colspan="5"> <strong> Total</strong></td>
-                  <td colspan="2">
+                 <tr> <td colspan="7"> <strong> Total</strong></td>
+                  <td>
                     <strong id="total"> {{ number_format($total, 0, ',', '.') }}</strong> </td></tr>
 
                   </tbody>
