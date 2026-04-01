@@ -38,11 +38,15 @@
                             </div>
                         @endif
 
-                        @if($gateways->isEmpty())
+                        @if(isset($paymentGatewayTableReady) && !$paymentGatewayTableReady)
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                Tabel <code>payment_gateways</code> belum ada di database tenant ini. Jalankan migrasi tenant terlebih dahulu.
+                            </div>
+                        @elseif($gateways->isEmpty())
                             <div class="alert alert-warning">
                                 <i class="fas fa-exclamation-triangle"></i>
-                                Belum ada provider di database tenant ini.
-                                Jalankan: <code>php artisan db:seed --class="\PaymentGatewaySeeder"</code>
+                                Provider payment gateway belum terisi. Jalankan: <code>php artisan db:seed --class=PaymentGatewaySeeder</code>
                             </div>
                         @else
 

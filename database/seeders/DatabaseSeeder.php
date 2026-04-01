@@ -9,6 +9,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             LeadWorkflowSeeder::class,
+            PaymentGatewaySeeder::class,
         ]);
     }
 }

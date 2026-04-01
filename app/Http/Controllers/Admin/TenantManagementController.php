@@ -208,8 +208,21 @@ class TenantManagementController extends Controller
                 \Log::warning("Tenant {$rescode} directories failed: " . implode(', ', $directoriesFailed));
             }
 
+            // Inisialisasi provider payment gateway default jika tabel tersedia.
+            try {
+                $this->connectTenantTemp($tenant);
+                $seededProviders = $this->ensureDefaultPaymentGateways('tenant_temp');
+                \DB::purge('tenant_temp');
+
+                if ($seededProviders > 0) {
+                    \Log::info("Tenant {$rescode} payment gateways seeded", ['count' => $seededProviders]);
+                }
+            } catch (\Exception $seedException) {
+                \Log::warning("Tenant {$rescode} payment gateway seed skipped: " . $seedException->getMessage());
+            }
+
             return redirect()->route('admin.tenants.index')
-                ->with('success', "Tenant {$tenant->app_name} berhasil dibuat! Jangan lupa setup nginx config dan SSL certificate.");
+                ->with('success', "Tenant {$tenant->app_name} berhasil dibuat! Provider payment gateway default sudah disiapkan.");
         } catch (\Exception $e) {
             return redirect()->back()
                 ->with('error', 'Error: ' . $e->getMessage())
@@ -660,16 +673,24 @@ class TenantManagementController extends Controller
 
         $this->connectTenantTemp($tenant);
 
-        // Ambil semua gateway di tenant DB
-        $gateways = \DB::connection('tenant_temp')
-            ->table('payment_gateways')
-            ->orderBy('sort_order')
-            ->get()
-            ->keyBy('provider');
+        $paymentGatewayTableReady = \Schema::connection('tenant_temp')->hasTable('payment_gateways');
+
+        if ($paymentGatewayTableReady) {
+            $this->ensureDefaultPaymentGateways('tenant_temp');
+
+            // Ambil semua gateway di tenant DB
+            $gateways = \DB::connection('tenant_temp')
+                ->table('payment_gateways')
+                ->orderBy('sort_order')
+                ->get()
+                ->keyBy('provider');
+        } else {
+            $gateways = collect();
+        }
 
         \DB::purge('tenant_temp');
 
-        return view('tenants.payment-gateway-config', compact('tenant', 'gateways'));
+        return view('tenants.payment-gateway-config', compact('tenant', 'gateways', 'paymentGatewayTableReady'));
     }
 
     /**
@@ -828,6 +849,66 @@ class TenantManagementController extends Controller
             'strict'    => false,
         ]);
         \DB::purge('tenant_temp');
+    }
+
+    /**
+     * Pastikan provider payment gateway default tersedia di tenant DB.
+     * Aman dipanggil berulang kali — hanya menambah yang belum ada.
+     */
+    private function ensureDefaultPaymentGateways(string $connection = 'tenant_temp'): int
+    {
+        try {
+            if (!\Schema::connection($connection)->hasTable('payment_gateways')) {
+                return 0;
+            }
+
+            $defaults = \App\PaymentGateway::defaultProviders();
+            $inserted = 0;
+
+            foreach ($defaults as $def) {
+                $exists = \DB::connection($connection)
+                    ->table('payment_gateways')
+                    ->where('provider', $def['provider'])
+                    ->first();
+
+                $payload = [
+                    'label'      => $def['label'],
+                    'icon'       => $def['icon'],
+                    'sort_order' => $def['sort_order'],
+                    'settings'   => json_encode($def['settings'] ?? []),
+                    'updated_at' => now(),
+                ];
+
+                if ($exists) {
+                    \DB::connection($connection)
+                        ->table('payment_gateways')
+                        ->where('provider', $def['provider'])
+                        ->update($payload);
+                } else {
+                    \DB::connection($connection)
+                        ->table('payment_gateways')
+                        ->insert(array_merge($payload, [
+                            'domain'     => null,
+                            'provider'   => $def['provider'],
+                            'enabled'    => $def['enabled'] ?? 1,
+                            'fee_type'   => 'none',
+                            'fee_amount' => 0,
+                            'fee_label'  => 'Biaya Transaksi',
+                            'created_at' => now(),
+                        ]));
+
+                    $inserted++;
+                }
+            }
+
+            return $inserted;
+        } catch (\Exception $e) {
+            \Log::warning('ensureDefaultPaymentGateways failed: ' . $e->getMessage(), [
+                'connection' => $connection,
+            ]);
+
+            return 0;
+        }
     }
     
     /**
