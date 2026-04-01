@@ -359,8 +359,8 @@ public function winpay()
 
             // Baca konfigurasi dari settings kolom payment_gateways atau fallback ke .env
             $gw           = \App\PaymentGateway::findForCurrentTenant('duitku');
-            $merchantCode = ($gw->settings['merchant_code'] ?? null) ?: tenant_config('DUITKU_MERCHANT_CODE', env('DUITKU_MERCHANT_CODE'));
-            $apiKey       = ($gw->settings['api_key']       ?? null) ?: tenant_config('DUITKU_API_KEY',       env('DUITKU_API_KEY'));
+            $merchantCode = trim(($gw->settings['merchant_code'] ?? null) ?: tenant_config('DUITKU_MERCHANT_CODE', env('DUITKU_MERCHANT_CODE')));
+            $apiKey       = trim(($gw->settings['api_key']       ?? null) ?: tenant_config('DUITKU_API_KEY',       env('DUITKU_API_KEY')));
             $isSandbox    = $gw->settings['sandbox']        ?? (bool) tenant_config('DUITKU_SANDBOX', env('DUITKU_SANDBOX', false));
 
             if (empty($merchantCode) || empty($apiKey)) {
@@ -450,6 +450,7 @@ public function winpay()
                 'statusCode'      => $result['statusCode'] ?? null,
                 'statusMessage'   => $result['statusMessage'] ?? null,
                 'paymentUrl'      => $result['paymentUrl'] ?? null,
+                'rawBody'         => substr($response, 0, 500),
             ]);
 
             if ($httpCode === 200 && isset($result['statusCode']) && $result['statusCode'] === '00' && !empty($result['paymentUrl'])) {
@@ -460,7 +461,7 @@ public function winpay()
                 return redirect($result['paymentUrl']);
             }
 
-            $errMsg = $result['statusMessage'] ?? 'Gagal membuat transaksi Duitku (HTTP ' . $httpCode . ').';
+            $errMsg = $result['statusMessage'] ?? ($result['Message'] ?? ($result['message'] ?? 'Error HTTP ' . $httpCode . ': ' . substr($response, 0, 200)));
             return redirect()->back()->with('error', 'Duitku: ' . $errMsg);
 
         } catch (\Exception $e) {
@@ -552,8 +553,8 @@ public function winpay()
 
             // DUITKU — checkout page milih sendiri metodenya
             if ($gateway === 'duitku') {
-                $merchantCode = ($gw->settings['merchant_code'] ?? null) ?: tenant_config('DUITKU_MERCHANT_CODE', env('DUITKU_MERCHANT_CODE'));
-                $apiKey       = ($gw->settings['api_key']       ?? null) ?: tenant_config('DUITKU_API_KEY',       env('DUITKU_API_KEY'));
+                $merchantCode = trim(($gw->settings['merchant_code'] ?? null) ?: tenant_config('DUITKU_MERCHANT_CODE', env('DUITKU_MERCHANT_CODE')));
+                $apiKey       = trim(($gw->settings['api_key']       ?? null) ?: tenant_config('DUITKU_API_KEY',       env('DUITKU_API_KEY')));
                 $isSandbox    = $gw->settings['sandbox']        ?? (bool) tenant_config('DUITKU_SANDBOX', env('DUITKU_SANDBOX', false));
 
                 if (empty($merchantCode) || empty($apiKey)) {
@@ -625,8 +626,9 @@ public function winpay()
 
                 $result = json_decode($response, true);
                 \Log::channel('payment')->debug('Duitku bundle createInvoice', [
-                    'bundle_ref' => $bundleRef, 'httpCode' => $httpCode,
-                    'statusCode' => $result['statusCode'] ?? null, 'paymentUrl' => $result['paymentUrl'] ?? null,
+                    'bundle_ref'  => $bundleRef, 'httpCode' => $httpCode,
+                    'statusCode'  => $result['statusCode'] ?? null, 'paymentUrl' => $result['paymentUrl'] ?? null,
+                    'rawBody'     => substr($response, 0, 500),
                 ]);
 
                 if ($httpCode === 200 && ($result['statusCode'] ?? null) === '00' && !empty($result['paymentUrl'])) {
@@ -635,7 +637,7 @@ public function winpay()
                     return redirect($result['paymentUrl']);
                 }
 
-                $errMsg = $result['statusMessage'] ?? 'Gagal membuat transaksi Duitku (HTTP ' . $httpCode . ').';
+                $errMsg = $result['statusMessage'] ?? ($result['Message'] ?? ($result['message'] ?? 'Error HTTP ' . $httpCode . ': ' . substr($response, 0, 200)));
                 return redirect()->back()->with('error', 'Duitku: ' . $errMsg);
             }
 
