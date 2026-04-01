@@ -24,18 +24,23 @@ class PaymentGatewaySeeder extends Seeder
         $defaults = \App\PaymentGateway::defaultProviders();
 
         foreach ($defaults as $def) {
-            $exists = DB::table('payment_gateways')->where('provider', $def['provider'])->exists();
+            $exists = DB::table('payment_gateways')->where('provider', $def['provider'])->first();
+
+            $existingSettings = [];
+            if ($exists && !empty($exists->settings)) {
+                $existingSettings = json_decode($exists->settings, true) ?? [];
+            }
 
             if ($exists) {
-                // Update hanya label, icon, sort_order, settings — JANGAN overwrite enabled/fee
-                // yang sudah dikustomisasi tenant
+                // Update hanya label, icon, sort_order, settings default — JANGAN overwrite enabled/fee
+                // maupun credential tenant yang sudah diisi.
                 DB::table('payment_gateways')
                     ->where('provider', $def['provider'])
                     ->update([
                         'label'      => $def['label'],
                         'icon'       => $def['icon'],
                         'sort_order' => $def['sort_order'],
-                        'settings'   => json_encode($def['settings']),
+                        'settings'   => json_encode(array_merge($def['settings'] ?? [], $existingSettings)),
                         'updated_at' => now(),
                     ]);
             } else {

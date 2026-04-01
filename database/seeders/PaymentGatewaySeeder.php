@@ -26,11 +26,16 @@ class PaymentGatewaySeeder extends Seeder
                 ->where('provider', $def['provider'])
                 ->first();
 
+            $existingSettings = [];
+            if ($exists && !empty($exists->settings)) {
+                $existingSettings = json_decode($exists->settings, true) ?? [];
+            }
+
             $payload = [
                 'label'      => $def['label'],
                 'icon'       => $def['icon'],
                 'sort_order' => $def['sort_order'],
-                'settings'   => json_encode($def['settings'] ?? []),
+                'settings'   => json_encode(array_merge($def['settings'] ?? [], $existingSettings)),
                 'updated_at' => now(),
             ];
 
