@@ -72,5 +72,6 @@ class Kernel extends HttpKernel
         'admin' => \App\Http\Middleware\AdminMiddleware::class,
         'filter.tenant.logs' => \App\Http\Middleware\FilterTenantLogs::class,
         'dashboard.pref'  => \App\Http\Middleware\EnforceDashboardPreference::class,
+        'check.license' => \App\Http\Middleware\CheckLicense::class,
     ];
 }

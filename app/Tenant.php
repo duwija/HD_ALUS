@@ -44,6 +44,9 @@ class Tenant extends Model
         'payment_tripay_enabled',
         'is_active',
         'notes',
+        'license_plan_id',
+        'license_status',
+        'license_expires_at',
     ];
 
     /**
@@ -57,7 +60,9 @@ class Tenant extends Model
         'payment_bumdes_enabled' => 'integer',
         'payment_winpay_enabled' => 'integer',
         'payment_tripay_enabled' => 'integer',
-        'is_active' => 'boolean',
+        'is_active'           => 'boolean',
+        'license_plan_id'     => 'integer',
+        'license_expires_at'  => 'date',
     ];
 
     /**
@@ -181,6 +186,75 @@ class Tenant extends Model
     }
 
     /**
+     * Relasi ke LicensePlan
+     */
+    public function licensePlan()
+    {
+        return $this->belongsTo(LicensePlan::class, 'license_plan_id');
+    }
+
+    /**
+     * Apakah lisensi masih aktif/valid
+     */
+    public function isLicenseActive(): bool
+    {
+        if (in_array($this->license_status, ['suspended', 'expired'])) {
+            return false;
+        }
+        if ($this->license_expires_at && $this->license_expires_at->isPast()) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Cek apakah tenant boleh menambah customer baru
+     * Bandingkan jumlah active customer di tenant DB dengan max_customers plan
+     */
+    public function canAddCustomer(int $currentActiveCount): bool
+    {
+        if (!$this->isLicenseActive()) {
+            return false;
+        }
+        if (!$this->licensePlan) {
+            return true; // Belum ada plan = tidak dibatasi (backward compat)
+        }
+        if ($this->licensePlan->isUnlimited()) {
+            return true;
+        }
+        return $currentActiveCount < $this->licensePlan->max_customers;
+    }
+
+    /**
+     * Label status lisensi untuk tampilan
+     */
+    public function licenseStatusLabel(): string
+    {
+        $labels = [
+            'trial'     => '<span class="badge badge-info">Trial</span>',
+            'active'    => '<span class="badge badge-success">Active</span>',
+            'expired'   => '<span class="badge badge-danger">Expired</span>',
+            'suspended' => '<span class="badge badge-warning">Suspended</span>',
+        ];
+        return $labels[$this->license_status] ?? '<span class="badge badge-secondary">Unknown</span>';
+    }
+
+    /**
+     * Hitung sisa kuota berdasarkan active customer
+     */
+    public function remainingQuota(int $activeCount): string
+    {
+        if (!$this->licensePlan) {
+            return 'N/A';
+        }
+        if ($this->licensePlan->isUnlimited()) {
+            return 'Unlimited';
+        }
+        $sisa = max(0, $this->licensePlan->max_customers - $activeCount);
+        return number_format($sisa) . ' / ' . number_format($this->licensePlan->max_customers);
+    }
+
+    /**
      * Convert to array for TenantMiddleware
      */
     public function toTenantArray()
@@ -188,6 +262,7 @@ class Tenant extends Model
         $data = [
             'tenant_id' => $this->id,
             'domain' => $this->domain,
+            'domain_name' => $this->domain,
             'is_active' => (int) $this->is_active,
             'app_name' => $this->app_name,
             'signature' => $this->signature,

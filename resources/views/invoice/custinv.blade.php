@@ -6,6 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Tagihan Pelanggan</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
             --primary:   #667eea;
@@ -28,8 +29,37 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             font-size: 14px;
             color: var(--gray-800);
-            padding-bottom: 100px; /* space for sticky pay bar */
+            padding-bottom: 100px; /* space for sticky bars */
         }
+        /* Bundle sticky bar */
+        .bundle-bar {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 12px 16px 16px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,.18);
+            display: flex; z-index: 98;
+            align-items: center; gap: 12px;
+            color: #fff;
+        }
+        .bundle-bar-info { flex: 1; min-width: 0; }
+        .bundle-bar-label { font-size: 11px; opacity: .8; margin-bottom: 2px; }
+        .bundle-bar-gw    { font-size: 15px; font-weight: 800; }
+        .bundle-bar-count { font-size: 10px; opacity: .7; margin-top: 1px; }
+        .bundle-bar-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .btn-bundle-pay {
+            background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.4);
+            color: #fff; padding: 10px 16px; border-radius: 10px;
+            font-size: 13px; font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+            text-decoration: none; font-family: inherit; white-space: nowrap;
+            transition: background .15s;
+        }
+        .btn-bundle-pay:hover { background: rgba(255,255,255,.3); }
+        .btn-bundle-pay.primary {
+            background: rgba(255,255,255,.95); color: var(--primary-d);
+            border-color: transparent;
+        }
+        .btn-bundle-pay.primary:hover { background: #fff; }
         /* Header */
         .page-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -120,6 +150,7 @@
         .btn-pay  { background: linear-gradient(135deg, var(--primary), var(--primary-d)); color: #fff; }
         .btn-show:hover { background: var(--gray-200); }
         .btn-pay:hover  { opacity: .9; }
+        .btn-pay:disabled { background: var(--gray-200); color: var(--gray-500); cursor: not-allowed; opacity: 1; }
         .inv-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         /* Badge */
         .badge-status {
@@ -395,7 +426,46 @@
     </div>
 
     {{-- Invoice section --}}
-    @php $unpaidCount = $suminvoice->where('payment_status', 0)->count(); @endphp
+    @php
+        $unpaidCount     = $suminvoice->where('payment_status', 0)->count();
+        $selectableCount = $suminvoice->where('payment_status', 0)->filter(function($inv) use ($pendingBundleByInvoice) {
+            if (str_starts_with($inv->payment_id ?? '', 'duitku:')) return false;
+            if (str_starts_with($inv->payment_id ?? '', 'winpay:')) return false;
+            if ($pendingBundleByInvoice->has($inv->id)) return false;
+            return true;
+        })->count();
+
+        $earliestSelectableInvoiceId = $suminvoice
+            ->where('payment_status', 0)
+            ->filter(function($inv) use ($pendingBundleByInvoice) {
+                if (str_starts_with($inv->payment_id ?? '', 'duitku:')) return false;
+                if (str_starts_with($inv->payment_id ?? '', 'winpay:')) return false;
+                if ($pendingBundleByInvoice->has($inv->id)) return false;
+                return true;
+            })
+            ->sortBy([
+                ['date', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->pluck('id')
+            ->first();
+
+        $selectableOrderMap = $suminvoice
+            ->where('payment_status', 0)
+            ->filter(function($inv) use ($pendingBundleByInvoice) {
+                if (str_starts_with($inv->payment_id ?? '', 'duitku:')) return false;
+                if (str_starts_with($inv->payment_id ?? '', 'winpay:')) return false;
+                if ($pendingBundleByInvoice->has($inv->id)) return false;
+                return true;
+            })
+            ->sortBy([
+                ['date', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->pluck('id')
+            ->values()
+            ->flip();
+    @endphp
 
     <div class="section-title">
         <i class="fas fa-file-invoice"></i>
@@ -412,8 +482,8 @@
         </div>
     @else
 
-    {{-- Select-all bar — hanya tampil jika ada >1 unpaid --}}
-    @if($unpaidCount > 1)
+    {{-- Select-all bar — hanya tampil jika ada >1 yang bisa dipilih (bukan Duitku pending) --}}
+    @if($selectableCount > 1)
     <div class="select-bar">
         <label>
             <input type="checkbox" id="selectAll" class="inv-checkbox">
@@ -427,17 +497,38 @@
     <div class="invoice-list" id="invoiceList">
         @foreach($suminvoice as $inv)
         @php
-            $sc       = match((int)$inv->payment_status) { 1=>'paid', 2=>'cancel', default=>'unpaid' };
-            $bc       = match((int)$inv->payment_status) { 1=>'badge-paid', 2=>'badge-cancel', default=>'badge-unpaid' };
-            $sl       = match((int)$inv->payment_status) { 1=>'LUNAS', 2=>'BATAL', default=>'BELUM BAYAR' };
-            $isUnpaid = (int)$inv->payment_status === 0;
+            $isUnpaid      = (int)$inv->payment_status === 0;
+            $dkpPending    = $isUnpaid && str_starts_with($inv->payment_id ?? '', 'duitku:');
+            $dkpUrl        = '';
+            if ($dkpPending) {
+                $dkpParts = explode('|', substr($inv->payment_id, strlen('duitku:')), 2);
+                $dkpUrl   = $dkpParts[1] ?? '';
+            }
+            $wpPending     = $isUnpaid && str_starts_with($inv->payment_id ?? '', 'winpay:');
+            $wpUrl         = '';
+            if ($wpPending) {
+                $wpParts = explode('|', substr($inv->payment_id, strlen('winpay:')), 2);
+                $wpUrl   = $wpParts[1] ?? '';
+            }
+            $bundlePending = $pendingBundleByInvoice->get($inv->id);
+            $isSelectable  = $isUnpaid && !$dkpPending && !$wpPending && ($bundlePending === null);
+            $isEarliestSelectable = $isSelectable && ((int) $inv->id === (int) $earliestSelectableInvoiceId);
+            $sc = match((int)$inv->payment_status) { 1=>'paid', 2=>'cancel', default=>'unpaid' };
+            $bc = match((int)$inv->payment_status) { 1=>'badge-paid', 2=>'badge-cancel', default=>'badge-unpaid' };
+            $sl = match(true) {
+                (int)$inv->payment_status === 1 => 'LUNAS',
+                (int)$inv->payment_status === 2 => 'BATAL',
+                $dkpPending || $wpPending || ($bundlePending !== null) => 'MENUNGGU',
+                default => 'BELUM BAYAR',
+            };
         @endphp
         <div class="inv-card {{ $sc }}" id="card-{{ $inv->id }}">
             <div class="inv-card-header">
-                @if($isUnpaid)
+                @if($isSelectable)
                 <input type="checkbox"
                     class="inv-checkbox inv-select"
                     data-id="{{ $inv->id }}"
+                    data-order="{{ $selectableOrderMap->get($inv->id, '') }}"
                     data-amount="{{ $inv->total_amount }}"
                     data-number="{{ $inv->number }}"
                     onchange="updateSelection()">
@@ -456,11 +547,46 @@
                             <a href="/suminvoice/{{ $inv->tempcode }}/viewinvoice" class="btn-action btn-show">
                                 <i class="fas fa-eye"></i> Lihat
                             </a>
-                            @if($isUnpaid)
+                            @if($dkpPending)
+                                @if(!empty($dkpUrl))
+                                <a href="{{ $dkpUrl }}" target="_blank" class="btn-action btn-pay">
+                                    <i class="fas fa-credit-card"></i> Lanjutkan
+                                </a>
+                                @endif
+                                <form method="POST" action="{{ url('/duitku/reset') }}" style="display:inline;" class="js-confirm-change-payment">
+                                    @csrf
+                                    <input type="hidden" name="id" value="{{ $inv->id }}">
+                                    <button type="submit" class="btn-action btn-show" title="Ganti metode pembayaran">
+                                        <i class="fas fa-rotate-left"></i> Ganti Metode Bayar
+                                    </button>
+                                </form>
+                            @elseif($wpPending)
+                                @if(!empty($wpUrl))
+                                <a href="{{ $wpUrl }}" target="_blank" class="btn-action btn-pay">
+                                    <i class="fas fa-credit-card"></i> Lanjutkan
+                                </a>
+                                @endif
+                                <form method="POST" action="{{ url('/payment/reset') }}" style="display:inline;" class="js-confirm-change-payment">
+                                    @csrf
+                                    <input type="hidden" name="id" value="{{ $inv->id }}">
+                                    <button type="submit" class="btn-action btn-show" title="Ganti metode pembayaran">
+                                        <i class="fas fa-rotate-left"></i> Ganti Metode Bayar
+                                    </button>
+                                </form>
+                            @elseif($bundlePending)
+                                {{-- kosong, tombol ditampilkan di footer card di bawah --}}
+                            @elseif($isUnpaid)
+                            @if($isEarliestSelectable)
                             <button type="button" class="btn-action btn-pay btn-pay-single"
                                 onclick="quickPay({{ $inv->id }}, {{ $inv->total_amount }}, '{{ $inv->number }}')">
                                 <i class="fas fa-credit-card"></i> Bayar
                             </button>
+                            @else
+                            <button type="button" class="btn-action btn-pay btn-pay-single" disabled
+                                title="Bayar invoice terlama terlebih dahulu">
+                                <i class="fas fa-credit-card"></i> Bayar
+                            </button>
+                            @endif
                             @endif
                         </div>
                     </div>
@@ -480,6 +606,36 @@
     {{ $companyAddress1 }}<br>
     {{ $companyAddress2 }}
 </div>
+
+@php
+    $firstBundle      = $pendingBundleByInvoice->unique('bundle_ref')->first();
+    $bundleInvCount   = $firstBundle ? $pendingBundleByInvoice->where('bundle_ref', $firstBundle->bundle_ref)->count() : 0;
+@endphp
+
+@if($firstBundle)
+{{-- Sticky Bundle Bar --}}
+<div class="bundle-bar" id="bundleBar">
+    <div class="bundle-bar-info">
+        <div class="bundle-bar-label">Transaksi menunggu pembayaran</div>
+        <div class="bundle-bar-gw">{{ strtoupper($firstBundle->gateway) }}@if($firstBundle->tripay_method) &middot; {{ $firstBundle->tripay_method }}@endif</div>
+        <div class="bundle-bar-count">{{ $bundleInvCount }} invoice dalam 1 transaksi</div>
+    </div>
+    <div class="bundle-bar-actions">
+        <form method="POST" action="{{ url('/bundle/cancel') }}" style="margin:0;" class="js-confirm-change-payment">
+            @csrf
+            <input type="hidden" name="bundle_ref" value="{{ $firstBundle->bundle_ref }}">
+            <button type="submit" class="btn-bundle-pay">
+                <i class="fas fa-rotate-left"></i> Ganti Metode Bayar
+            </button>
+        </form>
+        @if(!empty($firstBundle->payment_url))
+        <a href="{{ $firstBundle->payment_url }}" target="_blank" class="btn-bundle-pay primary">
+            <i class="fas fa-credit-card"></i> Lanjutkan Pembayaran
+        </a>
+        @endif
+    </div>
+</div>
+@endif
 
 {{-- Sticky Payment Bar --}}
 <div class="pay-bar" id="payBar">
@@ -521,11 +677,31 @@
                             @endif
                         </button>
                     @break
+                    @case('duitku2')
+                        <button type="button" class="gw-btn" onclick="submitGateway('duitku2')">
+                            <div class="gw-icon"><i class="{{ $gw->icon }}"></i></div>
+                            <div class="gw-name">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
+                            <div class="gw-sub">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? 'VA, E-Wallet, QRIS' }}</div>
+                            @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
+                            <div class="gw-sub" style="color:#ef4444;margin-top:4px;">{{ $gw->feeDescription() }}</div>
+                            @endif
+                        </button>
+                    @break
                     @case('winpay')
                         <button type="button" class="gw-btn" onclick="submitGateway('winpay')">
                             <div class="gw-icon"><i class="{{ $gw->icon }}"></i></div>
                             <div class="gw-name">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
                             <div class="gw-sub">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? 'Bank VA' }}</div>
+                            @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
+                            <div class="gw-sub" style="color:#ef4444;margin-top:4px;">{{ $gw->feeDescription() }}</div>
+                            @endif
+                        </button>
+                    @break
+                    @case('winpay2')
+                        <button type="button" class="gw-btn" onclick="submitGateway('winpay2')">
+                            <div class="gw-icon"><i class="{{ $gw->icon }}"></i></div>
+                            <div class="gw-name">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
+                            <div class="gw-sub">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? 'QRIS & E-Wallet' }}</div>
                             @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
                             <div class="gw-sub" style="color:#ef4444;margin-top:4px;">{{ $gw->feeDescription() }}</div>
                             @endif
@@ -588,7 +764,25 @@
     let selectedAmounts = {};
     let selectedNumbers = {};
 
+    function getOrderedSelectableCheckboxes() {
+        return Array.from(document.querySelectorAll('.inv-select'))
+            .sort((a, b) => Number(a.dataset.order || 0) - Number(b.dataset.order || 0));
+    }
+
+    function enforceSequentialChecks() {
+        const ordered = getOrderedSelectableCheckboxes();
+        let firstGap = 0;
+        while (firstGap < ordered.length && ordered[firstGap].checked) firstGap++;
+
+        ordered.forEach((cb, idx) => {
+            const allow = idx <= firstGap;
+            cb.disabled = !allow;
+            if (!allow) cb.checked = false;
+        });
+    }
+
     function updateSelection() {
+        enforceSequentialChecks();
         selectedIds = []; selectedAmounts = {}; selectedNumbers = {};
         document.querySelectorAll('.inv-select:checked').forEach(cb => {
             selectedIds.push(cb.dataset.id);
@@ -619,7 +813,8 @@
 
     const saCb = document.getElementById('selectAll');
     if (saCb) saCb.addEventListener('change', () => {
-        document.querySelectorAll('.inv-select').forEach(cb => cb.checked = saCb.checked);
+        const ordered = getOrderedSelectableCheckboxes();
+        ordered.forEach(cb => cb.checked = saCb.checked);
         updateSelection();
     });
 
@@ -679,6 +874,29 @@
         document.getElementById('bundleForm').submit();
     }
 
+    function bindChangePaymentConfirmations() {
+        document.querySelectorAll('.js-confirm-change-payment').forEach(form => {
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+
+                Swal.fire({
+                    title: 'Ganti metode bayar',
+                    text: 'Ganti metode bayar akan membatalkan transaksi saat ini.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Ya, batalkan transaksi ini',
+                    cancelButtonText: 'Kembali',
+                    reverseButtons: true,
+                    focusCancel: true,
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        form.submit();
+                    }
+                });
+            });
+        });
+    }
+
     // ── Pagination ──
     const PER_PAGE = 5;
     let currentPage = 1;
@@ -720,7 +938,22 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', initPager);
+    document.addEventListener('DOMContentLoaded', () => {
+        initPager();
+        enforceSequentialChecks();
+        adjustPayBarOffset();
+        bindChangePaymentConfirmations();
+    });
+
+    function adjustPayBarOffset() {
+        const bundleBar = document.getElementById('bundleBar');
+        const payBar    = document.getElementById('payBar');
+        if (!payBar) return;
+        const h = bundleBar ? bundleBar.offsetHeight : 0;
+        payBar.style.bottom = h + 'px';
+        // Extra body padding so content isn't hidden behind both bars
+        document.body.style.paddingBottom = (100 + h) + 'px';
+    }
 </script>
 
 </body>

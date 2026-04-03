@@ -91,11 +91,11 @@
                                 </div>
 
                                 {{-- Settings row (api_key, merchant_code, dll) --}}
-                                @php $settings = json_decode($gw->settings ?? '{}', true) ?? []; @endphp
-                                @if(isset($settings['api_key']) || isset($settings['merchant_code']))
+                                  @php $settings = json_decode($gw->settings ?? '{}', true) ?? []; @endphp
+                                                                    @if(in_array($provider, ['duitku', 'duitku2', 'winpay', 'winpay2']))
                                 <div class="row mt-2" id="settingsRow_{{ $provider }}"
                                      style="{{ $gw->enabled ? '' : 'display:none;' }}">
-                                    @if(isset($settings['merchant_code']))
+                                                                        @if(in_array($provider, ['duitku', 'duitku2']))
                                     <div class="col-md-3">
                                         <label class="small text-muted mb-1">Merchant Code</label>
                                         <input type="text" class="form-control form-control-sm"
@@ -103,8 +103,6 @@
                                                value="{{ $settings['merchant_code'] ?? '' }}"
                                                placeholder="DXXXX">
                                     </div>
-                                    @endif
-                                    @if(isset($settings['api_key']))
                                     <div class="col-md-5">
                                         <label class="small text-muted mb-1">API Key</label>
                                         <input type="text" class="form-control form-control-sm"
@@ -112,20 +110,20 @@
                                                value="{{ $settings['api_key'] ?? '' }}"
                                                placeholder="API Key">
                                     </div>
-                                    @endif
-                                    {{-- Metode pembayaran Duitku tidak perlu dipilih di sini --}}
-                                    {{-- Menggunakan POP API (createInvoice) → user memilih sendiri di halaman checkout Duitku --}}
-                                    {{-- Atur metode yang aktif di: Duitku Merchant Dashboard → Payment Method --}}
                                     <div class="col-md-12 mt-2">
                                         <div class="alert alert-info py-2 px-3 small mb-0">
                                             <i class="fas fa-info-circle"></i>
+                                            @if($provider === 'duitku2')
+                                            Duitku 2 memakai merchant / credential berbeda dari Duitku utama.
+                                            Cocok untuk akun checkout Duitku kedua. Metode pembayaran tetap dipilih pelanggan di halaman checkout Duitku.
+                                            @else
                                             <strong>Metode pembayaran</strong> diatur langsung di
                                             <a href="https://dashboard.duitku.com" target="_blank">Duitku Merchant Dashboard</a>
                                             &rarr; <em>Payment Method</em>.
                                             Sistem menggunakan <strong>Checkout Page</strong> — pelanggan memilih sendiri saat pembayaran.
+                                            @endif
                                         </div>
                                     </div>
-                                    @if(array_key_exists('sandbox', $settings))
                                     <div class="col-md-2 d-flex align-items-end pb-1">
                                         <div class="custom-control custom-checkbox">
                                             <input type="hidden" name="providers[{{ $provider }}][settings][sandbox]" value="0">
@@ -135,6 +133,44 @@
                                                    value="1"
                                                    {{ !empty($settings['sandbox']) ? 'checked' : '' }}>
                                             <label class="custom-control-label text-warning" for="sandbox_{{ $provider }}">Sandbox</label>
+                                        </div>
+                                    </div>
+                                    @elseif(in_array($provider, ['winpay', 'winpay2']))
+                                    <div class="col-md-4">
+                                        <label class="small text-muted mb-1">API Endpoint</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               name="providers[{{ $provider }}][settings][endpoint]"
+                                               value="{{ $settings['endpoint'] ?? '' }}"
+                                               placeholder="https://api.winpay.id">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="small text-muted mb-1">API Key</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               name="providers[{{ $provider }}][settings][api_key]"
+                                               value="{{ $settings['api_key'] ?? '' }}"
+                                               placeholder="Winpay API Key">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="small text-muted mb-1">Secret Key</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               name="providers[{{ $provider }}][settings][secret_key]"
+                                               value="{{ $settings['secret_key'] ?? '' }}"
+                                               placeholder="Winpay Secret Key">
+                                    </div>
+                                    <div class="col-md-12 mt-2">
+                                        <div class="alert alert-info py-2 px-3 small mb-0">
+                                            <i class="fas fa-info-circle"></i>
+                                            @if($provider === 'winpay2')
+                                            Winpay 2 memakai merchant / credential berbeda dari Winpay utama.
+                                            Cocok untuk akun checkout Winpay kedua, misalnya khusus QRIS dan E-Wallet.
+                                            Channel tetap dipilih di sisi Winpay checkout, bukan dari aplikasi ini.
+                                            Fee customer tetap bisa diatur dari panel ini bila merchant kedua memang membutuhkan charge terpisah.
+                                            @else
+                                            Konfigurasi Winpay disimpan langsung per tenant di halaman ini.
+                                            Jika tenant lama masih punya <code>WINPAY_ENDPOINT</code>, <code>WINPAY_KEY</code>, atau <code>WINPAY_SECRET</code>
+                                            di Edit Tenant, nilainya akan disalin otomatis sekali ke settings Winpay saat halaman ini dibuka.
+                                            Karena Winpay memakai <strong>checkout page</strong>, metode bayar akhir dipilih di sisi Winpay.
+                                            @endif
                                         </div>
                                     </div>
                                     @endif
@@ -182,9 +218,13 @@
                                             </span>
                                         </label>
                                         <input type="number" class="form-control form-control-sm"
+                                               id="feeAmount_{{ $provider }}"
                                                name="providers[{{ $provider }}][fee_amount]"
                                                value="{{ $gw->fee_amount }}"
-                                               min="0" step="{{ $gw->fee_type === 'percent' ? '0.01' : '100' }}">
+                                               min="0"
+                                                 step="any"
+                                               max="{{ $gw->fee_type === 'percent' ? '100' : '' }}"
+                                               inputmode="decimal">
                                     </div>
                                     <div class="col-md-4">
                                         <label class="small text-muted mb-1">Label Biaya</label>
@@ -282,6 +322,8 @@
                         <li>Menonaktifkan gateway menyembunyikannya dari halaman invoice customer.</li>
                         <li>Biaya <strong>Fixed</strong>: Rupiah tetap, misal <code>2500</code> = Rp 2.500.</li>
                         <li>Biaya <strong>Persen</strong>: % dari tagihan, misal <code>2.5</code> = 2,5%.</li>
+                        <li><strong>Winpay 2</strong> dapat memakai merchant Winpay kedua dengan fee customer terpisah jika diperlukan.</li>
+                        <li><strong>Duitku 2</strong> dapat memakai merchant Duitku kedua dengan fee customer terpisah jika diperlukan.</li>
                         <li>Urutan mengatur tampilan pilihan gateway di invoice.</li>
                         <li>Perubahan langsung aktif, tidak perlu restart server.</li>
                     </ul>
@@ -296,17 +338,64 @@
 .custom-switch { transform: scale(1.2); }
 </style>
 <script>
+function setSectionInputsDisabled(section, disabled) {
+    if (!section) return;
+    section.querySelectorAll('input, select, textarea').forEach(function (field) {
+        if (field.type === 'hidden') return;
+        field.disabled = disabled;
+    });
+}
+
 function toggleRow(provider, enabled) {
     var feeRow      = document.getElementById('feeRow_'      + provider);
     var settingsRow = document.getElementById('settingsRow_' + provider);
-    if (feeRow)      feeRow.style.display      = enabled ? '' : 'none';
-    if (settingsRow) settingsRow.style.display = enabled ? '' : 'none';
+    if (feeRow) {
+        feeRow.style.display = enabled ? '' : 'none';
+        setSectionInputsDisabled(feeRow, !enabled);
+    }
+    if (settingsRow) {
+        settingsRow.style.display = enabled ? '' : 'none';
+        setSectionInputsDisabled(settingsRow, !enabled);
+    }
+    if (enabled) {
+        var feeType = document.getElementById('feeType_' + provider);
+        if (feeType) {
+            toggleFeeAmount(provider, feeType.value);
+        }
+    }
 }
+
 function toggleFeeAmount(provider, feeType) {
     var col  = document.getElementById('feeAmountCol_' + provider);
     var unit = document.getElementById('feeUnit_' + provider);
+    var input = document.getElementById('feeAmount_' + provider);
     if (col)  col.style.display  = feeType === 'none' ? 'none' : '';
     if (unit) unit.textContent   = feeType === 'percent' ? '(%)' : '(Rp)';
+    if (input) {
+        input.min = '0';
+        if (feeType === 'percent') {
+            input.step = 'any';
+            input.max = '100';
+            input.placeholder = 'contoh: 1 atau 2.5';
+            input.disabled = false;
+        } else {
+            input.step = 'any';
+            input.removeAttribute('max');
+            input.placeholder = 'contoh: 2500';
+            input.disabled = feeType === 'none';
+        }
+    }
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[id^="enabled_"]').forEach(function (checkbox) {
+        var provider = checkbox.id.replace('enabled_', '');
+        toggleRow(provider, checkbox.checked);
+    });
+    document.querySelectorAll('[id^="feeType_"]').forEach(function (select) {
+        var provider = select.id.replace('feeType_', '');
+        toggleFeeAmount(provider, select.value);
+    });
+});
 </script>
 @endsection

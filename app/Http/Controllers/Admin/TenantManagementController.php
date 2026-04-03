@@ -236,7 +236,8 @@ class TenantManagementController extends Controller
     public function edit($id)
     {
         $tenant = Tenant::findOrFail($id);
-        return view('tenants.edit', compact('tenant'));
+        $licensePlans = \App\LicensePlan::allActive();
+        return view('tenants.edit', compact('tenant', 'licensePlans'));
     }
 
     /**
@@ -262,6 +263,9 @@ class TenantManagementController extends Controller
             'feature_whatsapp' => 'nullable|boolean',
             'feature_payment' => 'nullable|boolean',
             'is_active' => 'nullable|boolean',
+            'license_plan_id' => 'nullable|exists:isp_master.license_plans,id',
+            'license_status' => 'nullable|in:active,suspended,expired,trial',
+            'license_expires_at' => 'nullable|date',
         ], [
             'domain.required' => 'Domain wajib diisi.',
             'domain.unique' => 'Domain sudah digunakan oleh tenant lain.',
@@ -298,6 +302,9 @@ class TenantManagementController extends Controller
                 'env_variables' => $this->processEnvVariables($request),
                 'is_active' => $request->has('is_active'),
                 'notes' => $request->notes,
+                'license_plan_id' => $request->license_plan_id ?: null,
+                'license_status' => $request->license_status ?: null,
+                'license_expires_at' => $request->license_expires_at ?: null,
             ]);
 
             // Update password if provided
@@ -313,6 +320,33 @@ class TenantManagementController extends Controller
                 ->with('error', 'Error: ' . $e->getMessage())
                 ->withInput();
         }
+    }
+
+    /**
+     * Quick update tenant license from show page
+     */
+    public function updateLicense(Request $request, $id)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'license_plan_id'   => 'nullable|exists:isp_master.license_plans,id',
+            'license_status'    => 'required|in:active,suspended,expired,trial',
+            'license_expires_at'=> 'nullable|date',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator)->withInput();
+        }
+
+        $tenant->update([
+            'license_plan_id'    => $request->license_plan_id ?: null,
+            'license_status'     => $request->license_status,
+            'license_expires_at' => $request->license_expires_at ?: null,
+        ]);
+
+        return redirect()->back()
+            ->with('success', "Lisensi tenant {$tenant->app_name} berhasil diupdate!");
     }
 
     /**
@@ -376,58 +410,58 @@ class TenantManagementController extends Controller
         ]);
         
         // Get customer statistics by status from tenant database
+        // id_status: 1=Potential, 2=Active, 3=Inactive, 4=Block, 5=Company Property
         $customerStats = [
-            'total' => \DB::connection('tenant_temp')->table('customers')->count(),
-            'active' => \DB::connection('tenant_temp')->table('customers')->where('id_status', 1)->count(),
-            'potential' => \DB::connection('tenant_temp')->table('customers')->where('id_status', 2)->count(),
-            'block' => \DB::connection('tenant_temp')->table('customers')->where('id_status', 3)->count(),
-            'inactive' => \DB::connection('tenant_temp')->table('customers')->where('id_status', 4)->count(),
+            'total'            => \DB::connection('tenant_temp')->table('customers')->count(),
+            'potential'        => \DB::connection('tenant_temp')->table('customers')->where('id_status', 1)->count(),
+            'active'           => \DB::connection('tenant_temp')->table('customers')->where('id_status', 2)->count(),
+            'inactive'         => \DB::connection('tenant_temp')->table('customers')->where('id_status', 3)->count(),
+            'block'            => \DB::connection('tenant_temp')->table('customers')->where('id_status', 4)->count(),
             'company_properti' => \DB::connection('tenant_temp')->table('customers')->where('id_status', 5)->count(),
-            'deleted' => \DB::connection('tenant_temp')->table('customers')->whereNotNull('deleted_at')->count(),
+            'deleted'          => \DB::connection('tenant_temp')->table('customers')->whereNotNull('deleted_at')->count(),
         ];
         
         // Purge temporary connection
         \DB::purge('tenant_temp');
-        
+
+        $licensePlans = \App\LicensePlan::allActive();
+
         // Check storage paths
-        $rescode = $tenant->rescode;
+        $rescode  = $tenant->rescode;
         $basePath = base_path();
-        
+
         $storagePaths = [
             'private' => [
                 'base' => "storage/tenants/{$rescode}",
                 'logs' => "storage/tenants/{$rescode}/logs",
-                'app' => "storage/tenants/{$rescode}/app/public",
+                'app'  => "storage/tenants/{$rescode}/app/public",
             ],
             'public' => [
-                'base' => "public/tenants/{$rescode}",
-                'storage' => "public/tenants/{$rescode}/storage",
-                'upload' => "public/tenants/{$rescode}/upload",
+                'base'          => "public/tenants/{$rescode}",
+                'storage'       => "public/tenants/{$rescode}/storage",
+                'upload'        => "public/tenants/{$rescode}/upload",
                 'customerfiles' => "public/tenants/{$rescode}/upload/customerfiles",
-                'backup' => "public/tenants/{$rescode}/backup",
-                'users' => "public/tenants/{$rescode}/users",
-                'img' => "public/tenants/{$rescode}/img",
-            ]
+                'backup'        => "public/tenants/{$rescode}/backup",
+                'users'         => "public/tenants/{$rescode}/users",
+                'img'           => "public/tenants/{$rescode}/img",
+            ],
         ];
-        
-        // Check if directories exist and get additional info
+
         $storageStatus = [];
         foreach (['private', 'public'] as $type) {
             foreach ($storagePaths[$type] as $key => $path) {
-                $fullPath = "{$basePath}/{$path}";
-                $exists = is_dir($fullPath);
-                $writable = $exists && is_writable($fullPath);
+                $fullPath  = "{$basePath}/{$path}";
+                $exists    = is_dir($fullPath);
+                $writable  = $exists && is_writable($fullPath);
                 $fileCount = 0;
                 $totalSize = 0;
-                
-                // Count files and calculate size if directory exists
+
                 if ($exists) {
                     try {
                         $files = new \RecursiveIteratorIterator(
                             new \RecursiveDirectoryIterator($fullPath, \RecursiveDirectoryIterator::SKIP_DOTS),
                             \RecursiveIteratorIterator::SELF_FIRST
                         );
-                        
                         foreach ($files as $file) {
                             if ($file->isFile()) {
                                 $fileCount++;
@@ -435,24 +469,24 @@ class TenantManagementController extends Controller
                             }
                         }
                     } catch (\Exception $e) {
-                        // Silent fail if can't read directory
+                        // silent
                     }
                 }
-                
+
                 $storageStatus[$type][$key] = [
-                    'path' => $path,
-                    'exists' => $exists,
-                    'writable' => $writable,
-                    'file_count' => $fileCount,
-                    'total_size' => $totalSize,
+                    'path'           => $path,
+                    'exists'         => $exists,
+                    'writable'       => $writable,
+                    'file_count'     => $fileCount,
+                    'total_size'     => $totalSize,
                     'size_formatted' => $this->formatBytes($totalSize),
                 ];
             }
         }
-        
-        return view('tenants.show', compact('tenant', 'storagePaths', 'storageStatus', 'customerStats'));
+
+        return view('tenants.show', compact('tenant', 'storagePaths', 'storageStatus', 'customerStats', 'licensePlans'));
     }
-    
+
     /**
      * Switch to tenant database
      */
@@ -677,6 +711,7 @@ class TenantManagementController extends Controller
 
         if ($paymentGatewayTableReady) {
             $this->ensureDefaultPaymentGateways('tenant_temp');
+            $this->syncLegacyWinpaySettingsToGateway($tenant);
 
             // Ambil semua gateway di tenant DB
             $gateways = \DB::connection('tenant_temp')
@@ -738,9 +773,50 @@ class TenantManagementController extends Controller
             }
         }
 
+        $this->syncLegacyWinpaySettingsToGateway($tenant, false);
+
         \DB::purge('tenant_temp');
 
         return redirect()->back()->with('success', 'Konfigurasi payment gateway berhasil disimpan.');
+    }
+
+    private function syncLegacyWinpaySettingsToGateway(Tenant $tenant, bool $includeGlobalEnv = true): void
+    {
+        $row = \DB::connection('tenant_temp')
+            ->table('payment_gateways')
+            ->where('provider', 'winpay')
+            ->first();
+
+        if (!$row) {
+            return;
+        }
+
+        $settings = json_decode($row->settings ?? '{}', true) ?? [];
+        $envVars = $tenant->env_variables ?? [];
+
+        $legacy = [
+            'endpoint'   => trim((string) ($envVars['WINPAY_ENDPOINT'] ?? ($includeGlobalEnv ? env('WINPAY_ENDPOINT') : ''))),
+            'api_key'    => trim((string) ($envVars['WINPAY_KEY'] ?? ($includeGlobalEnv ? env('WINPAY_KEY') : ''))),
+            'secret_key' => trim((string) ($envVars['WINPAY_SECRET'] ?? ($includeGlobalEnv ? env('WINPAY_SECRET') : ''))),
+        ];
+
+        $changed = false;
+        foreach ($legacy as $key => $value) {
+            if (empty($settings[$key]) && !empty($value)) {
+                $settings[$key] = $value;
+                $changed = true;
+            }
+        }
+
+        if ($changed) {
+            \DB::connection('tenant_temp')
+                ->table('payment_gateways')
+                ->where('provider', 'winpay')
+                ->update([
+                    'settings' => json_encode($settings),
+                    'updated_at' => now(),
+                ]);
+        }
     }
 
     // ── PAYMENT POINTS (Bumdes / Lokasi Bayar) ────────────────────────────────
@@ -1084,6 +1160,241 @@ class TenantManagementController extends Controller
         }
     }
     
+    /**
+     * Show users (staff) list for tenant
+     */
+    public function tenantUsers($id)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        \Config::set('database.connections.tenant_temp', [
+            'driver'    => 'mysql',
+            'host'      => $tenant->db_host ?? '127.0.0.1',
+            'port'      => $tenant->db_port ?? '3306',
+            'database'  => $tenant->db_database,
+            'username'  => $tenant->db_username,
+            'password'  => $tenant->db_password,
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'strict'    => false,
+        ]);
+
+        $users = \DB::connection('tenant_temp')
+            ->table('users')
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name', 'full_name', 'email', 'privilege', 'phone', 'is_active_employee', 'created_at']);
+
+        $merchants = \DB::connection('tenant_temp')
+            ->table('merchants')
+            ->pluck('name', 'id');
+
+        \DB::purge('tenant_temp');
+
+        return view('tenants.users', compact('tenant', 'users', 'merchants'));
+    }
+
+    /**
+     * Store new user in tenant database
+     */
+    public function storeTenantUser(Request $request, $id)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'name'      => 'required|string|max:100',
+            'full_name' => 'nullable|string|max:200',
+            'email'     => 'required|email|max:191',
+            'privilege' => 'required|in:admin,user,vendor,merchant,payment',
+            'phone'     => 'nullable|string|max:50',
+            'password'  => 'required|string|min:6|confirmed',
+        ], [
+            'name.required'     => 'Username wajib diisi.',
+            'email.required'    => 'Email wajib diisi.',
+            'email.email'       => 'Format email tidak valid.',
+            'privilege.required'=> 'Privilege wajib dipilih.',
+            'password.required' => 'Password wajib diisi.',
+            'password.min'      => 'Password minimal 6 karakter.',
+            'password.confirmed'=> 'Konfirmasi password tidak cocok.',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator)->withInput();
+        }
+
+        \Config::set('database.connections.tenant_temp', [
+            'driver'    => 'mysql',
+            'host'      => $tenant->db_host ?? '127.0.0.1',
+            'port'      => $tenant->db_port ?? '3306',
+            'database'  => $tenant->db_database,
+            'username'  => $tenant->db_username,
+            'password'  => $tenant->db_password,
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'strict'    => false,
+        ]);
+
+        // Check uniqueness in tenant DB
+        $exists = \DB::connection('tenant_temp')
+            ->table('users')
+            ->where(function($q) use ($request) {
+                $q->where('email', $request->email)
+                  ->orWhere('name', $request->name);
+            })
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if ($exists) {
+            \DB::purge('tenant_temp');
+            return redirect()->back()
+                ->with('error', 'Username atau email sudah digunakan di tenant ini.')
+                ->withInput();
+        }
+
+        \DB::connection('tenant_temp')->table('users')->insert([
+            'name'               => $request->name,
+            'full_name'          => $request->full_name,
+            'email'              => $request->email,
+            'privilege'          => $request->privilege,
+            'phone'              => $request->phone,
+            'password'           => bcrypt($request->password),
+            'is_active_employee' => 1,
+            'created_at'         => now(),
+            'updated_at'         => now(),
+        ]);
+
+        \DB::purge('tenant_temp');
+
+        return redirect()->route('admin.tenants.users', $id)
+            ->with('success', "User \"{$request->name}\" berhasil ditambahkan ke tenant {$tenant->app_name}!");
+    }
+
+    /**
+     * Update tenant user
+     */
+    public function updateTenantUser(Request $request, $id, $userId)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'full_name'         => 'nullable|string|max:200',
+            'email'             => 'required|email|max:191',
+            'privilege'         => 'required|in:admin,user,vendor,merchant,payment',
+            'phone'             => 'nullable|string|max:50',
+            'is_active_employee'=> 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator)->withInput();
+        }
+
+        \Config::set('database.connections.tenant_temp', [
+            'driver'    => 'mysql',
+            'host'      => $tenant->db_host ?? '127.0.0.1',
+            'port'      => $tenant->db_port ?? '3306',
+            'database'  => $tenant->db_database,
+            'username'  => $tenant->db_username,
+            'password'  => $tenant->db_password,
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'strict'    => false,
+        ]);
+
+        \DB::connection('tenant_temp')->table('users')
+            ->where('id', $userId)
+            ->update([
+                'full_name'          => $request->full_name,
+                'email'              => $request->email,
+                'privilege'          => $request->privilege,
+                'phone'              => $request->phone,
+                'is_active_employee' => $request->has('is_active_employee') ? 1 : 0,
+                'updated_at'         => now(),
+            ]);
+
+        \DB::purge('tenant_temp');
+
+        return redirect()->route('admin.tenants.users', $id)
+            ->with('success', 'User berhasil diupdate!');
+    }
+
+    /**
+     * Soft-delete tenant user
+     */
+    public function destroyTenantUser($id, $userId)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        \Config::set('database.connections.tenant_temp', [
+            'driver'    => 'mysql',
+            'host'      => $tenant->db_host ?? '127.0.0.1',
+            'port'      => $tenant->db_port ?? '3306',
+            'database'  => $tenant->db_database,
+            'username'  => $tenant->db_username,
+            'password'  => $tenant->db_password,
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'strict'    => false,
+        ]);
+
+        \DB::connection('tenant_temp')->table('users')
+            ->where('id', $userId)
+            ->update(['deleted_at' => now()]);
+
+        \DB::purge('tenant_temp');
+
+        return redirect()->route('admin.tenants.users', $id)
+            ->with('success', 'User berhasil dihapus!');
+    }
+
+    /**
+     * Reset tenant user password
+     */
+    public function resetTenantUserPassword(Request $request, $id, $userId)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'password' => 'required|string|min:6|confirmed',
+        ], [
+            'password.required' => 'Password baru wajib diisi.',
+            'password.min'      => 'Password minimal 6 karakter.',
+            'password.confirmed'=> 'Konfirmasi password tidak cocok.',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator)->withInput();
+        }
+
+        \Config::set('database.connections.tenant_temp', [
+            'driver'    => 'mysql',
+            'host'      => $tenant->db_host ?? '127.0.0.1',
+            'port'      => $tenant->db_port ?? '3306',
+            'database'  => $tenant->db_database,
+            'username'  => $tenant->db_username,
+            'password'  => $tenant->db_password,
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'strict'    => false,
+        ]);
+
+        \DB::connection('tenant_temp')->table('users')
+            ->where('id', $userId)
+            ->update([
+                'password'   => bcrypt($request->password),
+                'updated_at' => now(),
+            ]);
+
+        \DB::purge('tenant_temp');
+
+        return redirect()->route('admin.tenants.users', $id)
+            ->with('success', 'Password user berhasil direset!');
+    }
+
     /**
      * Show customers list for tenant
      */

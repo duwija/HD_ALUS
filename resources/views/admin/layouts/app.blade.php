@@ -114,6 +114,13 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.license-plans.*') ? 'active' : '' }}"
+                               href="{{ route('admin.license-plans.index') }}">
+                                <i class="fas fa-id-card"></i>
+                                License Plans
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" 
                                href="{{ route('admin.users.index') }}">
                                 <i class="fas fa-users-cog"></i>

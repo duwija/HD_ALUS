@@ -737,8 +737,6 @@ a button {
         <tr bgcolor="#CBCAC7"  >
             <th style="border: 1px solid #333">#</th>
             <th style="border: 1px solid #333">Description</th>
-            <th style="border: 1px solid #333">Period</th>
-            <th style="border: 1px solid #333">Type</th>
             <th style="border: 1px solid #333">Price</th>
             <th style="border: 1px solid #333">Qty</th>
             <th style="border: 1px solid #333">Sub Total</th>
@@ -791,8 +789,6 @@ a button {
           <th style="border: 1px solid #333" scope="row">{{ $loop->iteration }}</th>
           {{--   <td>{{ $invoice->created_at }}</td> --}}
           <td style="border: 1px solid #333">{{ $description }}</td>
-          <td style="border: 1px solid #333">{{ $periodLabel }}</td>
-          <td align="center" style="border: 1px solid #333">{{ $monthlyLabel }}</td>
           <td style="border: 1px solid #333">{{ number_format($invoice->amount + $taxitem, 0, ',', '.') }}</td>
           <input type="hidden" name="invoice_item[]" value={{ $invoice->id }}>
 
@@ -840,7 +836,7 @@ a button {
                 <tr>
                     @else
                     @endif
-                    <td colspan="6" style="border: 1px solid #333" >Total Tagihan Bulan ini / Current Charges <br> <p >Harga yang tertera pada invoice sudah termasuk PPN</p></td>
+                    <td colspan="4" style="border: 1px solid #333" >Total Tagihan Bulan ini / Current Charges <br> <p >Harga yang tertera pada invoice sudah termasuk PPN</p></td>
                     <td style="border: 1px solid #333" align="right"><strong id="total">Rp. {{ number_format($subtotal, 0, ',', '.') }} </strong></td>
                     {{--  <td colspan="2" style="border: 1px solid #333"> <strong> Tax Ppn ({{$taxfee}}%)</strong> --}}
                         {{-- <input type="text" name="subtotal" id="subtotal" value={{$subtotal}} >--}}
@@ -892,6 +888,12 @@ a button {
     <br>
     <p>{{ $suminvoice_number->user->name ?? $suminvoice_number->updated_by }}</p>
 
+    <div style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
+        <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
+            <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
+        </a>
+    </div>
+
 
 </div>
 
@@ -900,6 +902,12 @@ a button {
 <div>
     <p>T{{$signature}} </p>
     <p>Terima Kasih,</p>
+
+    <div style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
+        <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
+            <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
+        </a>
+    </div>
 
 
 
@@ -920,248 +928,11 @@ a button {
 
 @else
 
-
-
-
-
-<br>
-
-
-
-
-
-
-@if (!empty($result['data']['status']) AND ($result['data']['status']=="UNPAID") ) 
-
-
-<div class="container font12" >
-
-    <h5 align="center"><strong>Metode Pembayaran {{$result['data']['payment_name']}}</strong> </h5>
-
-    <p align="center">Batas akhir pembayaran</p>
-    <p align="center"><strong>{{date("d F Y, H:i:s", $result['data']['expired_time'])}}WITA</strong></p>
-
-    <div class="payment-info">
-        <div align="center">
-            <img src="https://billing.alus.co.id/img/bank/{{ $result['data']['payment_method'] }}.webp" alt="Payment">
-        </div>
-        <div align="center">
-            Jumlah Bayar <br>
-            <h4><strong>Rp. {{number_format($result['data']['amount'], 0, ',', '.')}}</strong></h4>
-        </div>
-        <div align="center">
-            Kode Bayar / Nomor VA <br>
-            <h4> <strong>{{$result['data']['pay_code']}}</strong></h4>
-        </div>
-    </div>
-    <div align="center">
-        <br>
-        <a style="text-decoration: inherit;"  href="{{$result['data']['checkout_url']}}"><div class="btn1">Lihat Detail / Cara bayar</div> </a>
-    </div>
+<div style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
+    <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
+        <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
+    </a>
 </div>
-
-<script>
-    function copyToClipboard(text) {
-        navigator.clipboard.writeText(text).then(function() {
-            alert('Kode Bayar disalin ke clipboard');
-        }, function(err) {
-            alert('Gagal menyalin teks: ', err);
-        });
-    }
-</script>
-
-@if($gateways->count() > 0)
-<div align="center">
-    <br>
-    <button style="background-color: #007bff;" class="btn1" onclick="toggleContent('content1')">Pilih Metode Pembayaran yang Lain</button>
-</div>
-<div id="content1" class="content">
-    <tr>
-        <td colspan="2" align="center">
-            <p align="center">
-                <strong style="font-size: 14px; color: #000;">PILIH PAYMENT GATEWAY</strong>
-            </p>
-            <div class="payment-grid">
-                @foreach($gateways as $gw)
-                    @switch($gw->provider)
-                        @case('bumdes')
-                            <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="$('#myModal').modal('show')" style="cursor:pointer;">
-                                <i class="{{ $gw->icon }}"></i>
-                                <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                @endif
-                            </div>
-                        @break
-                        @case('winpay')
-                            <form id="winpayForm" action="{{ url('/create-winpay-va') }}" method="POST" style="display:inline;">
-                                @csrf
-                                <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-                                <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="document.getElementById('winpayForm').submit();" style="cursor:pointer;">
-                                    <i class="{{ $gw->icon }}"></i>
-                                    <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                    <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                    @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                    <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                    @endif
-                                </div>
-                            </form>
-                        @break
-                        @case('tripay')
-                            <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="$('#tripayModal').modal('show')" style="cursor:pointer;">
-                                <i class="{{ $gw->icon }}"></i>
-                                <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                @endif
-                            </div>
-                        @break
-                        @case('xendit')
-                            <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="$('#xenditModal').modal('show')" style="cursor:pointer;">
-                                <i class="{{ $gw->icon }}"></i>
-                                <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                @endif
-                            </div>
-                        @break
-                        @case('duitku')
-                            <form id="gw_duitku_form" action="{{ url('/create-duitku-va') }}" method="POST" style="display:inline;">
-                                @csrf
-                                <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-                                <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="this.style.opacity='0.6';document.getElementById('gw_duitku_form').submit();" style="cursor:pointer;">
-                                    <i class="{{ $gw->icon }}"></i>
-                                    <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                    <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                    @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                    <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                    @endif
-                                </div>
-                            </form>
-                        @break
-                        @default
-                            {{-- Provider baru belum punya case: tampil generic, klik submit form --}}
-                            <form id="gw_{{ $gw->provider }}_form" action="{{ url('/create-' . $gw->provider . '-va') }}" method="POST" style="display:inline;">
-                                @csrf
-                                <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-                                <input type="hidden" name="provider" value="{{ $gw->provider }}">
-                                <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="document.getElementById('gw_{{ $gw->provider }}_form').submit();" style="cursor:pointer;">
-                                    <i class="{{ $gw->icon }}"></i>
-                                    <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                    <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                    @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                    <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                    @endif
-                                </div>
-                            </form>
-                    @endswitch
-                @endforeach
-            </div>
-        </td>
-    </tr>
-</div>
-@endif
-
-@else
-
-@if($gateways->count() > 0)
-<tr>
-    <td colspan="2" align="center">
-        <p align="center">
-            <strong style="font-size: 14px; color: #000;">PILIH PAYMENT GATEWAY</strong>
-        </p>
-        <div class="payment-grid">
-            @foreach($gateways as $gw)
-                @switch($gw->provider)
-                    @case('bumdes')
-                        <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="$('#myModal').modal('show')" style="cursor:pointer;">
-                            <i class="{{ $gw->icon }}"></i>
-                            <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                            <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                            @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                            <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                            @endif
-                        </div>
-                    @break
-                    @case('winpay')
-                        <form id="winpayForm2" action="{{ url('/create-winpay-va') }}" method="POST" style="display:inline;">
-                            @csrf
-                            <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-                            <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="document.getElementById('winpayForm2').submit();" style="cursor:pointer;">
-                                <i class="{{ $gw->icon }}"></i>
-                                <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                @endif
-                            </div>
-                        </form>
-                    @break
-                    @case('tripay')
-                        <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="$('#tripayModal').modal('show')" style="cursor:pointer;">
-                            <i class="{{ $gw->icon }}"></i>
-                            <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                            <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                            @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                            <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                            @endif
-                        </div>
-                    @break
-                    @case('xendit')
-                        <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="$('#xenditModal').modal('show')" style="cursor:pointer;">
-                            <i class="{{ $gw->icon }}"></i>
-                            <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                            <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                            @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                            <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                            @endif
-                        </div>
-                    @break
-                    @case('duitku')
-                        <form id="gw2_duitku_form" action="{{ url('/create-duitku-va') }}" method="POST" style="display:inline;">
-                            @csrf
-                            <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-                            <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="this.style.opacity='0.6';document.getElementById('gw2_duitku_form').submit();" style="cursor:pointer;">
-                                <i class="{{ $gw->icon }}"></i>
-                                <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                @endif
-                            </div>
-                        </form>
-                    @break
-                    @default
-                        <form id="gw2_{{ $gw->provider }}_form" action="{{ url('/create-' . $gw->provider . '-va') }}" method="POST" style="display:inline;">
-                            @csrf
-                            <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-                            <input type="hidden" name="provider" value="{{ $gw->provider }}">
-                            <div class="payment-card" data-provider="{{ $gw->provider }}" onclick="document.getElementById('gw2_{{ $gw->provider }}_form').submit();" style="cursor:pointer;">
-                                <i class="{{ $gw->icon }}"></i>
-                                <div class="payment-label">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
-                                <div class="payment-subtitle">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
-                                @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
-                                <div class="payment-fee">{{ $gw->feeDescription() }}</div>
-                                @endif
-                            </div>
-                        </form>
-                @endswitch
-            @endforeach
-        </div>
-    </td>
-</tr>
-@endif
-
-@endif
-
-<div class="container">
-
-
-
-
 
  @endif
 

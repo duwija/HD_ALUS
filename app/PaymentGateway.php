@@ -151,20 +151,38 @@ class PaymentGateway extends Model
                 'label'      => 'Winpay',
                 'icon'       => 'fas fa-building-columns',
                 'sort_order' => 2,
-                'settings'   => ['subtitle' => 'Bank VA & Retail Outlet'],
+                'settings'   => [
+                    'subtitle'   => 'Bank VA & Retail Outlet',
+                    'endpoint'   => '',
+                    'api_key'    => '',
+                    'secret_key' => '',
+                ],
+            ],
+            [
+                'provider'   => 'winpay2',
+                'label'      => 'Winpay 2',
+                'icon'       => 'fas fa-qrcode',
+                'sort_order' => 3,
+                'enabled'    => 0,
+                'settings'   => [
+                    'subtitle'   => 'QRIS & E-Wallet (merchant terpisah)',
+                    'endpoint'   => '',
+                    'api_key'    => '',
+                    'secret_key' => '',
+                ],
             ],
             [
                 'provider'   => 'tripay',
                 'label'      => 'Tripay',
                 'icon'       => 'fas fa-credit-card',
-                'sort_order' => 3,
+                'sort_order' => 4,
                 'settings'   => ['subtitle' => 'E-Wallet & QRIS'],
             ],
             [
                 'provider'   => 'bumdes',
                 'label'      => 'Bumdes / Payment Point',
                 'icon'       => 'fas fa-store',
-                'sort_order' => 4,
+                'sort_order' => 5,
                 'settings'   => ['subtitle' => 'Bayar di Loket Terdekat'],
             ],
 
@@ -178,12 +196,26 @@ class PaymentGateway extends Model
                 'provider'   => 'duitku',
                 'label'      => 'Duitku',
                 'icon'       => 'fas fa-wallet',
-                'sort_order' => 5,
+                'sort_order' => 6,
                 'enabled'    => 0,   // default off — aktifkan per tenant via SQL atau admin panel
                 'settings'   => [
                     'subtitle'     => 'VA, QRIS & E-Wallet',
                     'merchant_code'=> '',   // diisi per-tenant lewat kolom settings di DB
                     'api_key'      => '',
+                    'sandbox'      => 0,    // 0=production, 1=sandbox
+                ],
+            ],
+            [
+                'provider'   => 'duitku2',
+                'label'      => 'Duitku 2',
+                'icon'       => 'fas fa-wallet',
+                'sort_order' => 7,
+                'enabled'    => 0,
+                'settings'   => [
+                    'subtitle'      => 'VA, QRIS & E-Wallet (merchant terpisah)',
+                    'merchant_code' => '',
+                    'api_key'       => '',
+                    'sandbox'       => 0,
                 ],
             ],
             // ─────────────────────────────────────────────────────────────────

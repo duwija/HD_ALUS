@@ -302,10 +302,11 @@
                                             <div class="col-md-6 mb-3">
                                                 <h6 class="text-info"><i class="fas fa-building-columns"></i> Winpay Gateway</h6>
                                                 <ul class="list-unstyled ml-3 small">
-                                                    <li><code>WINPAY_ENDPOINT</code> - API endpoint Winpay</li>
-                                                    <li><code>WINPAY_KEY</code> - API Key Winpay</li>
-                                                    <li><code>WINPAY_SECRET</code> - Secret Key Winpay</li>
-                                                    <li><code>winpay_fee</code> - Biaya transaksi Winpay (numeric, optional)</li>
+                                                    <li>Konfigurasi utama Winpay sekarang ada di menu <code>Payment Gateway</code> tenant</li>
+                                                    <li><code>WINPAY_ENDPOINT</code> - legacy, akan disalin ke Payment Gateway Winpay jika masih ada</li>
+                                                    <li><code>WINPAY_KEY</code> - legacy, akan disalin ke Payment Gateway Winpay jika masih ada</li>
+                                                    <li><code>WINPAY_SECRET</code> - legacy, akan disalin ke Payment Gateway Winpay jika masih ada</li>
+                                                    <li><code>winpay_fee</code> - legacy, fee aktif saat ini diatur di menu Payment Gateway</li>
                                                 </ul>
                                             </div>
 
@@ -546,6 +547,45 @@
                                               name="notes" 
                                               rows="4"
                                               placeholder="Catatan tambahan tentang tenant ini">{{ old('notes', $tenant->notes) }}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <h5 class="border-bottom pb-2 mb-3">
+                                    <i class="fas fa-id-card mr-1"></i> Lisensi
+                                </h5>
+
+                                <div class="form-group">
+                                    <label for="license_plan_id">Plan Lisensi</label>
+                                    <select class="form-control" id="license_plan_id" name="license_plan_id">
+                                        <option value="">-- Tanpa Plan --</option>
+                                        @foreach($licensePlans as $lp)
+                                            <option value="{{ $lp->id }}"
+                                                {{ old('license_plan_id', $tenant->license_plan_id) == $lp->id ? 'selected' : '' }}>
+                                                {{ $lp->name }}
+                                                ({{ $lp->isUnlimited() ? 'Unlimited' : $lp->max_customers . ' pelanggan' }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <small class="form-text text-muted">Tentukan batas maksimum pelanggan aktif.</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="license_status">Status Lisensi</label>
+                                    <select class="form-control" id="license_status" name="license_status">
+                                        <option value="active"    {{ old('license_status', $tenant->license_status) === 'active'    ? 'selected' : '' }}>Active</option>
+                                        <option value="trial"     {{ old('license_status', $tenant->license_status) === 'trial'     ? 'selected' : '' }}>Trial</option>
+                                        <option value="suspended" {{ old('license_status', $tenant->license_status) === 'suspended' ? 'selected' : '' }}>Suspended</option>
+                                        <option value="expired"   {{ old('license_status', $tenant->license_status) === 'expired'   ? 'selected' : '' }}>Expired</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="license_expires_at">Tanggal Berakhir Lisensi</label>
+                                    <input type="date" class="form-control" id="license_expires_at"
+                                        name="license_expires_at"
+                                        value="{{ old('license_expires_at', $tenant->license_expires_at ? $tenant->license_expires_at->format('Y-m-d') : '') }}">
+                                    <small class="form-text text-muted">Kosongkan jika tidak ada batas waktu.</small>
                                 </div>
                             </div>
                         </div>

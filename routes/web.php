@@ -49,6 +49,7 @@ use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\TenantManagementController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\GitHubSyncController;
+use App\Http\Controllers\Admin\LicensePlanController;
 use App\Http\Controllers\CustomerAuthController;
 use App\Http\Controllers\SalesAuthController;
 use App\Http\Controllers\AppPortalController;
@@ -117,7 +118,7 @@ Route::prefix('sales')->group(function() {
         Route::get('/', [SalesAuthController::class, 'index'])->name('sales.index');
         Route::get('/table-customer', [SalesAuthController::class, 'table_customer_sales'])->name('sales.table-customer');
         Route::get('/customer/create', [SalesAuthController::class, 'showCreateCustomer'])->name('sales.customer.create');
-        Route::post('/customer/store', [SalesAuthController::class, 'storeCustomer'])->name('sales.customer.store');
+        Route::post('/customer/store', [SalesAuthController::class, 'storeCustomer'])->name('sales.customer.store')->middleware('check.license');
         Route::get('/customer/{id}', [SalesAuthController::class, 'showCustomer'])->name('sales.customer.detail');
         Route::get('/customer/{id}/edit', [SalesAuthController::class, 'showEditCustomer'])->name('sales.customer.edit');
         Route::post('/customer/{id}/update', [SalesAuthController::class, 'updateCustomer'])->name('sales.customer.update');
@@ -148,6 +149,13 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
     Route::delete('/tenants/{id}/backups/{filename}', [TenantManagementController::class, 'deleteBackup'])->name('admin.tenants.backups.delete');
     Route::get('/tenants/{id}/customers', [TenantManagementController::class, 'customers'])->name('admin.tenants.customers');
     Route::get('/tenants/{id}/customers/data', [TenantManagementController::class, 'customersData'])->name('admin.tenants.customers.data');
+
+    // Tenant Users Management
+    Route::get('/tenants/{id}/users', [TenantManagementController::class, 'tenantUsers'])->name('admin.tenants.users');
+    Route::post('/tenants/{id}/users', [TenantManagementController::class, 'storeTenantUser'])->name('admin.tenants.users.store');
+    Route::put('/tenants/{id}/users/{userId}', [TenantManagementController::class, 'updateTenantUser'])->name('admin.tenants.users.update');
+    Route::delete('/tenants/{id}/users/{userId}', [TenantManagementController::class, 'destroyTenantUser'])->name('admin.tenants.users.destroy');
+    Route::post('/tenants/{id}/users/{userId}/reset-password', [TenantManagementController::class, 'resetTenantUserPassword'])->name('admin.tenants.users.reset-password');
     Route::get('/tenants/{id}/transactions', [TenantManagementController::class, 'transactions'])->name('admin.tenants.transactions');
     Route::post('/tenants/{id}/transactions/data', [TenantManagementController::class, 'transactionsData'])->name('admin.tenants.transactions.data');
     Route::delete('/tenants/{id}', [TenantManagementController::class, 'destroy'])->name('admin.tenants.destroy');
@@ -156,6 +164,15 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
     Route::get('/tenants/{id}/queue-status', [TenantManagementController::class, 'queueStatus'])->name('admin.tenants.queue-status');
     Route::post('/tenants/{id}/queue-restart', [TenantManagementController::class, 'queueRestart'])->name('admin.tenants.queue-restart');
     Route::post('/tenants/{id}/queue-config', [TenantManagementController::class, 'queueConfig'])->name('admin.tenants.queue-config');
+    Route::post('/tenants/{id}/license', [TenantManagementController::class, 'updateLicense'])->name('admin.tenants.license.update');
+
+    // License Plans Management
+    Route::get('/license-plans', [LicensePlanController::class, 'index'])->name('admin.license-plans.index');
+    Route::get('/license-plans/create', [LicensePlanController::class, 'create'])->name('admin.license-plans.create');
+    Route::post('/license-plans', [LicensePlanController::class, 'store'])->name('admin.license-plans.store');
+    Route::get('/license-plans/{id}/edit', [LicensePlanController::class, 'edit'])->name('admin.license-plans.edit');
+    Route::put('/license-plans/{id}', [LicensePlanController::class, 'update'])->name('admin.license-plans.update');
+    Route::delete('/license-plans/{id}', [LicensePlanController::class, 'destroy'])->name('admin.license-plans.destroy');
 
     // Admin User Management
     Route::get('/users', [AdminUserController::class, 'index'])->name('admin.users.index');
@@ -262,6 +279,8 @@ Route::get('/winpay','SuminvoiceController@winpay');
 Route::post('/create-winpay-va','SuminvoiceController@createWinpayVA');
 Route::post('/create-duitku-va','SuminvoiceController@createDuitkuVA');  // ← LANGKAH 3: tambah route provider baru
 Route::post('/duitku/reset','SuminvoiceController@resetDuitkuVA');
+Route::post('/payment/reset','SuminvoiceController@resetPaymentPending');
+Route::post('/bundle/cancel','SuminvoiceController@cancelBundle');
 Route::post('/invoice/bundle-pay','SuminvoiceController@createBundlePayment');
 
 
@@ -305,7 +324,7 @@ Route::get('/customer/isolir','CustomerController@isolir');
 Route::get('/customer/create','CustomerController@create');
 Route::get('/customer/search','CustomerController@search');
 Route::post('/customer/filter','CustomerController@filter');
-Route::post('/customer','CustomerController@store');
+Route::post('/customer','CustomerController@store')->middleware('check.license');
 Route::post('/customer/{id}/file','CustomerController@uploadFile');
 Route::post('/customer/wa','CustomerController@wa_customer');
 Route::patch('/customer/update/status','CustomerController@update_status');

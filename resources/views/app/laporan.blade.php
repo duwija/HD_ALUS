@@ -138,6 +138,28 @@
         text-align: center;
         margin-bottom: 10px;
     }
+
+    /* ── Pagination compact ── */
+    .pagination { margin: 0; gap: 3px; display: flex; flex-wrap: wrap; justify-content: center; list-style: none; padding: 0; }
+    .pagination li a,
+    .pagination li span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 6px;
+        font-size: 11px;
+        line-height: 1;
+        border-radius: 5px;
+        border: 1px solid var(--gray-200);
+        color: var(--gray-700);
+        background: #fff;
+        text-decoration: none;
+    }
+    .pagination li.active span,
+    .pagination li a:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .pagination li.disabled span { color: var(--gray-300); cursor: not-allowed; }
 </style>
 @endpush
 
@@ -221,6 +243,20 @@
         <p>Belum ada tiket</p>
     </div>
 @endforelse
+
+@if(method_exists($tickets, 'lastPage') && $tickets->lastPage() > 1)
+    <div style="margin:10px 0 14px; display:flex; justify-content:center;">
+        <ul class="pagination">
+            @foreach($tickets->getUrlRange(1, $tickets->lastPage()) as $page => $url)
+                @if($page == $tickets->currentPage())
+                    <li class="active"><span>{{ $page }}</span></li>
+                @else
+                    <li><a href="{{ $url }}">{{ $page }}</a></li>
+                @endif
+            @endforeach
+        </ul>
+    </div>
+@endif
 
 @php
     // Prioritas: whatsapp_noc → payment_wa → kosong

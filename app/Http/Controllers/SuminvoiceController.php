@@ -39,13 +39,120 @@ use Illuminate\Support\Facades\Http;
 
 class SuminvoiceController extends Controller
 {
+
+    private function getDuitkuConfig(string $provider = 'duitku'): array
+    {
+        $provider = in_array($provider, ['duitku', 'duitku2'], true) ? $provider : 'duitku';
+        $gw = \App\PaymentGateway::findForCurrentTenant($provider);
+        $settings = $gw ? ($gw->settings ?? []) : [];
+
+        if ($provider === 'duitku' && $gw) {
+            $legacySettings = [
+                'merchant_code' => trim((string) tenant_config('DUITKU_MERCHANT_CODE', env('DUITKU_MERCHANT_CODE'))),
+                'api_key'       => trim((string) tenant_config('DUITKU_API_KEY', env('DUITKU_API_KEY'))),
+                'sandbox'       => (bool) tenant_config('DUITKU_SANDBOX', env('DUITKU_SANDBOX', false)),
+            ];
+
+            $shouldSyncLegacy = false;
+            foreach (['merchant_code', 'api_key'] as $key) {
+                if (empty($settings[$key]) && !empty($legacySettings[$key])) {
+                    $settings[$key] = $legacySettings[$key];
+                    $shouldSyncLegacy = true;
+                }
+            }
+            if (!array_key_exists('sandbox', $settings)) {
+                $settings['sandbox'] = $legacySettings['sandbox'];
+                $shouldSyncLegacy = true;
+            }
+
+            if ($shouldSyncLegacy) {
+                $gw->settings = $settings;
+                $gw->save();
+            }
+        }
+
+        if (empty($settings['merchant_code']) || empty($settings['api_key'])) {
+            throw new \RuntimeException('Konfigurasi ' . strtoupper($provider) . ' belum lengkap. Isi Merchant Code dan API Key di menu Payment Gateway tenant.');
+        }
+
+        return [
+            'merchant_code' => trim((string) ($settings['merchant_code'] ?? '')),
+            'api_key'       => trim((string) ($settings['api_key'] ?? '')),
+            'sandbox'       => (bool) ($settings['sandbox'] ?? false),
+        ];
+    }
+
+    private function getWinpayErrorMessage(?array $responseData, string $rawResponse = '', ?int $httpCode = null): string
+    {
+        $message = $responseData['responseMessage']
+            ?? $responseData['message']
+            ?? $responseData['error']
+            ?? ($responseData['errors']['message'] ?? null);
+
+        if (!empty($message)) {
+            return $message;
+        }
+
+        if ($httpCode) {
+            return 'HTTP ' . $httpCode . ': ' . substr($rawResponse, 0, 200);
+        }
+
+        return 'Unknown error';
+    }
+
+    private function getWinpayConfig(string $provider = 'winpay'): array
+    {
+        $provider = in_array($provider, ['winpay', 'winpay2'], true) ? $provider : 'winpay';
+        $winpayGw = \App\PaymentGateway::findForCurrentTenant($provider);
+        $settings = $winpayGw ? ($winpayGw->settings ?? []) : [];
+
+        if ($provider === 'winpay' && $winpayGw) {
+            $legacySettings = [
+                'endpoint'   => trim((string) tenant_config('WINPAY_ENDPOINT', env('WINPAY_ENDPOINT'))),
+                'api_key'    => trim((string) tenant_config('WINPAY_KEY', env('WINPAY_KEY'))),
+                'secret_key' => trim((string) tenant_config('WINPAY_SECRET', env('WINPAY_SECRET'))),
+            ];
+
+            $shouldSyncLegacy = false;
+            foreach (['endpoint', 'api_key', 'secret_key'] as $key) {
+                if (empty($settings[$key]) && !empty($legacySettings[$key])) {
+                    $settings[$key] = $legacySettings[$key];
+                    $shouldSyncLegacy = true;
+                }
+            }
+
+            if ($shouldSyncLegacy) {
+                $winpayGw->settings = $settings;
+                $winpayGw->save();
+            }
+        }
+
+        if ($provider === 'winpay2' && empty($settings['endpoint'])) {
+            $mainWinpay = \App\PaymentGateway::findForCurrentTenant('winpay');
+            $mainSettings = $mainWinpay ? ($mainWinpay->settings ?? []) : [];
+            if (!empty($mainSettings['endpoint'])) {
+                $settings['endpoint'] = $mainSettings['endpoint'];
+            }
+        }
+
+        if (empty($settings['endpoint']) || empty($settings['api_key']) || empty($settings['secret_key'])) {
+            throw new \RuntimeException('Konfigurasi ' . strtoupper($provider) . ' belum lengkap. Isi Endpoint, API Key, dan Secret Key di menu Payment Gateway tenant.');
+        }
+
+        return [
+            'endpoint'   => trim((string) ($settings['endpoint'] ?? '')),
+            'api_key'    => trim((string) ($settings['api_key'] ?? '')),
+            'secret_key' => trim((string) ($settings['secret_key'] ?? '')),
+        ];
+    }
+
     use SendsCustomerNotification;
 
    public function __construct()
    {
         //$this->middleware('auth');
-    $this->middleware('auth', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment']]); 
-    $this->middleware('checkPrivilege:admin,accounting,payment,noc', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment']]);
+    $this->middleware('auth', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]); 
+    $this->middleware('checkPrivilege:admin,accounting,payment,noc', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]);
 }
 
     /**
@@ -354,18 +461,20 @@ public function winpay()
     public function createDuitkuVA(Request $request)
     {
         try {
+            $provider = $request->input('provider', 'duitku');
+            if (!in_array($provider, ['duitku', 'duitku2'], true)) {
+                $provider = 'duitku';
+            }
+
             $suminvoice = \App\Suminvoice::findOrFail($request->id);
             $customer   = \App\Customer::findOrFail($suminvoice->id_customer);
 
             // Baca konfigurasi dari settings kolom payment_gateways atau fallback ke .env
-            $gw           = \App\PaymentGateway::findForCurrentTenant('duitku');
-            $merchantCode = trim(($gw->settings['merchant_code'] ?? null) ?: tenant_config('DUITKU_MERCHANT_CODE', env('DUITKU_MERCHANT_CODE')));
-            $apiKey       = trim(($gw->settings['api_key']       ?? null) ?: tenant_config('DUITKU_API_KEY',       env('DUITKU_API_KEY')));
-            $isSandbox    = $gw->settings['sandbox']        ?? (bool) tenant_config('DUITKU_SANDBOX', env('DUITKU_SANDBOX', false));
-
-            if (empty($merchantCode) || empty($apiKey)) {
-                return redirect()->back()->with('error', 'Konfigurasi Duitku (merchant_code / api_key) belum diisi. Hubungi admin.');
-            }
+            $gw           = \App\PaymentGateway::findForCurrentTenant($provider);
+            $duitkuConfig = $this->getDuitkuConfig($provider);
+            $merchantCode = $duitkuConfig['merchant_code'];
+            $apiKey       = $duitkuConfig['api_key'];
+            $isSandbox    = $duitkuConfig['sandbox'];
 
             $baseAmount      = (float) $suminvoice->total_amount;
             $fee             = $gw ? $gw->calculateFee($baseAmount) : 0;
@@ -445,6 +554,7 @@ public function winpay()
 
             $result = json_decode($response, true);
             \Log::channel('payment')->debug('Duitku createInvoice response', [
+                'provider'        => $provider,
                 'merchantOrderId' => $merchantOrderId,
                 'httpCode'        => $httpCode,
                 'statusCode'      => $result['statusCode'] ?? null,
@@ -455,18 +565,119 @@ public function winpay()
 
             if ($httpCode === 200 && isset($result['statusCode']) && $result['statusCode'] === '00' && !empty($result['paymentUrl'])) {
                 $suminvoice->update([
-                    'payment_id'      => 'duitku:' . $result['reference'],
-                    'payment_gateway' => 'duitku',
+                    'payment_id'      => 'duitku:' . $result['reference'] . '|' . $result['paymentUrl'],
+                    'payment_gateway' => $provider,
                 ]);
                 return redirect($result['paymentUrl']);
             }
 
             $errMsg = $result['statusMessage'] ?? ($result['Message'] ?? ($result['message'] ?? 'Error HTTP ' . $httpCode . ': ' . substr($response, 0, 200)));
-            return redirect()->back()->with('error', 'Duitku: ' . $errMsg);
+            return redirect()->back()->with('error', strtoupper($provider) . ': ' . $errMsg);
 
         } catch (\Exception $e) {
             \Log::error('Duitku VA Error: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Gagal membuat transaksi Duitku: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Reset data pembayaran Duitku pada invoice agar pelanggan bisa
+     * membuat link pembayaran baru (link Duitku kadaluarsa setelah 24 jam).
+     * Duitku POP API tidak menyediakan endpoint cancel, cukup reset lokal.
+     */
+    public function resetDuitkuVA(Request $request)
+    {
+        try {
+            $suminvoice = \App\Suminvoice::findOrFail($request->id);
+
+            if ($suminvoice->payment_status == 1) {
+                return redirect()->back()->with('error', 'Invoice sudah lunas, tidak bisa direset.');
+            }
+
+            $suminvoice->update([
+                'payment_id'      => null,
+                'payment_gateway' => null,
+            ]);
+
+            \Log::channel('payment')->info('Duitku reset: payment_id cleared for invoice ' . $suminvoice->number);
+
+            return redirect()->back()->with('success', 'Link pembayaran Duitku berhasil direset. Silakan buat transaksi baru.');
+
+        } catch (\Exception $e) {
+            \Log::error('Duitku Reset Error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal reset transaksi Duitku: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Reset pembayaran pending untuk single invoice (Winpay, dll).
+     * Hanya menghapus payment_id dan payment_gateway secara lokal.
+     */
+    public function resetPaymentPending(Request $request)
+    {
+        try {
+            $suminvoice = \App\Suminvoice::findOrFail($request->id);
+
+            if ($suminvoice->payment_status == 1) {
+                return redirect()->back()->with('error', 'Invoice sudah lunas, tidak bisa direset.');
+            }
+
+            $suminvoice->update([
+                'payment_id'      => null,
+                'payment_gateway' => null,
+            ]);
+
+            \Log::channel('payment')->info('Payment pending reset: invoice ' . $suminvoice->number);
+
+            return redirect()->back()->with('success', 'Metode pembayaran berhasil direset. Silakan pilih metode lain.');
+
+        } catch (\Exception $e) {
+            \Log::error('Payment Reset Error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal reset: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Batalkan bundle payment yang masih pending.
+     * Menghapus record di payment_bundles & payment_bundle_items.
+     */
+    public function cancelBundle(Request $request)
+    {
+        try {
+            $bundleRef = $request->bundle_ref;
+            $bundle    = \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)->first();
+
+            if (!$bundle) {
+                return redirect()->back()->with('error', 'Bundle tidak ditemukan.');
+            }
+
+            if ((int)$bundle->status === 1) {
+                return redirect()->back()->with('error', 'Bundle sudah lunas, tidak bisa dibatalkan.');
+            }
+
+            // Ambil invoice ids sebelum menghapus items
+            $invoiceIds = \DB::table('payment_bundle_items')
+                ->where('bundle_ref', $bundleRef)
+                ->pluck('suminvoice_id');
+
+            \DB::transaction(function () use ($bundleRef, $invoiceIds) {
+                \DB::table('payment_bundle_items')->where('bundle_ref', $bundleRef)->delete();
+                \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)->delete();
+                // Bersihkan payment_id/payment_gateway pada invoice agar tidak tampil pending
+                if ($invoiceIds->count() > 0) {
+                    \App\Suminvoice::whereIn('id', $invoiceIds)
+                        ->where('payment_status', 0)
+                        ->update(['payment_id' => null, 'payment_gateway' => null]);
+                }
+            });
+
+            \Log::channel('payment')->info('Bundle cancelled: ' . $bundleRef);
+
+            return redirect()->back()->with('success', 'Transaksi bundle berhasil dibatalkan. Silakan pilih metode pembayaran baru.');
+
+        } catch (\Exception $e) {
+            \Log::error('Bundle Cancel Error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal membatalkan bundle: ' . $e->getMessage());
         }
     }
 
@@ -482,7 +693,7 @@ public function winpay()
             $tripayMethod = $request->input('tripay_method'); // hanya untuk gateway = tripay
 
             if (empty($invoiceIds) || !is_array($invoiceIds)) {
-                return redirect()->back()->with('error', 'Pilih minimal 1 tagihan.');
+                return redirect()->back()->with('error', 'Pilih minimal satu tagihan.');
             }
 
             // Ambil invoices yang belum bayar
@@ -498,6 +709,52 @@ public function winpay()
             $customerIds = $invoices->pluck('id_customer')->unique();
             if ($customerIds->count() > 1) {
                 return redirect()->back()->with('error', 'Tagihan harus milik pelanggan yang sama.');
+            }
+
+            // Wajib urut dari invoice terlama (berlaku untuk centang 1 atau banyak).
+            $customerId = (int) $customerIds->first();
+            $selectedIds = collect($invoiceIds)->map(fn ($id) => (int) $id)->unique()->values();
+
+            $pendingBundleInvoiceIds = \DB::table('payment_bundle_items')
+                ->join('payment_bundles', 'payment_bundle_items.bundle_ref', '=', 'payment_bundles.bundle_ref')
+                ->join('suminvoices', 'suminvoices.id', '=', 'payment_bundle_items.suminvoice_id')
+                ->where('payment_bundles.status', 0)
+                ->where('suminvoices.id_customer', $customerId)
+                ->pluck('payment_bundle_items.suminvoice_id')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
+
+            $eligibleUnpaidIds = \App\Suminvoice::where('id_customer', $customerId)
+                ->where('payment_status', 0)
+                ->where(function ($q) {
+                    $q->whereNull('payment_id')
+                        ->orWhere('payment_id', '')
+                        ->orWhere(function ($q2) {
+                            $q2->where('payment_id', 'not like', 'duitku:%')
+                                ->where('payment_id', 'not like', 'winpay:%');
+                        });
+                })
+                ->when($pendingBundleInvoiceIds->count() > 0, function ($q) use ($pendingBundleInvoiceIds) {
+                    $q->whereNotIn('id', $pendingBundleInvoiceIds->all());
+                })
+                ->orderBy('date', 'asc')
+                ->orderBy('id', 'asc')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->values();
+
+            $requiredPrefixIds = $eligibleUnpaidIds->take($selectedIds->count())->sort()->values();
+            $selectedSortedIds = $selectedIds->sort()->values();
+            if ($selectedSortedIds->all() !== $requiredPrefixIds->all()) {
+                $oldestRequiredId = $eligibleUnpaidIds->first();
+                $oldestRequiredNo = $oldestRequiredId
+                    ? (\App\Suminvoice::find($oldestRequiredId)->number ?? $oldestRequiredId)
+                    : null;
+                return redirect()->back()->with(
+                    'error',
+                    'Centang dan bayar harus berurutan dari invoice terlama' . ($oldestRequiredNo ? ': #' . $oldestRequiredNo : '.')
+                );
             }
 
             $customer    = \App\Customer::findOrFail($customerIds->first());
@@ -552,14 +809,11 @@ public function winpay()
             // ---- Routing per gateway ----
 
             // DUITKU — checkout page milih sendiri metodenya
-            if ($gateway === 'duitku') {
-                $merchantCode = trim(($gw->settings['merchant_code'] ?? null) ?: tenant_config('DUITKU_MERCHANT_CODE', env('DUITKU_MERCHANT_CODE')));
-                $apiKey       = trim(($gw->settings['api_key']       ?? null) ?: tenant_config('DUITKU_API_KEY',       env('DUITKU_API_KEY')));
-                $isSandbox    = $gw->settings['sandbox']        ?? (bool) tenant_config('DUITKU_SANDBOX', env('DUITKU_SANDBOX', false));
-
-                if (empty($merchantCode) || empty($apiKey)) {
-                    return redirect()->back()->with('error', 'Konfigurasi Duitku belum diisi. Hubungi admin.');
-                }
+            if (in_array($gateway, ['duitku', 'duitku2'], true)) {
+                $duitkuConfig = $this->getDuitkuConfig($gateway);
+                $merchantCode = $duitkuConfig['merchant_code'];
+                $apiKey       = $duitkuConfig['api_key'];
+                $isSandbox    = $duitkuConfig['sandbox'];
 
                 $timestamp = round(microtime(true) * 1000);
                 $signature = hash('sha256', $merchantCode . $timestamp . $apiKey);
@@ -626,6 +880,7 @@ public function winpay()
 
                 $result = json_decode($response, true);
                 \Log::channel('payment')->debug('Duitku bundle createInvoice', [
+                    'provider'    => $gateway,
                     'bundle_ref'  => $bundleRef, 'httpCode' => $httpCode,
                     'statusCode'  => $result['statusCode'] ?? null, 'paymentUrl' => $result['paymentUrl'] ?? null,
                     'rawBody'     => substr($response, 0, 500),
@@ -633,18 +888,19 @@ public function winpay()
 
                 if ($httpCode === 200 && ($result['statusCode'] ?? null) === '00' && !empty($result['paymentUrl'])) {
                     \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)
-                        ->update(['updated_at' => now()]);
+                        ->update(['payment_url' => $result['paymentUrl'], 'updated_at' => now()]);
                     return redirect($result['paymentUrl']);
                 }
 
                 $errMsg = $result['statusMessage'] ?? ($result['Message'] ?? ($result['message'] ?? 'Error HTTP ' . $httpCode . ': ' . substr($response, 0, 200)));
-                return redirect()->back()->with('error', 'Duitku: ' . $errMsg);
+                return redirect()->back()->with('error', strtoupper($gateway) . ': ' . $errMsg);
             }
 
             // WINPAY — langsung ke VA
-            if ($gateway === 'winpay') {
-                $key       = tenant_config('WINPAY_KEY',    env('WINPAY_KEY'));
-                $secretKey = tenant_config('WINPAY_SECRET', env('WINPAY_SECRET'));
+            if (in_array($gateway, ['winpay', 'winpay2'], true)) {
+                $winpayConfig = $this->getWinpayConfig($gateway);
+                $key          = $winpayConfig['api_key'];
+                $secretKey    = $winpayConfig['secret_key'];
 
                 $timestamp = (new \DateTime('now', new \DateTimeZone('Asia/Jakarta')))->format('Y-m-d\TH:i:sP');
                 $signature = hash_hmac('sha256', $timestamp, $secretKey);
@@ -662,22 +918,26 @@ public function winpay()
                 ];
 
                 $headers = ['Content-Type: application/json', 'X-Winpay-Key: ' . $key, 'X-Winpay-Signature: ' . $signature, 'X-Winpay-Timestamp: ' . $timestamp];
-                $url = tenant_config('WINPAY_ENDPOINT', env('WINPAY_ENDPOINT')) . '/api/create';
+                $url = rtrim($winpayConfig['endpoint'], '/') . '/api/create';
                 $ch  = curl_init($url);
-                curl_setopt_array($ch, [CURLOPT_POSTFIELDS => json_encode($data), CURLOPT_HTTPHEADER => $headers, CURLOPT_RETURNTRANSFER => true]);
+                curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($data), CURLOPT_HTTPHEADER => $headers, CURLOPT_RETURNTRANSFER => true]);
                 $response = curl_exec($ch);
                 $curlErr  = curl_error($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 curl_close($ch);
 
                 if ($curlErr) throw new \Exception('Winpay cURL error: ' . $curlErr);
 
                 $responseData = json_decode($response, true);
-                \Log::channel('payment')->info('Winpay bundle response', ['bundle_ref' => $bundleRef, 'response' => $responseData]);
+                \Log::channel('payment')->info('Winpay bundle response', ['bundle_ref' => $bundleRef, 'httpCode' => $httpCode, 'response' => $responseData, 'rawBody' => substr((string) $response, 0, 500)]);
 
                 if (isset($responseData['responseCode']) && $responseData['responseCode'] === '2010300' && isset($responseData['responseData']['redirect_url'])) {
-                    return redirect()->away($responseData['responseData']['redirect_url']);
+                    $winpayBundleUrl = $responseData['responseData']['redirect_url'];
+                    \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)
+                        ->update(['payment_url' => $winpayBundleUrl, 'updated_at' => now()]);
+                    return redirect()->away($winpayBundleUrl);
                 }
-                return redirect()->back()->with('error', 'Gagal membuat transaksi Winpay: ' . ($responseData['responseMessage'] ?? 'Unknown error'));
+                return redirect()->back()->with('error', 'Gagal membuat transaksi Winpay: ' . $this->getWinpayErrorMessage($responseData, (string) $response, $httpCode));
             }
 
             // TRIPAY — butuh method (channel) dari form
@@ -736,7 +996,12 @@ public function winpay()
                 \Log::channel('payment')->info('Tripay bundle response', ['bundle_ref' => $bundleRef, 'response' => $result]);
 
                 if (!empty($result['data']['reference'])) {
-                    return redirect($result['data']['payment_url'] ?? $returnUrl);
+                    $tripayBundleUrl = $result['data']['payment_url'] ?? '';
+                    if ($tripayBundleUrl) {
+                        \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)
+                            ->update(['payment_url' => $tripayBundleUrl, 'updated_at' => now()]);
+                    }
+                    return redirect($tripayBundleUrl ?: $returnUrl);
                 }
                 return redirect()->back()->with('error', 'Tripay: ' . ($result['message'] ?? 'Gagal membuat transaksi.'));
             }
@@ -753,8 +1018,14 @@ public function createWinpayVA(Request $request)
 { 
 
     try {
-        $key = tenant_config('WINPAY_KEY', env('WINPAY_KEY'));
-        $secretKey = tenant_config('WINPAY_SECRET', env('WINPAY_SECRET'));
+        $provider = $request->input('provider', 'winpay');
+        if (!in_array($provider, ['winpay', 'winpay2'], true)) {
+            $provider = 'winpay';
+        }
+
+        $winpayConfig = $this->getWinpayConfig($provider);
+        $key = $winpayConfig['api_key'];
+        $secretKey = $winpayConfig['secret_key'];
 
         $suminvoice = \App\Suminvoice::findOrFail($request->id);
 
@@ -780,7 +1051,7 @@ public function createWinpayVA(Request $request)
         ];
 
         // Biaya tambahan diambil dari tabel payment_gateways (per-tenant, fleksibel)
-        $winpayGw  = \App\PaymentGateway::findForCurrentTenant('winpay');
+        $winpayGw  = \App\PaymentGateway::findForCurrentTenant($provider);
         $winpayFee = $winpayGw ? $winpayGw->calculateFee((float) $suminvoice->total_amount) : 0;
         if ($winpayFee > 0) {
             $products[] = [
@@ -816,15 +1087,17 @@ public function createWinpayVA(Request $request)
         ];
 
         // Winpay API endpoint
-        $url = tenant_config('WINPAY_ENDPOINT', env('WINPAY_ENDPOINT')).'/api/create';
+        $url = rtrim($winpayConfig['endpoint'], '/').'/api/create';
 
         // cURL init
         $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
         $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         if (curl_errno($ch)) {
             $error = curl_error($ch);
@@ -834,7 +1107,7 @@ public function createWinpayVA(Request $request)
 
         curl_close($ch);
 
-        Log::info('Winpay Response: ' . $response);
+        Log::info('Winpay Response', ['provider' => $provider, 'httpCode' => $httpCode, 'rawBody' => substr((string) $response, 0, 500)]);
         $responseData = json_decode($response, true);
 
 // Pastikan parsing berhasil
@@ -851,20 +1124,20 @@ public function createWinpayVA(Request $request)
         ) {
 
 
-            $reference = $responseData['responseData']['ref'];
-
-            $query = \App\Suminvoice::where('number', $suminvoice->number)
-            ->update([
-                'payment_id' =>'winpay'
-
-            ]);
-
+            $reference   = $responseData['responseData']['ref'];
             $redirectUrl = $responseData['responseData']['redirect_url'];
+
+            \App\Suminvoice::where('number', $suminvoice->number)
+                ->update([
+                    'payment_id'      => 'winpay:' . $reference . '|' . $redirectUrl,
+                    'payment_gateway' => $provider,
+                ]);
+
             return redirect()->away($redirectUrl);
         }
 
 // Jika tidak ada URL atau kode gagal
-        return response()->json(['success' => false, 'message' => 'Gagal membuat invoice']);
+        return response()->json(['success' => false, 'message' => 'Gagal membuat transaksi Winpay: ' . $this->getWinpayErrorMessage($responseData, (string) $response, $httpCode)]);
 
 
     } catch (\Exception $e) {
@@ -876,9 +1149,9 @@ public function createWinpayVA(Request $request)
 public function deleteWinpayVA($merchantRef)
 {
     try {
-        // Ambil credential dari tenant config atau .env
-        $key = tenant_config('WINPAY_KEY', env('WINPAY_KEY'));
-        $secretKey = tenant_config('WINPAY_SECRET', env('WINPAY_SECRET'));
+        $winpayConfig = $this->getWinpayConfig('winpay');
+        $key = $winpayConfig['api_key'];
+        $secretKey = $winpayConfig['secret_key'];
 
         // Format timestamp sesuai GMT+7 (Asia/Jakarta)
         $timestamp = (new \DateTime('now', new \DateTimeZone('Asia/Jakarta')))
@@ -896,7 +1169,7 @@ public function deleteWinpayVA($merchantRef)
         ];
 
         // Endpoint API untuk menghapus invoice berdasarkan merchantRef
-        $url = tenant_config('WINPAY_ENDPOINT', env('WINPAY_ENDPOINT')).'/api/deleteByRef/' . $merchantRef;
+        $url = rtrim($winpayConfig['endpoint'], '/').'/api/deleteByRef/' . $merchantRef;
 
         // Inisialisasi cURL untuk DELETE request
         $ch = curl_init($url);
@@ -942,9 +1215,9 @@ public function deleteWinpayVA($merchantRef)
 public function findWinpayVA($id)
 {
     try {
-        // Ambil credential dari tenant config atau .env
-        $key = tenant_config('WINPAY_KEY', env('WINPAY_KEY'));
-        $secretKey = tenant_config('WINPAY_SECRET', env('WINPAY_SECRET'));
+        $winpayConfig = $this->getWinpayConfig('winpay');
+        $key = $winpayConfig['api_key'];
+        $secretKey = $winpayConfig['secret_key'];
 
         // Ambil data invoice dari database
         $suminvoice = \App\Suminvoice::findOrFail($id);
@@ -965,7 +1238,7 @@ public function findWinpayVA($id)
         ];
 
         // Endpoint API untuk mencari invoice berdasarkan merchantRef
-        $url = tenant_config('WINPAY_ENDPOINT', env('WINPAY_ENDPOINT')).'/api/findByRef/' . $suminvoice->number;
+        $url = rtrim($winpayConfig['endpoint'], '/').'/api/findByRef/' . $suminvoice->number;
 
         // Inisialisasi cURL untuk melakukan GET request
         $ch = curl_init($url);
@@ -3180,11 +3453,15 @@ public function send_reminder_inv(Request $request, $id)
             // $msgresult = \App\Suminvoice::wa_payment($customer->phone, $message);
             $msgresult = WaGatewayHelper::wa_payment($customer->phone, $message);
 
-            if (! isset($msgresult['status']) || $msgresult['status'] !== 'success') {
-                return response()->json(['message' => $msgresult['message']]);
-            } else {
-                return response()->json(['message' => $msgresult['message']], 400);
+            if (isset($msgresult['status']) && $msgresult['status'] === 'success') {
+                return response()->json([
+                    'message' => $msgresult['message'] ?? 'WhatsApp notification sent successfully.'
+                ]);
             }
+
+            return response()->json([
+                'message' => $msgresult['message'] ?? 'Failed to send WhatsApp notification.'
+            ], 400);
 
 
         } elseif ($type == 'email') {

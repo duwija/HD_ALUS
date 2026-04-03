@@ -766,16 +766,37 @@ public function custinv($encrypted)
         ->orderBy('sort_order')
         ->get();
 
+    // Deteksi bundle payment pending untuk invoice customer ini
+    $invoiceIds = $suminvoice->pluck('id');
+    $pendingBundleByInvoice = collect();
+    if ($invoiceIds->count() > 0) {
+        $bundleItems = \DB::table('payment_bundle_items')
+            ->join('payment_bundles', 'payment_bundle_items.bundle_ref', '=', 'payment_bundles.bundle_ref')
+            ->whereIn('payment_bundle_items.suminvoice_id', $invoiceIds)
+            ->where('payment_bundles.status', 0)
+            ->select(
+                'payment_bundle_items.suminvoice_id',
+                'payment_bundles.bundle_ref',
+                'payment_bundles.gateway',
+                'payment_bundles.total_amount',
+                'payment_bundles.tripay_method',
+                'payment_bundles.payment_url'
+            )
+            ->get();
+        $pendingBundleByInvoice = $bundleItems->keyBy('suminvoice_id');
+    }
+
     return view('invoice/custinv', [
-        'suminvoice'    => $suminvoice,
-        'customer'      => $customer,
-        'customerAddons' => $customerAddons,
-        'companyName'   => $companyName,
-        'companyAddress1' => $companyAddress1,
-        'companyAddress2' => $companyAddress2,
-        'invNote'       => $invNote,
-        'gateways'      => $gateways,
-        'encrypted'     => $encrypted,
+        'suminvoice'             => $suminvoice,
+        'customer'               => $customer,
+        'customerAddons'         => $customerAddons,
+        'companyName'            => $companyName,
+        'companyAddress1'        => $companyAddress1,
+        'companyAddress2'        => $companyAddress2,
+        'invNote'                => $invNote,
+        'gateways'               => $gateways,
+        'encrypted'              => $encrypted,
+        'pendingBundleByInvoice' => $pendingBundleByInvoice,
     ]);
 
 } catch (DecryptException $e) {

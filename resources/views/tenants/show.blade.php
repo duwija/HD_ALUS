@@ -13,6 +13,9 @@
                         <a href="{{ route('admin.tenants.customers', $tenant->id) }}" class="btn btn-success btn-sm" title="Customers">
                             <i class="fas fa-users"></i> <span class="d-none d-lg-inline">Customers</span>
                         </a>
+                        <a href="{{ route('admin.tenants.users', $tenant->id) }}" class="btn btn-secondary btn-sm" title="Users Tenant">
+                            <i class="fas fa-user-cog"></i> <span class="d-none d-lg-inline">Users</span>
+                        </a>
                         <a href="{{ route('admin.tenants.transactions', $tenant->id) }}" class="btn btn-warning btn-sm" title="Transactions">
                             <i class="fas fa-money-bill-wave"></i> <span class="d-none d-lg-inline">Transactions</span>
                         </a>
@@ -264,6 +267,147 @@
                                     @else
                                         <i class="fas fa-times-circle text-muted"></i> Payment Gateway
                                     @endif
+                                </div>
+                            </div>
+
+                            <h5 class="border-bottom pb-2 mb-3 mt-4">License & Quota</h5>
+
+                            @php
+                                $activeCount = $customerStats['active'];
+                                $plan = $tenant->licensePlan;
+                                $maxCust = $plan ? $plan->max_customers : null;
+                                $isUnlimited = $plan && $plan->isUnlimited();
+                                $quotaPercent = (!$isUnlimited && $maxCust > 0)
+                                    ? min(100, round($activeCount / $maxCust * 100))
+                                    : ($isUnlimited ? null : 0);
+                                $statusColors = [
+                                    'active'    => 'success',
+                                    'trial'     => 'info',
+                                    'suspended' => 'warning',
+                                    'expired'   => 'danger',
+                                ];
+                                $licenseStatus = $tenant->license_status ?? 'active';
+                                $statusColor = $statusColors[$licenseStatus] ?? 'secondary';
+                            @endphp
+
+                            <div class="row mb-3">
+                                <div class="col-md-6 mb-3">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="mb-0 font-weight-bold">
+                                                    <i class="fas fa-id-card text-primary mr-1"></i>
+                                                    {{ $plan ? $plan->name : 'Tidak ada plan' }}
+                                                </h6>
+                                                <span class="badge badge-{{ $statusColor }}">
+                                                    {{ ucfirst($licenseStatus) }}
+                                                </span>
+                                            </div>
+                                            @if($plan && $plan->price_monthly > 0)
+                                                <div class="small text-muted mb-1">
+                                                    <i class="fas fa-money-bill-wave mr-1"></i>
+                                                    {{ $plan->priceFormatted() }} / bulan
+                                                </div>
+                                            @endif
+                                            @if($plan && $plan->description)
+                                                <div class="small text-muted mb-2">{{ $plan->description }}</div>
+                                            @endif
+                                            @if($tenant->license_expires_at)
+                                                @php $expired = $tenant->license_expires_at->isPast(); @endphp
+                                                <div class="small {{ $expired ? 'text-danger font-weight-bold' : 'text-muted' }}">
+                                                    <i class="fas fa-calendar-alt mr-1"></i>
+                                                    Berakhir: {{ $tenant->license_expires_at->format('d M Y') }}
+                                                    @if($expired) <span class="badge badge-danger ml-1">Expired</span> @endif
+                                                </div>
+                                            @else
+                                                <div class="small text-muted"><i class="fas fa-infinity mr-1"></i> Tidak ada batas waktu</div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-body">
+                                            <h6 class="mb-2 font-weight-bold">
+                                                <i class="fas fa-users text-success mr-1"></i> Kuota Pelanggan
+                                            </h6>
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="small font-weight-bold">{{ $activeCount }} Aktif</span>
+                                                <span class="small text-muted">
+                                                    @if($isUnlimited) Unlimited @elseif($maxCust !== null) dari {{ $maxCust }} @else - @endif
+                                                </span>
+                                            </div>
+                                            @if(!$isUnlimited && $quotaPercent !== null)
+                                                @php
+                                                    $barColor = $quotaPercent >= 100 ? 'danger' : ($quotaPercent >= 80 ? 'warning' : 'success');
+                                                @endphp
+                                                <div class="progress mb-2" style="height:10px;">
+                                                    <div class="progress-bar bg-{{ $barColor }}" style="width:{{ $quotaPercent }}%"></div>
+                                                </div>
+                                                @if($quotaPercent >= 100)
+                                                    <div class="small text-danger font-weight-bold">
+                                                        <i class="fas fa-exclamation-triangle mr-1"></i> Kuota penuh!
+                                                    </div>
+                                                @elseif($maxCust !== null)
+                                                    <div class="small text-muted">Sisa: {{ max(0, $maxCust - $activeCount) }} slot</div>
+                                                @endif
+                                            @elseif($isUnlimited)
+                                                <div class="small text-success"><i class="fas fa-infinity mr-1"></i> Unlimited pelanggan</div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Quick License Update Form -->
+                            <div class="card border-left-primary shadow-sm mb-4">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <span><i class="fas fa-edit mr-1"></i> Update Lisensi</span>
+                                    <button class="btn btn-sm btn-link p-0" type="button"
+                                        data-toggle="collapse" data-target="#licenseUpdateForm">
+                                        <i class="fas fa-chevron-down"></i>
+                                    </button>
+                                </div>
+                                <div class="collapse" id="licenseUpdateForm">
+                                    <div class="card-body">
+                                        <form action="{{ route('admin.tenants.license.update', $tenant->id) }}" method="POST">
+                                            @csrf
+                                            <div class="form-row">
+                                                <div class="form-group col-md-4">
+                                                    <label class="small font-weight-bold">Plan Lisensi</label>
+                                                    <select name="license_plan_id" class="form-control form-control-sm">
+                                                        <option value="">-- Tanpa Plan --</option>
+                                                        @foreach($licensePlans as $lp)
+                                                            <option value="{{ $lp->id }}"
+                                                                {{ $tenant->license_plan_id == $lp->id ? 'selected' : '' }}>
+                                                                {{ $lp->name }}
+                                                                ({{ $lp->isUnlimited() ? 'Unlimited' : $lp->max_customers . ' pelanggan' }})
+                                                            </option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div class="form-group col-md-4">
+                                                    <label class="small font-weight-bold">Status Lisensi</label>
+                                                    <select name="license_status" class="form-control form-control-sm">
+                                                        <option value="active" {{ $licenseStatus === 'active' ? 'selected' : '' }}>Active</option>
+                                                        <option value="trial" {{ $licenseStatus === 'trial' ? 'selected' : '' }}>Trial</option>
+                                                        <option value="suspended" {{ $licenseStatus === 'suspended' ? 'selected' : '' }}>Suspended</option>
+                                                        <option value="expired" {{ $licenseStatus === 'expired' ? 'selected' : '' }}>Expired</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group col-md-4">
+                                                    <label class="small font-weight-bold">Tanggal Berakhir</label>
+                                                    <input type="date" name="license_expires_at"
+                                                        class="form-control form-control-sm"
+                                                        value="{{ $tenant->license_expires_at ? $tenant->license_expires_at->format('Y-m-d') : '' }}">
+                                                    <small class="text-muted">Kosongkan jika tidak terbatas</small>
+                                                </div>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary btn-sm">
+                                                <i class="fas fa-save mr-1"></i> Simpan Lisensi
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
                             </div>
 

@@ -133,8 +133,8 @@ class AppPortalController extends Controller
         $tickets = Ticket::with(['categorie', 'currentStep', 'steps'])
             ->whereIn('id_customer', $customers->pluck('id'))
             ->orderByDesc('id')
-            ->limit(50)
-            ->get();
+            ->paginate(3)
+            ->withQueryString();
 
         $customerMap = $customers->keyBy('id');
         $unreadCount = AppCustomerNotification::whereIn('customer_id', $customers->pluck('id'))
