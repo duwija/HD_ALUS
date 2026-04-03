@@ -82,6 +82,29 @@
   .adm-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
   h5.mb-0 { color: var(--text-primary, #333) !important; }
+
+  /* OLT/DR Net cards */
+  .net-card-wrap { border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.1); background: var(--bg-surface,#fff); position: relative; margin-bottom: 10px; }
+  .net-card-header { padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; color: #fff; }
+  .net-card-header .net-name { font-size: 14px; font-weight: 700; color: #fff; text-decoration: none; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .net-card-header .net-name:hover { text-decoration: underline; color: #fff; }
+  .net-card-body { padding: 10px 12px; }
+  .net-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+  .net-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .nb-total    { background: #e3f2fd; color: #1565c0; }
+  .nb-online   { background: #e8f5e9; color: #2e7d32; }
+  .nb-offline  { background: #ffebee; color: #c62828; }
+  .nb-los      { background: #fff3e0; color: #e65100; }
+  .nb-dyingasp { background: #fce4ec; color: #880e4f; }
+  .nb-err      { background: #ffebee; color: #c62828; }
+  .net-ip-row  { font-size: 11px; color: var(--text-muted,#888); margin-top: 6px; }
+  .net-refresh-btn { background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 11px; transition: background .15s; }
+  .net-refresh-btn:hover { background: rgba(255,255,255,.35); }
+  body.dark-mode .nb-total    { background: #1e293b; color: #7dd3fc; }
+  body.dark-mode .nb-online   { background: #14321a; color: #86efac; }
+  body.dark-mode .nb-offline  { background: #3b1515; color: #fca5a5; }
+  body.dark-mode .nb-los      { background: #3b2406; color: #fdba74; }
+  body.dark-mode .nb-dyingasp { background: #3b0a1e; color: #f9a8d4; }
 </style>
 
 <div class="container-fluid">
@@ -439,18 +462,44 @@
           <div class="adm-card">
             <div class="adm-card-hd">
               <span class="adm-card-title" style="color:#0097a7"><i class="fas fa-server"></i> OLT</span>
-              <a href="{{ url('olt') }}" style="font-size:10px;color:#aaa">{{ $oltList->count() }} unit &rarr;</a>
+              <div style="display:flex;align-items:center;gap:6px">
+                <a href="{{ url('olt') }}" style="font-size:10px;color:#aaa">{{ $oltList->count() }} unit &rarr;</a>
+                <button id="refreshAllOlts" class="btn btn-sm btn-outline-secondary" style="font-size:10px;padding:1px 8px;border-radius:6px">
+                  <i class="fas fa-sync-alt mr-1"></i>Refresh
+                </button>
+              </div>
             </div>
             <div class="adm-card-body" style="padding:0">
               <table class="adm-tbl">
-                <thead><tr><th>#</th><th>Nama</th><th>IP</th><th>Vendor</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Nama</th>
+                    <th>IP</th>
+                    <th class="text-center" style="color:#1565c0">Total</th>
+                    <th class="text-center" style="color:#2e7d32">Online</th>
+                    <th class="text-center" style="color:#e65100">LOS</th>
+                    <th class="text-center" style="color:#880e4f">Dying</th>
+                    <th class="text-center" style="color:#c62828">Offline</th>
+                    <th></th>
+                  </tr>
+                </thead>
                 <tbody>
                   @foreach($oltList->take(8) as $i => $olt)
-                  <tr>
-                    <td style="color:#aaa;width:24px">{{ $i+1 }}</td>
-                    <td>{{ $olt->name }}</td>
+                  <tr id="olt-row-{{ $olt->id }}">
+                    <td style="color:#aaa;width:22px">{{ $i+1 }}</td>
+                    <td><a href="{{ url('olt/'.$olt->id) }}" style="color:inherit;font-weight:600">{{ $olt->name }}</a></td>
                     <td><code style="font-size:10px;background:#f5f5f5;padding:1px 4px;border-radius:3px">{{ $olt->ip ?? '-' }}</code></td>
-                    <td style="color:#888">{{ $olt->vendor ?? '-' }}</td>
+                    <td class="text-center olt-col-total" style="font-weight:700;color:#1565c0"><i class="fas fa-spinner fa-spin" style="font-size:9px"></i></td>
+                    <td class="text-center olt-col-online" style="font-weight:700;color:#2e7d32">-</td>
+                    <td class="text-center olt-col-los" style="font-weight:700;color:#e65100">-</td>
+                    <td class="text-center olt-col-dyingasp" style="font-weight:700;color:#880e4f">-</td>
+                    <td class="text-center olt-col-offline" style="font-weight:700;color:#c62828">-</td>
+                    <td style="width:24px">
+                      <button class="btn btn-link btn-sm p-0 refresh-olt" data-id="{{ $olt->id }}" title="Refresh" style="color:#aaa;font-size:11px">
+                        <i class="fas fa-sync-alt"></i>
+                      </button>
+                    </td>
                   </tr>
                   @endforeach
                 </tbody>
@@ -527,6 +576,60 @@
 $(function () {
   $('[data-toggle="tooltip"]').tooltip({ delay: { show: 200, hide: 100 } });
 });
+
+// OLT table fetch
+function renderOltRow(id, info) {
+  var $row = $('#olt-row-'+id);
+  $row.find('.olt-col-total').text(info.onuCount||0);
+  $row.find('.olt-col-online').text(info.working||info.online||0);
+  $row.find('.olt-col-los').text(info.los||0);
+  $row.find('.olt-col-dyingasp').text(info.dyinggasp||0);
+  $row.find('.olt-col-offline').text(info.offline||0);
+}
+
+function fetchOlt(id, cb) {
+  $('#olt-row-'+id+' .olt-col-total').html('<i class="fas fa-spinner fa-spin" style="font-size:9px"></i>');
+  $.ajax({ url: '/olt/getoltinfo/'+id, method: 'GET', dataType: 'json' })
+    .done(function(r) {
+      if (r && r.success && r.oltInfo) {
+        renderOltRow(id, r.oltInfo);
+      } else {
+        $('#olt-row-'+id+' .olt-col-total').html('<span title="'+(r.error||'Tidak Terhubung')+'" style="color:#c62828"><i class="fas fa-times-circle"></i></span>');
+      }
+      if (cb) cb();
+    })
+    .fail(function() {
+      $('#olt-row-'+id+' .olt-col-total').html('<span style="color:#c62828"><i class="fas fa-times-circle"></i></span>');
+      if (cb) cb();
+    });
+}
+
+@if($oltList->isNotEmpty())
+$(function() {
+  // Auto-fetch on load
+  @foreach($oltList->take(8) as $olt)
+    fetchOlt({{ $olt->id }});
+  @endforeach
+
+  // Refresh individual
+  $(document).on('click', '.refresh-olt', function() {
+    var id = $(this).data('id');
+    var $btn = $(this);
+    $btn.find('i').addClass('fa-spin');
+    fetchOlt(id, function() { $btn.find('i').removeClass('fa-spin'); });
+  });
+
+  // Refresh all
+  $('#refreshAllOlts').on('click', function() {
+    var $ic = $(this).find('i').addClass('fa-spin');
+    var done = 0, total = {{ $oltList->take(8)->count() }};
+    if (!total) { $ic.removeClass('fa-spin'); return; }
+    @foreach($oltList->take(8) as $olt)
+      fetchOlt({{ $olt->id }}, function() { if (++done >= total) $ic.removeClass('fa-spin'); });
+    @endforeach
+  });
+});
+@endif
 </script>
 <script>
 (function () {
