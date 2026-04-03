@@ -9,6 +9,10 @@ class CreateLicensePlansTable extends Migration
 {
     public function up()
     {
+        if (Schema::connection('isp_master')->hasTable('license_plans')) {
+            return;
+        }
+
         Schema::connection('isp_master')->create('license_plans', function (Blueprint $table) {
             $table->id();
             $table->string('name');                        // Starter, Basic, Professional, Enterprise

@@ -142,6 +142,13 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.migrate.*') ? 'active' : '' }}"
+                               href="{{ route('admin.migrate.index') }}">
+                                <i class="fas fa-database"></i>
+                                DB Migration
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <hr class="bg-secondary my-3">
                         </li>
                         <li class="nav-item">

@@ -15,7 +15,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        // Must be in register() so it fires before SanctumServiceProvider::boot()
+        // which calls loadMigrationsFrom(). Calling it in boot() is too late.
+        Sanctum::ignoreMigrations();
     }
 
     /**
@@ -26,7 +28,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot()
     {
         //
-        Sanctum::ignoreMigrations();
         config(['app.locale' => 'id']);
         Carbon::setLocale('id');
         Schema::defaultStringLength(191);

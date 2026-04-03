@@ -50,6 +50,7 @@ use App\Http\Controllers\Admin\TenantManagementController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\GitHubSyncController;
 use App\Http\Controllers\Admin\LicensePlanController;
+use App\Http\Controllers\Admin\AdminMigrateController;
 use App\Http\Controllers\CustomerAuthController;
 use App\Http\Controllers\SalesAuthController;
 use App\Http\Controllers\AppPortalController;
@@ -222,6 +223,7 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
             'wa-provider' => 'WA_PROVIDER_GUIDE.md',
             'add-payment-gateway' => 'CARA_TAMBAH_PAYMENT_GATEWAY.md',
             'github-sync' => 'GITHUB_SYNC_GUIDE.md',
+            'migration-guide' => 'ADMIN_MIGRATION_GUIDE.md',
         ];
         
         $titles = [
@@ -242,6 +244,7 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
             'wa-provider'       => 'WhatsApp Provider Guide',
             'add-payment-gateway' => 'Cara Tambah Payment Gateway',
             'github-sync'       => 'GitHub Sync Guide',
+            'migration-guide'   => 'Tenant Migration Guide',
         ];
 
         if (!isset($docFiles[$doc])) {
@@ -268,6 +271,10 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
     Route::get('/github-sync/refresh', [GitHubSyncController::class, 'refresh'])->name('admin.github-sync.refresh');
     Route::get('/github-sync/changes', [GitHubSyncController::class, 'getChanges'])->name('admin.github-sync.changes');
     Route::post('/github-sync/token', [GitHubSyncController::class, 'saveToken'])->name('admin.github-sync.token');
+
+    // Tenant Database Migration
+    Route::get('/migrate', [AdminMigrateController::class, 'index'])->name('admin.migrate.index');
+    Route::post('/migrate/run', [AdminMigrateController::class, 'run'])->name('admin.migrate.run');
 });
 
 //s
