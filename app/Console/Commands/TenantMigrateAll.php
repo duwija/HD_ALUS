@@ -60,8 +60,12 @@ class TenantMigrateAll extends Command
 
         $successCount = 0;
         $failedCount  = 0;
-        $php          = PHP_BINARY;
-        $artisan      = base_path('artisan');
+        // PHP_BINARY may be php-fpm in some environments; ensure we use CLI binary.
+        $php = PHP_BINARY;
+        if (str_contains($php, 'fpm') || str_contains($php, 'cgi')) {
+            $php = trim(shell_exec('which php') ?: 'php');
+        }
+        $artisan = base_path('artisan');
 
         foreach ($tenants as $tenant) {
             $label = sprintf('%s | %s | %s', $tenant->id, $tenant->domain, $tenant->db_database);

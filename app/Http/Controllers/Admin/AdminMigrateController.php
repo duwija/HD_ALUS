@@ -60,8 +60,13 @@ class AdminMigrateController extends Controller
         }
 
         $results     = [];
-        $php         = PHP_BINARY;
-        $artisan     = base_path('artisan');
+        // PHP_BINARY points to php-fpm when running under a web server.
+        // Detect and fall back to the CLI binary instead.
+        $php = PHP_BINARY;
+        if (str_contains($php, 'fpm') || str_contains($php, 'cgi')) {
+            $php = trim(shell_exec('which php') ?: 'php');
+        }
+        $artisan = base_path('artisan');
 
         foreach ($tenants as $tenant) {
             if (empty($tenant->db_database) || empty($tenant->db_username)) {
