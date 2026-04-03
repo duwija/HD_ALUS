@@ -51,6 +51,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\GitHubSyncController;
 use App\Http\Controllers\Admin\LicensePlanController;
 use App\Http\Controllers\Admin\AdminMigrateController;
+use App\Http\Controllers\Admin\PppSecretController as AdminPppSecretController;
 use App\Http\Controllers\CustomerAuthController;
 use App\Http\Controllers\SalesAuthController;
 use App\Http\Controllers\AppPortalController;
@@ -193,6 +194,11 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
     Route::post('/tenants/{id}/payment-points', [TenantManagementController::class, 'storePaymentPoint'])->name('admin.tenants.payment-points.store');
     Route::put('/tenants/{id}/payment-points/{pointId}', [TenantManagementController::class, 'updatePaymentPoint'])->name('admin.tenants.payment-points.update');
     Route::delete('/tenants/{id}/payment-points/{pointId}', [TenantManagementController::class, 'destroyPaymentPoint'])->name('admin.tenants.payment-points.destroy');
+
+    // PPP CHAP Secrets
+    Route::get('/ppp-secrets',       [AdminPppSecretController::class, 'index'])->name('admin.ppp-secrets.index');
+    Route::post('/ppp-secrets',      [AdminPppSecretController::class, 'store'])->name('admin.ppp-secrets.store');
+    Route::delete('/ppp-secrets',    [AdminPppSecretController::class, 'destroy'])->name('admin.ppp-secrets.destroy');
 
     // Log Viewer
     Route::get('/logs', [TenantManagementController::class, 'logIndex'])->name('admin.logs.index');
@@ -701,6 +707,12 @@ Route::patch('/distpointgroup/{id}','DistpointgroupController@update');
 Route::get('/distpointgroup/{id}','DistpointgroupController@show');
 Route::delete('/distpointgroup/{id}','DistpointgroupController@destroy');
 
+
+// PPP CHAP Secrets Manager
+Route::get('/ppp-secrets',          'PppSecretController@index')->name('ppp.index');
+Route::post('/ppp-secrets/sync',    'PppSecretController@sync')->name('ppp.sync');
+Route::post('/ppp-secrets',         'PppSecretController@store')->name('ppp.store');
+Route::delete('/ppp-secrets',       'PppSecretController@destroy')->name('ppp.destroy');
 
 Route::get('/distrouter','DistrouterController@index');
 Route::get('/pppoe-monitor','DistrouterController@pppoeMonitor')->name('pppoe.monitor');

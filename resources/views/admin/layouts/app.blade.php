@@ -149,6 +149,13 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.ppp-secrets*') ? 'active' : '' }}"
+                               href="{{ route('admin.ppp-secrets.index') }}">
+                                <i class="fas fa-key"></i>
+                                PPP CHAP Secrets
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <hr class="bg-secondary my-3">
                         </li>
                         <li class="nav-item">

@@ -836,7 +836,7 @@ a button {
                 <tr>
                     @else
                     @endif
-                    <td colspan="4" style="border: 1px solid #333" >Total Tagihan Bulan ini / Current Charges <br> <p >Harga yang tertera pada invoice sudah termasuk PPN</p></td>
+                    <td colspan="4" style="border: 1px solid #333" >Total Tagihan </p></td>
                     <td style="border: 1px solid #333" align="right"><strong id="total">Rp. {{ number_format($subtotal, 0, ',', '.') }} </strong></td>
                     {{--  <td colspan="2" style="border: 1px solid #333"> <strong> Tax Ppn ({{$taxfee}}%)</strong> --}}
                         {{-- <input type="text" name="subtotal" id="subtotal" value={{$subtotal}} >--}}
