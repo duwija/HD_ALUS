@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Sanctum\Sanctum;
 use Carbon\Carbon;
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,6 +26,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot()
     {
         //
+        Sanctum::ignoreMigrations();
         config(['app.locale' => 'id']);
         Carbon::setLocale('id');
         Schema::defaultStringLength(191);
