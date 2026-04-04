@@ -27,7 +27,7 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         $schedule->job(new \App\Jobs\AutoIsolirCustomerJob)->dailyAt('07:47');
-        $schedule->command('pppoe:collect-stats')->everyThreeMinutes();
+        $schedule->command('pppoe:collect-stats-all')->everyThreeMinutes();
     }
 
     /**

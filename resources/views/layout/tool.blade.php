@@ -20,12 +20,6 @@
         <p>PPPoE Offline Map</p>
       </a>
     </li>
-    <li class="nav-item">
-      <a href="{{ route('ppp.index') }}" class="nav-link {{ request()->is('ppp-secrets*') ? 'active' : '' }}">
-        <i class="fas fa-key nav-icon"></i>
-        <p>PPP CHAP Secrets</p>
-      </a>
-    </li>
   </ul>
   <ul class="nav nav-treeview">
     <li class="nav-item">
