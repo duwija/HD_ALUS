@@ -583,6 +583,10 @@
     }
     .btnblink { animation: glowing 1300ms infinite; }
 
+    @media (min-width: 769px) {
+      .navbar-search-form { max-width: 380px; flex: 0 1 380px !important; }
+    }
+
     @media (max-width: 768px) {
       .tiketview_padding { padding: 2px !important; }
       .tiketview img { width: 100% !important; height: auto !important; }

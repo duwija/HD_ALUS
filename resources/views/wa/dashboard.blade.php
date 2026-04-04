@@ -26,6 +26,7 @@
             </div>
 
             <!-- Session Table -->
+            <div class="table-responsive">
             <table class="table table-bordered table-hover" id="sessionTable">
                 <thead class="thead-dark">
                     <tr>
@@ -40,6 +41,7 @@
                 </thead>
                 <tbody id="sessionList"></tbody>
             </table>
+            </div>
 
         </div>
     </div>
