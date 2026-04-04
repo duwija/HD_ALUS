@@ -586,6 +586,8 @@
     @media (max-width: 768px) {
       .tiketview_padding { padding: 2px !important; }
       .tiketview img { width: 100% !important; height: auto !important; }
+      .navbar-search-form { max-width: calc(100vw - 130px); }
+      .navbar-search-form .form-control { min-width: 0 !important; }
     }
 
     /* Select2 dark mode */
@@ -712,9 +714,9 @@
 
       @php $searchPrivileges = ['admin','noc','user','payment','accounting','marketing']; @endphp
       @if(in_array($privilege, $searchPrivileges))
-      <form action="/customer/search" method="GET" class="navbar-search-form ml-3 d-none d-md-flex">
+      <form action="/customer/search" method="GET" class="navbar-search-form ml-2 flex-fill">
         <div class="input-group input-group-sm">
-          <input class="form-control @error('search') is-invalid @enderror" name="search" id="search" type="search" placeholder="Cari customer..." aria-label="Search" style="min-width:200px">
+          <input class="form-control @error('search') is-invalid @enderror" name="search" id="search" type="search" placeholder="Cari customer..." aria-label="Search">
           <div class="input-group-append">
             <button class="btn-search" type="submit">
               <i class="fas fa-search" style="font-size:12px"></i>
@@ -730,13 +732,13 @@
       <ul class="navbar-nav ml-auto">
         <!-- Messages Dropdown Menu -->
 
-        <li class="nav-item">
+        <li class="nav-item d-none d-md-block">
           <a href="#" id="toggleDarkMode" class="nav-link" title="Toggle Dark Mode">
             <i class="fas fa-moon"></i>
           </a>
         </li>
 
-        <li class="nav-item">
+        <li class="nav-item d-none d-md-block">
           <a href="#" id="toggleDensity" class="nav-link" title="Toggle Compact Mode">
             <i class="fas fa-compress-alt" style="color:#6b7280"></i>
           </a>
