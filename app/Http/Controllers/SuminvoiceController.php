@@ -184,9 +184,11 @@ class SuminvoiceController extends Controller
         $start = Carbon::now();
         $count = 0;
 
+        $tenantQueue = app('tenant')['domain'] ?? 'default';
         foreach ($customers as $cust) {
             $count++;
             CreateInvJob::dispatch($cust->id, $inv_date)
+            ->onQueue($tenantQueue)
             ->delay($start->addSeconds(10));
         }
 

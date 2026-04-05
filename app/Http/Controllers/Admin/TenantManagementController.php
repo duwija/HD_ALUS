@@ -2078,15 +2078,21 @@ class TenantManagementController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
         $slug = explode('.', $tenant->domain)[0];
-        $programGroup = "{$slug}_queue_worker";
+        $tenantQueue = $tenant->domain;
 
-        // Get supervisor worker status
+        // Supervisor: try per-tenant program first, fall back to shared kencana_queue_worker
+        $programGroup = "{$slug}_queue_worker";
         $supervisorOutput = shell_exec("sudo supervisorctl status '{$programGroup}:*' 2>&1");
+        $hasOwnWorker = $supervisorOutput && str_contains($supervisorOutput, $programGroup . ':');
+        if (!$hasOwnWorker) {
+            $programGroup = 'kencana_queue_worker';
+            $supervisorOutput = shell_exec("sudo supervisorctl status '{$programGroup}:*' 2>&1");
+        }
+
         $workers = [];
         if ($supervisorOutput) {
             foreach (explode("\n", trim($supervisorOutput)) as $line) {
                 if (empty(trim($line))) continue;
-                // Parse: name   STATUS   pid X, uptime H:MM:SS
                 preg_match('/^(\S+)\s+(\S+)\s*(.*)$/', trim($line), $m);
                 $workers[] = [
                     'name'   => $m[1] ?? $line,
@@ -2096,25 +2102,14 @@ class TenantManagementController extends Controller
             }
         }
 
-        // Get jobs stats from tenant DB
+        // Get jobs stats from central queue DB filtered by tenant queue name
         $pendingJobs = 0;
         $failedJobs  = 0;
         try {
-            \Config::set('database.connections.tenant_temp', [
-                'driver'    => 'mysql',
-                'host'      => $tenant->db_host ?? '127.0.0.1',
-                'port'      => $tenant->db_port ?? '3306',
-                'database'  => $tenant->db_database,
-                'username'  => $tenant->db_username,
-                'password'  => $tenant->db_password,
-                'charset'   => 'utf8mb4',
-                'collation' => 'utf8mb4_unicode_ci',
-                'prefix'    => '',
-                'strict'    => false,
-            ]);
-            $pendingJobs = \DB::connection('tenant_temp')->table('jobs')->count();
-            $failedJobs  = \DB::connection('tenant_temp')->table('failed_jobs')->count();
-            \DB::purge('tenant_temp');
+            $pendingJobs = \DB::connection('mysql_queue')->table('jobs')
+                ->where('queue', $tenantQueue)->count();
+            $failedJobs  = \DB::connection('mysql_queue')->table('failed_jobs')
+                ->where('queue', $tenantQueue)->count();
         } catch (\Exception $e) {
             // DB unreachable
         }
@@ -2145,7 +2140,13 @@ class TenantManagementController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
         $slug   = explode('.', $tenant->domain)[0];
+
+        // Use per-tenant program if exists, otherwise restart shared worker
         $programGroup = "{$slug}_queue_worker";
+        $check = shell_exec("sudo supervisorctl status '{$programGroup}:*' 2>&1");
+        if (!$check || !str_contains($check, $programGroup . ':')) {
+            $programGroup = 'kencana_queue_worker';
+        }
 
         $output = shell_exec("sudo supervisorctl restart '{$programGroup}:*' 2>&1");
 

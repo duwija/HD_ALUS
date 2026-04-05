@@ -21,13 +21,19 @@ use Symfony\Component\Process\Process;
 use App\Mail\EmailNotification;
 use Illuminate\Support\Facades\Mail;
 use App\Helpers\WaGatewayHelper;
+use Illuminate\Support\Facades\Config;
 
 class CreateInvJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public $tries = 3;
+    public $timeout = 120;
+    public $backoff = [30, 60];
+
     protected $customerId;
     protected $inv_date;
+    protected $tenantDomain;
 
     /**
      * Create a new job instance.
@@ -38,7 +44,8 @@ class CreateInvJob implements ShouldQueue
     {
         $this->customerId = $customerId;
         $this->inv_date = $inv_date;
-
+        $tenant = app('tenant');
+        $this->tenantDomain = $tenant['domain'] ?? null;
     }
 
     /**
@@ -48,6 +55,8 @@ class CreateInvJob implements ShouldQueue
      */
     public function handle()
     {
+        $this->restoreTenantContext();
+
         $customer = Customer::where('customers.id', $this->customerId)
         ->join('plans', 'customers.id_plan', '=', 'plans.id')
         ->select('customers.*', 'plans.name as plan', 'plans.price as price')
@@ -279,4 +288,63 @@ class CreateInvJob implements ShouldQueue
 }
 }
 }
+
+    private function restoreTenantContext(): void
+    {
+        if (empty($this->tenantDomain)) {
+            \Log::channel('invoice')->warning('[TENANT] tenantDomain tidak tersimpan di job, skip restore.');
+            return;
+        }
+
+        try {
+            $tenantModel = \App\Tenant::on('isp_master')->where('domain', $this->tenantDomain)->first();
+            if (!$tenantModel) {
+                \Log::channel('invoice')->warning("[TENANT] Tenant '{$this->tenantDomain}' tidak ditemukan di isp_master.");
+                return;
+            }
+
+            $tenant = $tenantModel->toTenantArray();
+
+            app()->instance('tenant', $tenant);
+
+            $dbConfig = [
+                'host'     => $tenant['db_host']     ?? env('DB_HOST'),
+                'port'     => $tenant['db_port']     ?? env('DB_PORT'),
+                'database' => $tenant['db_database'] ?? env('DB_DATABASE'),
+                'username' => $tenant['db_username'] ?? env('DB_USERNAME'),
+                'password' => $tenant['db_password'] ?? env('DB_PASSWORD'),
+            ];
+            foreach ($dbConfig as $key => $value) {
+                Config::set('database.connections.mysql.' . $key, $value);
+            }
+            \DB::purge('mysql');
+            \DB::reconnect('mysql');
+
+            $mailMap = [
+                'mail_host'         => 'mail.mailers.smtp.host',
+                'mail_port'         => 'mail.mailers.smtp.port',
+                'mail_username'     => 'mail.mailers.smtp.username',
+                'mail_password'     => 'mail.mailers.smtp.password',
+                'mail_encryption'   => 'mail.mailers.smtp.encryption',
+                'mail_from_address' => 'mail.from.address',
+                'mail_from_name'    => 'mail.from.name',
+            ];
+            foreach ($mailMap as $tenantKey => $configKey) {
+                if (!empty($tenant[$tenantKey])) {
+                    Config::set($configKey, $tenantKey === 'mail_port' ? (int) $tenant[$tenantKey] : $tenant[$tenantKey]);
+                }
+            }
+            if (!empty($tenant['mail_mailer'])) {
+                Config::set('mail.default', $tenant['mail_mailer']);
+            }
+
+            Config::set('app.name',      $tenant['app_name']  ?? 'ISP Management');
+            Config::set('app.signature', $tenant['signature'] ?? $tenant['app_name'] ?? '');
+
+            \Log::channel('invoice')->info("[TENANT] Context restored: domain={$this->tenantDomain} db={$tenant['db_database']}");
+
+        } catch (\Exception $e) {
+            \Log::channel('invoice')->error("[TENANT] Gagal restore context: " . $e->getMessage());
+        }
+    }
 }
