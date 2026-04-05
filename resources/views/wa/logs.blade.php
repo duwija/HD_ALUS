@@ -89,7 +89,14 @@
     },
     columns: [
       { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
-      { data: 'created_at', name: 'created_at' },
+      { data: 'created_at', name: 'created_at', render: function(data) {
+          if (!data) return '-';
+          var d = new Date(data);
+          var pad = n => String(n).padStart(2,'0');
+          return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear()
+               + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        }
+      },
       { data: 'number', name: 'number' },
       { data: 'session', name: 'session' },
       { data: 'message', name: 'message' },
