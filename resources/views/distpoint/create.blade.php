@@ -73,18 +73,20 @@
            class="form-control @error('coordinate') is-invalid @enderror"
            name="coordinate"
            id="coordinate"
-           placeholder="Latitude,Longitude"
+           placeholder="Contoh: -6.200000,106.816666"
            value="{{ old('coordinate') }}"
-           pattern="^-?\d{1,2}\.\d+,\s*-?\d{1,3}\.\d+$"
-           title="Format harus Latitude,Longitude seperti -6.200000,106.816666">
-
-           @error('coordinate')
-           <div class="error invalid-feedback">{{ $message }}</div>
-           @enderror
+           pattern="-?\d{1,3}\.\d+,-?\d{1,3}\.\d+"
+           title="Format: lat,lng — contoh: -6.200000,106.816666 (titik sebagai desimal, koma sebagai pemisah lat & lng)"
+           oninput="validateCoordinate(this)">
            <div class="input-group-append">
-            <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#modal-maps">Get From Maps</button>
+            <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#modal-maps"><i class="fas fa-map-marker-alt"></i> Get From Maps</button>
           </div>
         </div>
+        <small class="text-muted"><i class="fas fa-info-circle"></i> Format: <code>-6.200000,106.816666</code> (titik = desimal, koma = pemisah)</small>
+        <div id="coordinate-error" class="text-danger small" style="display:none;"></div>
+        @error('coordinate')
+        <div class="error invalid-feedback">{{ $message }}</div>
+        @enderror
       </div>
 
       <div class="form-group">
@@ -181,7 +183,9 @@
       marker = L.marker([lat, lng], { draggable: true }).addTo(map);
       marker.on('dragend', function (e) {
         const latlng = e.target.getLatLng();
-        document.getElementById('coordinate').value = `${latlng.lat.toFixed(6)},${latlng.lng.toFixed(6)}`;
+        const el = document.getElementById('coordinate');
+        el.value = `${latlng.lat.toFixed(6)},${latlng.lng.toFixed(6)}`;
+        validateCoordinate(el);
       });
 
       // 🔍 Search bar
@@ -192,7 +196,9 @@
         const latlng = e.geocode.center;
         map.setView(latlng, 16);
         marker.setLatLng(latlng);
-        document.getElementById('coordinate').value = `${latlng.lat.toFixed(6)},${latlng.lng.toFixed(6)}`;
+        const el = document.getElementById('coordinate');
+        el.value = `${latlng.lat.toFixed(6)},${latlng.lng.toFixed(6)}`;
+        validateCoordinate(el);
       })
       .addTo(map);
 
@@ -214,13 +220,43 @@
     map.once('locationfound', function (e) {
       const { lat, lng } = e.latlng;
       marker.setLatLng(e.latlng);
-      document.getElementById('coordinate').value = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+      const el = document.getElementById('coordinate');
+      el.value = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+      validateCoordinate(el);
     });
 
     map.once('locationerror', function () {
       alert('Tidak dapat menemukan lokasi Anda. Pastikan izin lokasi aktif di browser.');
     });
   });
+
+  function validateCoordinate(el) {
+    const pattern = /^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$/;
+    const errEl   = document.getElementById('coordinate-error');
+    const val     = el.value.trim();
+
+    if (val === '') {
+      el.classList.remove('is-invalid', 'is-valid');
+      errEl.style.display = 'none';
+      return;
+    }
+
+    // Auto-hapus spasi di antara lat & lng
+    if (/^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/.test(val) && val !== val.replace(/\s/g, '')) {
+      el.value = val.replace(/\s/g, '');
+    }
+
+    if (pattern.test(el.value.trim())) {
+      el.classList.remove('is-invalid');
+      el.classList.add('is-valid');
+      errEl.style.display = 'none';
+    } else {
+      el.classList.remove('is-valid');
+      el.classList.add('is-invalid');
+      errEl.textContent = 'Format tidak valid. Gunakan: -6.200000,106.816666 (titik=desimal, koma=pemisah)';
+      errEl.style.display = 'block';
+    }
+  }
 </script>
 <script>
   $(document).ready(function () {

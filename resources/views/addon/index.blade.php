@@ -29,6 +29,7 @@
         </a>
       </div>
       <div class="card-body p-0">
+        <div class="table-responsive">
         <table class="table table-hover table-striped mb-0">
           <thead class="thead-light">
             <tr>
@@ -82,6 +83,7 @@
             @endforelse
           </tbody>
         </table>
+        </div>{{-- /.table-responsive --}}
       </div>
     </div>
 

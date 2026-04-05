@@ -19,6 +19,15 @@ class NotifInvJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /** Maximum number of attempts before failing */
+    public $tries = 3;
+
+    /** Maximum seconds the job may run */
+    public $timeout = 120;
+
+    /** Seconds to wait before retrying (per attempt) */
+    public $backoff = [30, 60];
+
     /**
      * Create a new job instance.
      *
