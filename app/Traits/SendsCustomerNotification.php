@@ -46,12 +46,15 @@ trait SendsCustomerNotification
         $delay     = $this->messageDelay($index, $longPauseEvery);
         $notifType = $this->notifTypeLabel($customer->notification);
 
+        // Gunakan nama queue = domain tenant agar setiap tenant hanya melihat job miliknya
+        $tenantQueue = app('tenant')['domain'] ?? 'default';
+
         NotifInvJob::dispatch(
             $customer->phone,
             $customer->name,
             $customer->customer_id,
             $encryptedurl
-        )->delay($start->addSeconds($delay));
+        )->onQueue($tenantQueue)->delay($start->addSeconds($delay));
 
         Log::channel('notif')->info(
             "Queued [{$notifType}] CID {$customer->customer_id} | {$customer->name} | delay +{$delay}s"

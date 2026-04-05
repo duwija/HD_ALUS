@@ -2431,7 +2431,8 @@ public function search(Request $request)
 
 public function queueCount()
 {
-    $remaining = \App\Job::count();
+    $tenantQueue = app('tenant')['domain'] ?? 'default';
+    $remaining = \DB::connection('mysql_queue')->table('jobs')->where('queue', $tenantQueue)->count();
     $total     = (int) \Illuminate\Support\Facades\Cache::get('queue_blast_total', 0);
     $startedAt = (int) \Illuminate\Support\Facades\Cache::get('queue_blast_started', 0);
 
@@ -2464,8 +2465,9 @@ public function queueCount()
 
 public function cancelJobs()
 {
-    $count = \App\Job::count();
-    \App\Job::truncate();
+    $tenantQueue = app('tenant')['domain'] ?? 'default';
+    $count = \DB::connection('mysql_queue')->table('jobs')->where('queue', $tenantQueue)->count();
+    \DB::connection('mysql_queue')->table('jobs')->where('queue', $tenantQueue)->delete();
     \Illuminate\Support\Facades\Cache::forget('queue_blast_total');
     \Illuminate\Support\Facades\Cache::forget('queue_blast_started');
     return response()->json(['success' => true, 'deleted' => $count, 'message' => "$count job(s) berhasil dihapus dari antrian."]);
@@ -2497,7 +2499,9 @@ public function notification()
     ->orWhere('customers.id_status', '4')
     ->count() ;
 
-    $queue = \App\Job::count() ;
+    // Jobs difilter berdasarkan queue nama tenant — setiap tenant hanya lihat job miliknya
+    $tenantQueue = app('tenant')['domain'] ?? 'default';
+    $queue = \DB::connection('mysql_queue')->table('jobs')->where('queue', $tenantQueue)->count();
 
 
     $merchant = \App\Merchant::pluck('name', 'id');
