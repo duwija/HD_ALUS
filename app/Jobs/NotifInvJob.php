@@ -227,7 +227,6 @@ class NotifInvJob implements ShouldQueue
             \DB::purge('mysql');
             \DB::reconnect('mysql');
             // Reconnect mysql_queue agar queue driver tetap bisa delete job setelah handle()
-            \DB::purge('mysql_queue');
             \DB::reconnect('mysql_queue');
 
             // Set mail config dari tenant

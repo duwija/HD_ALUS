@@ -49,7 +49,7 @@ trait SendsCustomerNotification
             $val = \Illuminate\Support\Facades\Config::get("database.connections.mysql.{$key}");
             \Illuminate\Support\Facades\Config::set("database.connections.mysql_queue.{$key}", $val);
         }
-        \Illuminate\Support\Facades\DB::purge('mysql_queue');
+        \Illuminate\Support\Facades\DB::reconnect('mysql_queue');
 
         $delay     = $this->messageDelay($index, $longPauseEvery);
         $notifType = $this->notifTypeLabel($customer->notification);
