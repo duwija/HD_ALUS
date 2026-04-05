@@ -213,13 +213,22 @@ class NotifInvJob implements ShouldQueue
             app()->instance('tenant', $tenant);
 
             // Switch database connection ke tenant DB
-            Config::set('database.connections.mysql.host',     $tenant['db_host']     ?? env('DB_HOST'));
-            Config::set('database.connections.mysql.port',     $tenant['db_port']     ?? env('DB_PORT'));
-            Config::set('database.connections.mysql.database', $tenant['db_database'] ?? env('DB_DATABASE'));
-            Config::set('database.connections.mysql.username', $tenant['db_username'] ?? env('DB_USERNAME'));
-            Config::set('database.connections.mysql.password', $tenant['db_password'] ?? env('DB_PASSWORD'));
+            $dbConfig = [
+                'host'     => $tenant['db_host']     ?? env('DB_HOST'),
+                'port'     => $tenant['db_port']     ?? env('DB_PORT'),
+                'database' => $tenant['db_database'] ?? env('DB_DATABASE'),
+                'username' => $tenant['db_username'] ?? env('DB_USERNAME'),
+                'password' => $tenant['db_password'] ?? env('DB_PASSWORD'),
+            ];
+            foreach ($dbConfig as $key => $value) {
+                Config::set('database.connections.mysql.' . $key, $value);
+                Config::set('database.connections.mysql_queue.' . $key, $value);
+            }
             \DB::purge('mysql');
             \DB::reconnect('mysql');
+            // Reconnect mysql_queue agar queue driver tetap bisa delete job setelah handle()
+            \DB::purge('mysql_queue');
+            \DB::reconnect('mysql_queue');
 
             // Set mail config dari tenant
             $mailMap = [
