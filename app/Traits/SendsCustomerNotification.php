@@ -43,14 +43,6 @@ trait SendsCustomerNotification
             return;
         }
 
-        // Pastikan mysql_queue connection point ke DB tenant yang aktif saat ini
-        // agar job tersimpan di tabel jobs milik tenant yang benar (bukan DB default)
-        foreach (['host', 'port', 'database', 'username', 'password'] as $key) {
-            $val = \Illuminate\Support\Facades\Config::get("database.connections.mysql.{$key}");
-            \Illuminate\Support\Facades\Config::set("database.connections.mysql_queue.{$key}", $val);
-        }
-        \Illuminate\Support\Facades\DB::reconnect('mysql_queue');
-
         $delay     = $this->messageDelay($index, $longPauseEvery);
         $notifType = $this->notifTypeLabel($customer->notification);
 

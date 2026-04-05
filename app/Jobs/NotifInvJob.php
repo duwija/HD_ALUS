@@ -222,12 +222,10 @@ class NotifInvJob implements ShouldQueue
             ];
             foreach ($dbConfig as $key => $value) {
                 Config::set('database.connections.mysql.' . $key, $value);
-                Config::set('database.connections.mysql_queue.' . $key, $value);
             }
             \DB::purge('mysql');
             \DB::reconnect('mysql');
-            // Reconnect mysql_queue agar queue driver tetap bisa delete job setelah handle()
-            \DB::reconnect('mysql_queue');
+            // mysql_queue tetap di DB default agar worker bisa delete job setelah handle()
 
             // Set mail config dari tenant
             $mailMap = [
