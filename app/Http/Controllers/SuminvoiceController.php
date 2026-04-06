@@ -1518,24 +1518,31 @@ public function customerisolirJob(Request $request)
 
     $start = Carbon::now();
 
-    $count =0;
-    foreach($customer as $customer) {
+    $count          = 0;
+    $tenantQueue    = app('tenant')['domain'] ?? 'default';
+    $longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', rand(18, 27));
+
+    foreach ($customer as $cust) {
+        $count++;
+
+        $delay = $this->messageDelay($count, $longPauseEvery);
+
+        IsolirJob::dispatch($cust->id, $cust->id_status)
+            ->onQueue($tenantQueue)
+            ->delay($start->addSeconds($delay));
+
+        try {
+            \Log::channel('isolir')->info(
+                'Queued isolir Customer :' . $cust->customer_id . ' | ' . $cust->name
+                . ' | ETA +' . $delay . 's'
+            );
+        } catch (\Exception $logEx) {
+            \Log::info('Isolir log write failed: ' . $logEx->getMessage());
+        }
+    }
 
 
-
-
-     $count = $count +1;
-
-
-     IsolirJob::dispatch($customer->id, $customer->id_status)->delay($start->addSeconds(30));
-     \Log::channel('isolir')->info('Set Customer :'.$customer->customer_id. ' | ' .$customer->name." to Blocked | Isolir"); 
-
-
-
- }
-
-
- $msg = 'Processing Sent '. $count .' messages';
+ $msg = 'Processing Queued '. $count .' isolir job(s)';
 
  return redirect ('suminvoice/notification')->with('info',$msg);
 
@@ -3043,7 +3050,7 @@ if ($customers->id_status == 4 && $active_invoice <= 0) {
         //     $customers->pppoe
         // );
 
-    EnableMikrotikJob::dispatch($customers->id)->delay(now()->addSeconds(3));
+    EnableMikrotikJob::dispatch($customers->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(3));
 
         // Perubahan status
 
@@ -3101,7 +3108,7 @@ if ($customers->id_status == 4 && $active_invoice <= 0) {
             //     $customers->pppoe
             // );
               // Perubahan status
-            EnableMikrotikJob::dispatch($customers->id)->delay(now()->addSeconds(3));
+            EnableMikrotikJob::dispatch($customers->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(3));
 
             $changes = [
                 'Status' => [

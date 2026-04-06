@@ -496,6 +496,20 @@
                                                 </p>
                                             </div>
 
+                                            <!-- Isolir Job Delay -->
+                                            <div class="col-md-6 mb-3">
+                                                <h6 class="text-danger"><i class="fas fa-ban"></i> Isolir Job Delay</h6>
+                                                <ul class="list-unstyled ml-3 small">
+                                                    <li><code>ISOLIR_DELAY_MIN</code> - Delay minimum antar job isolir <span class="text-muted">(detik, default: 30)</span></li>
+                                                    <li><code>ISOLIR_DELAY_MAX</code> - Delay maksimum antar job isolir <span class="text-muted">(detik, default: 60)</span></li>
+                                                    <li><code>ISOLIR_LONG_PAUSE_EVERY</code> - Long pause setiap N customer <span class="text-muted">(default: 10)</span></li>
+                                                    <li><code>ISOLIR_LONG_PAUSE_EXTRA</code> - Extra delay saat long pause <span class="text-muted">(detik, default: 120)</span></li>
+                                                </ul>
+                                                <p class="small text-muted ml-3 mb-0">
+                                                    <i class="fas fa-info-circle"></i> Delay bersifat <strong>kumulatif</strong> — customer ke-N diproses setelah <code>delay &times; N</code> detik. Naikkan nilai jika router/OLT sering timeout saat isolir massal.
+                                                </p>
+                                            </div>
+
                                             <!-- Custom Variables -->
                                             <div class="col-md-6 mb-0">
                                                 <h6 class="text-muted"><i class="fas fa-cog"></i> Custom Variables</h6>

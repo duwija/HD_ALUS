@@ -291,7 +291,30 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
 > **Tip:** Untuk tenant dengan gateway cepat (tidak ada anti-spam), set ke nilai kecil:
 > `NOTIF_DELAY_MIN=10`, `NOTIF_DELAY_MAX=30`, `NOTIF_LONG_PAUSE_EVERY=50`, `NOTIF_LONG_PAUSE_EXTRA=60`
 
-#### 14. **Queue Worker Configuration**
+#### 14. **Isolir Job Delay**
+```json
+{
+  "ISOLIR_DELAY_MIN": 30,
+  "ISOLIR_DELAY_MAX": 60,
+  "ISOLIR_LONG_PAUSE_EVERY": 10,
+  "ISOLIR_LONG_PAUSE_EXTRA": 120
+}
+```
+**Kegunaan:** Mengatur kecepatan eksekusi job isolir (pemblokiran pelanggan) massal agar tidak membebani router/OLT sekaligus. Nilai ini dikonsumsi oleh `isolirDelay()` di `SendsCustomerNotification` trait.
+
+| Key | Default | Keterangan |
+|-----|---------|------------|
+| `ISOLIR_DELAY_MIN` | `30` | Delay minimum antar job isolir (detik) |
+| `ISOLIR_DELAY_MAX` | `60` | Delay maksimum antar job isolir (detik) |
+| `ISOLIR_LONG_PAUSE_EVERY` | `10` | Long pause setiap N customer diproses |
+| `ISOLIR_LONG_PAUSE_EXTRA` | `120` | Extra delay saat long pause (detik) |
+
+> **Tip:** Jika router/OLT lambat merespons, naikkan nilai ini agar tidak ada job yang timeout:
+> `ISOLIR_DELAY_MIN=60`, `ISOLIR_DELAY_MAX=120`, `ISOLIR_LONG_PAUSE_EVERY=5`, `ISOLIR_LONG_PAUSE_EXTRA=300`
+
+> **Catatan:** Delay bersifat **kumulatif** — customer ke-N akan diproses setelah `delay × N` detik dari waktu dispatch, sehingga router tidak menerima request serentak.
+
+#### 15. **Queue Worker Configuration**
 ```json
 {
   "QUEUE_SLEEP": 3,

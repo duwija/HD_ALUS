@@ -212,7 +212,8 @@ class NotifInvJob implements ShouldQueue
             // Set tenant ke app instance (agar tenant_config() berfungsi)
             app()->instance('tenant', $tenant);
 
-            // Switch database connection ke tenant DB
+            // Re-arahkan log channel ke folder tenant yang benar
+            $this->switchTenantLogChannels($tenant['db_database'] ?? env('DB_DATABASE', 'default'));
             $dbConfig = [
                 'host'     => $tenant['db_host']     ?? env('DB_HOST'),
                 'port'     => $tenant['db_port']     ?? env('DB_PORT'),
@@ -254,6 +255,23 @@ class NotifInvJob implements ShouldQueue
 
         } catch (\Exception $e) {
             Log::channel('notif')->error("[TENANT] Gagal restore context: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update path channel log ke folder tenant yang aktif dan reset cache Monolog.
+     * Diperlukan karena config/logging.php dievaluasi sekali saat worker start
+     * sehingga semua tenant menggunakan path yang sama jika tidak di-override di sini.
+     */
+    private function switchTenantLogChannels(string $dbDatabase): void
+    {
+        $base = storage_path("logs/tenant_{$dbDatabase}");
+        if (!is_dir($base)) {
+            @mkdir($base, 0775, true);
+        }
+        foreach (['notif', 'isolir', 'invoice', 'payment', 'auth'] as $ch) {
+            Config::set("logging.channels.{$ch}.path", "{$base}/{$ch}.log");
+            Log::forgetChannel($ch);
         }
     }
 }

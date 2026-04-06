@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -21,20 +22,19 @@ class IsolirJob implements ShouldQueue
      *
      * @return void
      */
-    public $tries = 3; // Job akan dicoba maksimal 3 kali
-    public $timeout = 300; // Timeout per eksekusi job (dalam detik)
-    public $backoff = 900; // 900 detik = 15 menit
+    public $tries = 3;
+    public $timeout = 300;
+    public $backoff = 900;
     protected $id;
     protected $status;
+    protected $tenantDomain;
+
     public function __construct($id, $status)
     {
-        //
-
-
         $this->id = $id;
-
         $this->status = $status;
-
+        $tenant = app('tenant');
+        $this->tenantDomain = $tenant['domain'] ?? null;
     }
 
     /**
@@ -44,7 +44,7 @@ class IsolirJob implements ShouldQueue
      */
     public function handle()
     {
-
+        $this->restoreTenantContext();
 
         $attempt = $this->attempts(); // Dapatkan jumlah percobaan
 
@@ -151,6 +151,54 @@ class IsolirJob implements ShouldQueue
             $exception->getMessage(),
             $this->tries
         );
+    }
+
+    private function restoreTenantContext(): void
+    {
+        if (empty($this->tenantDomain)) return;
+
+        try {
+            $tenantModel = \App\Tenant::on('isp_master')->where('domain', $this->tenantDomain)->first();
+            if (!$tenantModel) return;
+
+            $tenant = $tenantModel->toTenantArray();
+            app()->instance('tenant', $tenant);
+
+            // Re-arahkan log channel ke folder tenant yang benar
+            $this->switchTenantLogChannels($tenant['db_database'] ?? env('DB_DATABASE', 'default'));
+
+            $dbConfig = [
+                'host'     => $tenant['db_host']     ?? env('DB_HOST'),
+                'port'     => $tenant['db_port']     ?? env('DB_PORT'),
+                'database' => $tenant['db_database'] ?? env('DB_DATABASE'),
+                'username' => $tenant['db_username'] ?? env('DB_USERNAME'),
+                'password' => $tenant['db_password'] ?? env('DB_PASSWORD'),
+            ];
+            foreach ($dbConfig as $key => $value) {
+                Config::set('database.connections.mysql.' . $key, $value);
+            }
+            \DB::purge('mysql');
+            \DB::reconnect('mysql');
+
+            Log::channel('isolir')->info("[TENANT] Context restored: domain={$this->tenantDomain} db={$tenant['db_database']}");
+        } catch (\Exception $e) {
+            Log::channel('isolir')->error('[TENANT] Gagal restore context: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update path channel log ke folder tenant yang aktif dan reset cache Monolog.
+     */
+    private function switchTenantLogChannels(string $dbDatabase): void
+    {
+        $base = storage_path("logs/tenant_{$dbDatabase}");
+        if (!is_dir($base)) {
+            @mkdir($base, 0775, true);
+        }
+        foreach (['notif', 'isolir', 'invoice', 'payment', 'auth'] as $ch) {
+            Config::set("logging.channels.{$ch}.path", "{$base}/{$ch}.log");
+            Log::forgetChannel($ch);
+        }
     }
 
 }

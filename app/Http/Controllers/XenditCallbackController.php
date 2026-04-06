@@ -130,7 +130,7 @@ class XenditCallbackController extends Controller
              \App\Customer::where('id', $invoice->id_customer)->update([
                 'id_status' => 2 ]);
                // \App\Distrouter::mikrotik_enable($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->customer_id);
-             EnableMikrotikJob::dispatch($customers->id)->delay(now()->addSeconds(2));
+             EnableMikrotikJob::dispatch($customers->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(2));
 
          }
 
@@ -300,7 +300,7 @@ public function update_tripay(Request $request)
             //     $distrouter->port,
             //     $customers->pppoe
             // );
-               EnableMikrotikJob::dispatch($customers->id)->delay(now()->addSeconds(2));
+               EnableMikrotikJob::dispatch($customers->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(2));
            } catch (\Exception $e) {
             \Log::channel('payment')->warning("Gagal mikrotik_enable untuk {$customers->customer_id}: " . $e->getMessage());
         }
@@ -346,7 +346,7 @@ elseif ($customers->id_status == 4 && \App\Suminvoice::where('payment_status', 0
             //     $distrouter->port,
             //     $customers->pppoe
             // );
-           EnableMikrotikJob::dispatch($customers->id)->delay(now()->addSeconds(2));
+           EnableMikrotikJob::dispatch($customers->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(2));
        } catch (\Exception $e) {
         \Log::channel('payment')->warning("Gagal mikrotik_enable untuk {$customers->customer_id}: " . $e->getMessage());
     }
@@ -672,7 +672,7 @@ return response()->json(['success' => true]);
             if ($distrouter = \App\Distrouter::withTrashed()->where('id', $customers->id_distrouter)->first()) {
              try {
                
-               EnableMikrotikJob::dispatch($customers->id)->delay(now()->addSeconds(2));
+               EnableMikrotikJob::dispatch($customers->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(2));
            } catch (\Exception $e) {
             \Log::channel('payment')->warning("Gagal mikrotik_enable untuk {$customers->customer_id}: " . $e->getMessage());
         }
@@ -716,7 +716,7 @@ elseif ($customers->id_status == 4 && \App\Suminvoice::where('payment_status', 0
             //     $customers->pppoe
             // );
 
-           EnableMikrotikJob::dispatch($customers->id)->delay(now()->addSeconds(2));
+           EnableMikrotikJob::dispatch($customers->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(2));
        } catch (\Exception $e) {
         \Log::channel('payment')->warning("Gagal mikrotik_enable untuk {$customers->customer_id}: " . $e->getMessage());
     }
@@ -878,7 +878,7 @@ return("ACCEPTED");
                 \App\Customer::where('id', $customer->id)->update(['id_status' => 2]);
                 if ($distrouter = \App\Distrouter::withTrashed()->where('id', $customer->id_distrouter)->first()) {
                     try {
-                        EnableMikrotikJob::dispatch($customer->id)->delay(now()->addSeconds(2));
+                        EnableMikrotikJob::dispatch($customer->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(2));
                     } catch (\Exception $e) {
                         \Log::channel('payment')->warning("Gagal mikrotik_enable bundle untuk {$customer->customer_id}: " . $e->getMessage());
                     }
@@ -1108,7 +1108,7 @@ return("ACCEPTED");
                 \App\Customer::where('id', $invoice->id_customer)->update(['id_status' => 2]);
                 if ($distrouter = \App\Distrouter::withTrashed()->where('id', $customers->id_distrouter)->first()) {
                     try {
-                        \App\Jobs\EnableMikrotikJob::dispatch($customers->id)->delay(now()->addSeconds(2));
+                        \App\Jobs\EnableMikrotikJob::dispatch($customers->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(2));
                     } catch (\Exception $e) {
                         \Log::channel('payment')->warning('Duitku: Gagal mikrotik_enable untuk ' . $customers->customer_id . ': ' . $e->getMessage());
                     }

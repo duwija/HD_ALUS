@@ -74,6 +74,12 @@
   .mpopup-title { font-weight:700;font-size:12px;margin-bottom:4px; }
   .mpopup-row   { font-size:11px;color:var(--text-secondary);margin:2px 0; }
   .mpopup-badge { display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);margin-top:3px; }
+  .mpopup-badge-link {
+    display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;
+    font-weight:600;background:rgba(59,130,246,.15);color:#3b82f6;
+    border:1px solid rgba(59,130,246,.3);margin-top:3px;margin-left:4px;text-decoration:none;
+  }
+  .mpopup-badge-link:hover { background:rgba(59,130,246,.28);color:#2563eb;text-decoration:none; }
 
   /* ODP marker */
   .pppoe-odp-dot {
@@ -123,6 +129,12 @@
     to   { stroke-dashoffset: 0; }
   }
   .legend-flow-line { animation: legendFlow 1.2s linear infinite; }
+  /* Full page map mode */
+  body.map-fullscreen #mapPanel {
+    position: fixed; inset: 0; z-index: 1100; border-radius: 0;
+    height: 100vh !important; margin: 0; padding: 14px;
+  }
+  body.map-fullscreen #pppoe-inline-map { height: calc(100vh - 110px) !important; }
 </style>
 
 <div class="container-fluid">
@@ -180,11 +192,17 @@
             <button id="btnRefreshMap" class="btn btn-sm btn-outline-danger" style="border-radius:8px" title="Refresh map">
               <i class="fas fa-sync-alt"></i>
             </button>
+            <button id="btnZoomOffline" class="btn btn-sm btn-outline-warning" style="border-radius:8px" title="Zoom ke area offline" onclick="zoomToOffline()">
+              <i class="fas fa-crosshairs"></i>
+            </button>
+            <button id="btnFullPage" class="btn btn-sm btn-outline-secondary" style="border-radius:8px" title="Full Page" onclick="toggleFullPage()">
+              <i class="fas fa-expand"></i>
+            </button>
           </div>
         </div>
         <div style="margin-bottom:8px;min-height:18px">
-          <span id="mapStatBadge" class="map-offline-badge" style="display:none">
-            <i class="fas fa-circle" style="font-size:7px"></i><span id="mapCount">0</span> titik offline
+          <span id="mapStatBadge" class="map-offline-badge" style="display:none;cursor:pointer" title="Klik untuk lihat daftar" onclick="openOfflineModal()">
+            <i class="fas fa-circle" style="font-size:7px"></i><span id="mapCount">0</span> customer offline
           </span>
           <span id="mapLoadingText" style="font-size:11px;color:var(--text-muted);display:none">
             <i class="fas fa-spinner fa-spin mr-1"></i>Menghubungi router...
@@ -255,6 +273,27 @@
       </div>
       <div class="modal-footer" style="border-color:var(--border)">
         <span id="userListCount" class="mr-auto" style="font-size:12px;color:var(--text-muted)"></span>
+        <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{-- Offline Customer List Modal (map panel) --}}
+<div class="modal fade" id="offlineMonitorModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border)">
+      <div class="modal-header" style="border-color:var(--border);padding:12px 16px">
+        <h5 class="modal-title" style="font-size:15px;font-weight:700">
+          <i class="fas fa-exclamation-circle mr-2" style="color:#ef4444"></i>Daftar Customer Offline
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" style="color:var(--text-primary);opacity:.7">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="offlineMonitorListBody" style="padding:0;max-height:70vh;overflow-y:auto"></div>
+      <div class="modal-footer" style="border-color:var(--border);padding:8px 16px">
+        <span id="offlineMonitorCount" style="font-size:12px;color:var(--text-muted);flex:1"></span>
         <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Tutup</button>
       </div>
     </div>
@@ -566,6 +605,8 @@
       document.getElementById('mapCount').textContent = pts.length;
       document.getElementById('mapStatBadge').style.display = pts.length ? 'inline-flex' : 'none';
 
+      window._offlineCustomers = pts;
+      var odpInfo = data.odp_info || {};  // keyed by odp id
       var bounds = [];
       pts.forEach(function(m){
         var ll = [m.lat, m.lng];
@@ -576,15 +617,21 @@
           +(m.address ? '<div class="mpopup-row"><i class="fas fa-map-pin" style="width:12px;margin-right:3px"></i>'+m.address+'</div>' : '')
           +'<div class="mpopup-row"><i class="fas fa-server" style="width:12px;margin-right:3px"></i>'+m.router+'</div>'
           +(m.last_offline ? '<div class="mpopup-row" style="color:#f59e0b"><i class="fas fa-clock" style="width:12px;margin-right:3px"></i>Offline sejak: <b>'+m.last_offline+'</b></div>' : '')
-          +'<span class="mpopup-badge"><i class="fas fa-exclamation-circle" style="margin-right:3px"></i>Offline</span>';
-        L.marker(ll, { icon: redIcon }).bindPopup(popup, { maxWidth:220 }).addTo(markerLayer);
+          +'<span class="mpopup-badge"><i class="fas fa-exclamation-circle" style="margin-right:3px"></i>Offline</span>'
+          +(m.id ? '<a href="/customer/'+m.id+'" target="_blank" class="mpopup-badge-link"><i class="fas fa-external-link-alt" style="margin-right:3px"></i>Lihat Pelanggan</a>' : '');
+        L.marker(ll, { icon: redIcon }).bindPopup(popup, { maxWidth:240 }).addTo(markerLayer);
 
         // ODP marker + dashed line
         if(m.odp_lat != null && m.odp_lng != null){
           var odpll = [m.odp_lat, m.odp_lng];
-          var odpPopup = '<div class="mpopup-title"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:#f59e0b"></i>'+(m.odp_name||'ODP')+'</div>'
-            +'<div class="mpopup-row" style="font-size:10px">Dispoint / ODP</div>';
-          L.marker(odpll, { icon: odpIcon }).bindPopup(odpPopup, { maxWidth:180 }).addTo(markerLayer);
+          var odpInf = odpInfo[m.odp_id] || {};
+          var odpCount = (odpInf.customer_count !== undefined) ? odpInf.customer_count : '-';
+          var odpBtn = m.odp_id ? '<a href="/distpoint/'+m.odp_id+'" target="_blank" class="mpopup-badge-link" style="background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)"><i class="fas fa-external-link-alt" style="margin-right:3px"></i>Lihat ODP</a>' : '';
+          var odpPopup = '<div class="mpopup-title"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:#f59e0b"></i>'+(odpInf.name||m.odp_name||'ODP')+'</div>'
+            +'<div class="mpopup-row"><i class="fas fa-users" style="width:12px;margin-right:3px"></i>Pelanggan: <strong>'+odpCount+'</strong></div>'
+            +(odpInf.description && odpInf.description !== '-' ? '<div class="mpopup-row" style="font-size:10px">'+odpInf.description+'</div>' : '')
+            +'<div style="margin-top:4px">'+odpBtn+'</div>';
+          L.marker(odpll, { icon: odpIcon }).bindPopup(odpPopup, { maxWidth:200 }).addTo(markerLayer);
           L.polyline([ll, odpll], {
             color: '#f59e0b',
             weight: 2,
@@ -595,6 +642,7 @@
         }
       });
 
+      window._offlineBounds = bounds.slice();
       if(bounds.length === 1)       map.setView(bounds[0], 15);
       else if(bounds.length > 1)    map.fitBounds(bounds, { padding:[30,30], maxZoom:15 });
 
@@ -616,10 +664,20 @@
           html: '<div style="width:16px;height:16px;background:#3b82f6;border:2px solid #fff;border-radius:3px;box-shadow:0 0 0 2px rgba(59,130,246,.4)"></div>',
           iconSize:[16,16], iconAnchor:[8,8], popupAnchor:[0,-10]
         });
-        var parentPopup = '<div class="mpopup-title"><i class="fas fa-sitemap" style="margin-right:4px;color:#3b82f6"></i>'+link.parent_name+'</div>'
-          +'<div class="mpopup-row" style="font-size:10px">Parent ODP</div>';
-        var childPopup = '<div class="mpopup-title"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:#f59e0b"></i>'+link.child_name+'</div>'
-          +'<div class="mpopup-row" style="font-size:10px">Child ODP &rarr; <b>'+link.parent_name+'</b></div>';
+        var parentInf  = odpInfo[link.parent_id]  || {};
+        var childInf   = odpInfo[link.child_id]    || {};
+        var parentCount = (parentInf.customer_count !== undefined) ? parentInf.customer_count : '-';
+        var childCount  = (childInf.customer_count  !== undefined) ? childInf.customer_count  : '-';
+        var parentBtn = link.parent_id ? '<a href="/distpoint/'+link.parent_id+'" target="_blank" class="mpopup-badge-link" style="background:rgba(59,130,246,.15);color:#3b82f6;border-color:rgba(59,130,246,.3)"><i class="fas fa-external-link-alt" style="margin-right:3px"></i>Lihat ODP</a>' : '';
+        var childBtn  = link.child_id  ? '<a href="/distpoint/'+link.child_id+'" target="_blank" class="mpopup-badge-link" style="background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)"><i class="fas fa-external-link-alt" style="margin-right:3px"></i>Lihat ODP</a>' : '';
+        var parentPopup = '<div class="mpopup-title"><i class="fas fa-sitemap" style="margin-right:4px;color:#3b82f6"></i>'+(parentInf.name||link.parent_name)+'</div>'
+          +'<div class="mpopup-row"><i class="fas fa-users" style="width:12px;margin-right:3px"></i>Pelanggan: <strong>'+parentCount+'</strong></div>'
+          +'<div class="mpopup-row" style="font-size:10px">Parent ODP</div>'
+          +'<div style="margin-top:4px">'+parentBtn+'</div>';
+        var childPopup = '<div class="mpopup-title"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:#f59e0b"></i>'+(childInf.name||link.child_name)+'</div>'
+          +'<div class="mpopup-row"><i class="fas fa-users" style="width:12px;margin-right:3px"></i>Pelanggan: <strong>'+childCount+'</strong></div>'
+          +'<div class="mpopup-row" style="font-size:10px">Child ODP &rarr; <b>'+link.parent_name+'</b></div>'
+          +'<div style="margin-top:4px">'+childBtn+'</div>';
 
         // Only add parent marker once (avoid duplicates by checking layerGroup)
         var alreadyAdded = false;
@@ -668,6 +726,58 @@
 
   // Fix map size after layout settles
   setTimeout(function(){ map.invalidateSize(); }, 300);
+
+  // === Global helper functions for map panel buttons ===
+  window._pppoeInlineMap   = map;
+  window._offlineCustomers = [];
+  window._offlineBounds    = [];
+
+  window.zoomToOffline = function() {
+    var b = window._offlineBounds || [];
+    if (!b.length) return;
+    if (b.length === 1) map.setView(b[0], 15);
+    else map.fitBounds(b, { padding:[30,30], maxZoom:15 });
+  };
+
+  window.toggleFullPage = function() {
+    document.body.classList.toggle('map-fullscreen');
+    var icon = document.querySelector('#btnFullPage i');
+    if (document.body.classList.contains('map-fullscreen')) {
+      icon.className = 'fas fa-compress';
+      document.getElementById('btnFullPage').title = 'Keluar Full Page';
+    } else {
+      icon.className = 'fas fa-expand';
+      document.getElementById('btnFullPage').title = 'Full Page';
+    }
+    setTimeout(function() { map.invalidateSize(); }, 200);
+  };
+
+  window.openOfflineModal = function() {
+    var customers = window._offlineCustomers || [];
+    var rows = '';
+    if (!customers.length) {
+      rows = '<p class="text-center" style="padding:20px;color:var(--text-muted)">Tidak ada customer offline.</p>';
+    } else {
+      rows += '<table class="table table-sm" style="margin:0;font-size:12px">'
+            + '<thead style="position:sticky;top:0;background:var(--bg-surface);z-index:1">'
+            + '<tr><th style="width:32px">#</th><th>Nama</th><th>PPPoE</th><th>Router</th><th>Offline Sejak</th><th></th></tr>'
+            + '</thead><tbody>';
+      customers.forEach(function(m, i) {
+        rows += '<tr>'
+          + '<td style="color:var(--text-muted)">' + (i+1) + '</td>'
+          + '<td><strong>' + (m.name||'-') + '</strong><br><span style="color:var(--text-muted);font-size:11px">' + (m.customer_id||'') + '</span></td>'
+          + '<td><code style="font-size:11px">' + (m.pppoe||'-') + '</code></td>'
+          + '<td style="font-size:11px">' + (m.router||'-') + '</td>'
+          + '<td style="color:#f59e0b;font-size:11px">' + (m.last_offline||'-') + '</td>'
+          + '<td>' + (m.id ? '<a href="/customer/'+m.id+'" target="_blank" class="btn btn-xs btn-outline-primary" style="font-size:10px;padding:1px 7px;border-radius:20px"><i class="fas fa-external-link-alt"></i></a>' : '') + '</td>'
+          + '</tr>';
+      });
+      rows += '</tbody></table>';
+    }
+    document.getElementById('offlineMonitorListBody').innerHTML  = rows;
+    document.getElementById('offlineMonitorCount').textContent   = customers.length + ' customer offline';
+    $('#offlineMonitorModal').modal('show');
+  };
 })();
 </script>
 @endsection

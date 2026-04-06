@@ -225,7 +225,33 @@ env_variables: {
 - Tenant pakai Fonnte/WA Cloud → delay lebih aman
 - Tidak perlu redeploy, cukup ubah via Admin UI
 
-### 7. Queue Worker Configuration
+### 7. Isolir Job Delay
+```php
+// Tenant dengan banyak pelanggan & router cepat
+env_variables: {
+    "ISOLIR_DELAY_MIN": "30",
+    "ISOLIR_DELAY_MAX": "60",
+    "ISOLIR_LONG_PAUSE_EVERY": "10",
+    "ISOLIR_LONG_PAUSE_EXTRA": "120"
+}
+
+// Tenant dengan router/OLT lambat atau kapasitas terbatas
+env_variables: {
+    "ISOLIR_DELAY_MIN": "60",
+    "ISOLIR_DELAY_MAX": "120",
+    "ISOLIR_LONG_PAUSE_EVERY": "5",
+    "ISOLIR_LONG_PAUSE_EXTRA": "300"
+}
+```
+
+**Gunakan Isolir Job Delay untuk:**
+- Mengatur kecepatan job isolir massal agar router/OLT tidak kewalahan
+- Delay bersifat **kumulatif** — customer ke-N diproses setelah `delay × N` detik
+- Router dengan banyak koneksi serentak → naikkan delay
+- Log setiap job mencatat ETA untuk monitoring progress
+- Tidak perlu redeploy, cukup ubah via Admin UI
+
+### 8. Queue Worker Configuration
 ```php
 env_variables: {
     "QUEUE_SLEEP": "3",

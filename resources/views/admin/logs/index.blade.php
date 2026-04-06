@@ -26,18 +26,28 @@
 <div class="container-fluid">
 
     {{-- Header --}}
-    <div class="d-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
         <div>
             <h2 class="h4 mb-1"><i class="fas fa-scroll text-secondary mr-2"></i>Application Logs</h2>
             <small class="text-muted">
-                Tenant: <strong>{{ strtoupper($tenantKey) }}</strong> &bull;
-                <span class="text-success"><i class="fas fa-lock mr-1"></i>Log PHP channel ditulis per-tenant</span> &bull;
-                <span class="text-info"><i class="fas fa-code mr-1"></i>OLT log dari Python script</span>
+                <span class="text-info"><i class="fas fa-code mr-1"></i>OLT log dari Python script (shared)</span>
             </small>
         </div>
         <a href="{{ route('admin.tenants.index') }}" class="btn btn-sm btn-outline-secondary">
             <i class="fas fa-arrow-left mr-1"></i> Back
         </a>
+    </div>
+
+    {{-- Tenant selector tabs --}}
+    <div class="mb-3 d-flex align-items-center flex-wrap" style="gap:6px">
+        <span class="text-muted small mr-1"><i class="fas fa-database mr-1"></i>Tenant:</span>
+        @foreach($allTenants as $tKey => $tDir)
+        <a href="{{ route('admin.logs.index', ['tenant' => $tKey]) }}"
+           class="btn btn-sm {{ $tKey === $tenantKey ? 'btn-primary' : 'btn-outline-secondary' }}"
+           style="border-radius:20px;font-size:12px;padding:3px 12px">
+            {{ strtoupper($tKey) }}
+        </a>
+        @endforeach
     </div>
 
     @php
@@ -54,8 +64,45 @@
         ];
     @endphp
 
-    @if(empty($grouped))
-        <div class="alert alert-info"><i class="fas fa-info-circle mr-1"></i> Tidak ada file log ditemukan.</div>
+    @if(empty($grouped) && !$tenantLogInfo)
+        <div class="alert alert-info"><i class="fas fa-info-circle mr-1"></i> Tidak ada file log ditemukan untuk tenant <strong>{{ strtoupper($tenantKey) }}</strong>.</div>
+    @endif
+
+    {{-- Tenant laravel.log --}}
+    @if($tenantLogInfo)
+    <div class="card shadow-sm mb-4 log-card other">
+        <div class="card-header py-2 d-flex align-items-center">
+            <i class="fas fa-file-code mr-2 text-secondary"></i>
+            <strong>Laravel Log</strong>
+            <span class="badge badge-success ml-2" style="font-size:10px">
+                <i class="fas fa-lock mr-1"></i>{{ strtoupper($tenantKey) }} only
+            </span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+                <thead class="thead-light">
+                    <tr><th class="pl-3">Nama File</th><th>Ukuran</th><th>Terakhir Diubah</th><th class="text-right pr-3">Aksi</th></tr>
+                </thead>
+                <tbody>
+                    <tr class="file-row">
+                        <td class="pl-3"><i class="fas fa-file-alt text-muted mr-1"></i><code>laravel.log</code></td>
+                        <td><span class="text-muted small">
+                            @if($tenantLogInfo['size'] > 1048576) {{ number_format($tenantLogInfo['size']/1048576,2) }} MB
+                            @elseif($tenantLogInfo['size'] > 1024) {{ number_format($tenantLogInfo['size']/1024,1) }} KB
+                            @else {{ $tenantLogInfo['size'] }} B @endif
+                        </span></td>
+                        <td class="small text-muted">{{ date('d M Y H:i', $tenantLogInfo['modified']) }}</td>
+                        <td class="text-right pr-3">
+                            <a href="{{ route('admin.logs.view', ['file' => $tenantLogInfo['name']]) }}"
+                               class="btn btn-xs btn-outline-primary btn-sm py-0 px-2">
+                                <i class="fas fa-eye mr-1"></i> Lihat
+                            </a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
     @endif
 
     @foreach($typeLabels as $typeKey => $meta)
@@ -67,7 +114,7 @@
                 <span class="badge badge-secondary ml-2">{{ count($grouped[$typeKey]) }} file</span>
                 @if($meta['tenant'])
                 <span class="badge badge-success ml-1" style="font-size:10px">
-                    <i class="fas fa-lock mr-1"></i>{{ strtoupper($tenantKey) }} only
+                    <i class="fas fa-lock mr-1"></i>{{ strtoupper($tenantKey) }}
                 </span>
                 @elseif($typeKey === 'legacy')
                 <span class="badge badge-warning ml-1" style="font-size:10px">

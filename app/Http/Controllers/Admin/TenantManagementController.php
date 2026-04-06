@@ -1923,13 +1923,27 @@ class TenantManagementController extends Controller
      */
     public function logIndex(Request $request)
     {
-        $tenantKey = env('DB_DATABASE', 'default');
-        $tenantDir = storage_path("logs/tenant_{$tenantKey}");
-        $rootDir   = storage_path('logs');
+        $rootDir = storage_path('logs');
+
+        // Discover all tenant log directories
+        $allTenants = [];
+        foreach (glob($rootDir . '/tenant_*', GLOB_ONLYDIR) as $dir) {
+            $key = preg_replace('/^tenant_/', '', basename($dir));
+            $allTenants[$key] = basename($dir); // e.g. 'kencana' => 'tenant_kencana'
+        }
+        ksort($allTenants);
+
+        // Selected tenant (from query string, default to first available)
+        $tenantKey = $request->query('tenant', array_key_first($allTenants) ?? env('DB_DATABASE', 'default'));
+        // Validate — must be a real directory
+        if (!isset($allTenants[$tenantKey])) {
+            $tenantKey = array_key_first($allTenants) ?? env('DB_DATABASE', 'default');
+        }
+        $tenantDir = $rootDir . '/' . ($allTenants[$tenantKey] ?? "tenant_{$tenantKey}");
 
         $files = [];
 
-        // Scan tenant-specific dir (invoice, notif, payment, auth, laravel, etc.)
+        // Scan selected tenant dir
         if (is_dir($tenantDir)) {
             foreach (glob($tenantDir . '/*.log') as $path) {
                 $name = basename($path);
@@ -1954,22 +1968,15 @@ class TenantManagementController extends Controller
             }
         }
 
-        // Scan root dir for Python OLT/jobs logs (not tenant PHP channels)
+        // Scan root dir for Python OLT/jobs logs (shared, not per-tenant)
         foreach (glob($rootDir . '/*.log') as $path) {
             $name = basename($path);
             if ($name === 'laravel.log') continue;
-            // Skip legacy PHP channel files that have been migrated to tenant dir
             $phpChannels = ['invoice', 'notif', 'payment', 'isolir', 'auth', 'jobsprocess'];
             $isPhpChannel = false;
             foreach ($phpChannels as $p) { if (str_starts_with($name, $p)) { $isPhpChannel = true; break; } }
 
-            if (str_starts_with($name, 'olt_log')) {
-                $type = 'olt';
-            } elseif ($isPhpChannel) {
-                $type = 'legacy'; // old shared files before migration
-            } else {
-                $type = 'other';
-            }
+            $type = str_starts_with($name, 'olt_log') ? 'olt' : ($isPhpChannel ? 'legacy' : 'other');
 
             $files[] = [
                 'name'     => $name,
@@ -1988,7 +1995,15 @@ class TenantManagementController extends Controller
             $grouped[$f['type']][] = $f;
         }
 
-        return view('admin.logs.index', compact('grouped', 'files', 'tenantKey'));
+        // Tenant laravel.log
+        $tenantLogPath = $tenantDir . '/laravel.log';
+        $tenantLogInfo = file_exists($tenantLogPath) ? [
+            'name'     => "tenant_{$tenantKey}/laravel.log",
+            'size'     => filesize($tenantLogPath),
+            'modified' => filemtime($tenantLogPath),
+        ] : null;
+
+        return view('admin.logs.index', compact('grouped', 'files', 'tenantKey', 'allTenants', 'tenantLogInfo'));
     }
 
     /**
@@ -2079,16 +2094,9 @@ class TenantManagementController extends Controller
         $tenant = Tenant::findOrFail($id);
         $slug = explode('.', $tenant->domain)[0];
         $tenantQueue = $tenant->domain;
-
-        // Supervisor: try per-tenant program first, fall back to shared kencana_queue_worker
         $programGroup = "{$slug}_queue_worker";
-        $supervisorOutput = shell_exec("sudo supervisorctl status '{$programGroup}:*' 2>&1");
-        $hasOwnWorker = $supervisorOutput && str_contains($supervisorOutput, $programGroup . ':');
-        if (!$hasOwnWorker) {
-            $programGroup = 'kencana_queue_worker';
-            $supervisorOutput = shell_exec("sudo supervisorctl status '{$programGroup}:*' 2>&1");
-        }
 
+        $supervisorOutput = shell_exec("sudo supervisorctl status '{$programGroup}:*' 2>&1");
         $workers = [];
         if ($supervisorOutput) {
             foreach (explode("\n", trim($supervisorOutput)) as $line) {
@@ -2140,13 +2148,7 @@ class TenantManagementController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
         $slug   = explode('.', $tenant->domain)[0];
-
-        // Use per-tenant program if exists, otherwise restart shared worker
         $programGroup = "{$slug}_queue_worker";
-        $check = shell_exec("sudo supervisorctl status '{$programGroup}:*' 2>&1");
-        if (!$check || !str_contains($check, $programGroup . ':')) {
-            $programGroup = 'kencana_queue_worker';
-        }
 
         $output = shell_exec("sudo supervisorctl restart '{$programGroup}:*' 2>&1");
 

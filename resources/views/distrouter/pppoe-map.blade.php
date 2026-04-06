@@ -45,6 +45,13 @@
     font-weight:600; background:rgba(239,68,68,.15); color:#ef4444;
     border:1px solid rgba(239,68,68,.3); margin-top:4px;
   }
+  .popup-badge-link {
+    display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px;
+    font-weight:600; background:rgba(59,130,246,.15); color:#3b82f6;
+    border:1px solid rgba(59,130,246,.3); margin-top:4px; margin-left:4px;
+    text-decoration:none;
+  }
+  .popup-badge-link:hover { background:rgba(59,130,246,.28); color:#2563eb; text-decoration:none; }
   .map-legend {
     display:flex; align-items:center; gap:14px; flex-wrap:wrap;
     font-size:11px; color:var(--text-secondary); margin-bottom:6px;
@@ -112,8 +119,8 @@
       <i class="fas fa-layer-group" style="color:#8b5cf6"></i> Map Layers
     </label>
 
-    <span id="statOffline" class="map-stat ms-offline" style="display:none">
-      <i class="fas fa-circle" style="font-size:7px"></i><span id="countOffline">0</span> titik offline
+    <span id="statOffline" class="map-stat ms-offline" style="display:none;cursor:pointer" title="Klik untuk lihat daftar" onclick="openOfflineModal()">
+      <i class="fas fa-circle" style="font-size:7px"></i><span id="countOffline">0</span> customer offline
     </span>
 
     <span id="statCountdown" class="map-stat" style="background:rgba(99,102,241,.1);color:#6366f1;border:1px solid rgba(99,102,241,.25)">
@@ -145,6 +152,30 @@
   </div>
 
 </div>
+
+<!-- Offline Customer List Modal -->
+<div class="modal fade" id="offlineListModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border)">
+      <div class="modal-header" style="border-color:var(--border);padding:12px 16px">
+        <h5 class="modal-title" style="font-size:15px;font-weight:700">
+          <i class="fas fa-exclamation-circle mr-2" style="color:#ef4444"></i>Daftar Customer Offline
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" style="color:var(--text-primary);opacity:.7">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="offlineListBody" style="padding:0;max-height:70vh;overflow-y:auto">
+        <!-- filled by JS -->
+      </div>
+      <div class="modal-footer" style="border-color:var(--border);padding:8px 16px">
+        <span id="offlineModalCount" style="font-size:12px;color:var(--text-muted);flex:1"></span>
+        <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 @endsection
 
 @section('footer-scripts')
@@ -346,11 +377,23 @@ function initPppoeMap() {
 
     $.getJSON(url, function(data) {
       showLoading(false);
-      var pts   = data.markers   || [];
-      var links = data.odp_links || [];
+      var pts     = data.markers   || [];
+      var links   = data.odp_links || [];
+      var odpInfo = data.odp_info  || {};  // keyed by odp id
 
-      // Debug info
-      console.log('[PPPoE Map] markers:', pts.length, 'odp_links:', links.length);
+      // Build helper: build ODP popup HTML from odp_info
+      function buildOdpPopup(odpId, odpName, extraRow) {
+        var info   = odpInfo[odpId] || {};
+        var title  = info.name || odpName || 'ODP';
+        var count  = (info.customer_count !== undefined) ? info.customer_count : '-';
+        var desc   = info.description && info.description !== '-' ? '<div class="popup-row"><i class="fas fa-info-circle mr-1" style="width:14px"></i>' + info.description + '</div>' : '';
+        var btnLink = odpId ? '<a href="/distpoint/' + odpId + '" target="_blank" class="popup-badge-link" style="background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)"><i class="fas fa-external-link-alt mr-1"></i>Lihat ODP</a>' : '';
+        return '<div class="popup-title"><i class="fas fa-map-marker-alt mr-1" style="color:#f59e0b"></i>' + title + '</div>'
+          + '<div class="popup-row"><i class="fas fa-users mr-1" style="width:14px"></i>Pelanggan terhubung: <strong>' + count + '</strong></div>'
+          + desc
+          + (extraRow || '')
+          + '<div style="margin-top:5px">' + btnLink + '</div>';
+      }
 
       document.getElementById('statOffline').style.display = pts.length ? 'inline-flex' : 'none';
       document.getElementById('countOffline').textContent  = pts.length;
@@ -373,7 +416,8 @@ function initPppoeMap() {
           + (m.address ? '<div class="popup-row"><i class="fas fa-map-pin mr-1" style="width:14px"></i>' + m.address + '</div>' : '')
           + '<div class="popup-row"><i class="fas fa-server mr-1" style="width:14px"></i>' + m.router + '</div>'
           + (m.last_offline ? '<div class="popup-row" style="color:#f59e0b"><i class="fas fa-clock mr-1" style="width:14px"></i>Offline sejak: <b>' + m.last_offline + '</b></div>' : '')
-          + '<span class="popup-badge"><i class="fas fa-exclamation-circle mr-1"></i>Offline</span>';
+          + '<span class="popup-badge"><i class="fas fa-exclamation-circle mr-1"></i>Offline</span>'
+          + (m.id ? '<a href="/customer/' + m.id + '" target="_blank" class="popup-badge-link"><i class="fas fa-external-link-alt mr-1"></i>Lihat Pelanggan</a>' : '');
 
         var marker = L.marker(ll, { icon: redIcon }).bindPopup(popup, { maxWidth: 260 });
         offlineCluster.addLayer(marker);
@@ -383,7 +427,7 @@ function initPppoeMap() {
           addedOdps[m.odp_name] = true;
           bounds.push([m.odp_lat, m.odp_lng]);
           L.marker([m.odp_lat, m.odp_lng], { icon: odpIcon })
-            .bindPopup('<div class="popup-title"><i class="fas fa-map-marker-alt mr-1" style="color:#f59e0b"></i>' + (m.odp_name || 'ODP') + '</div><div class="popup-row" style="font-size:11px">ODP / Dispoint</div>', { maxWidth: 200 })
+            .bindPopup(buildOdpPopup(m.odp_id, m.odp_name), { maxWidth: 240 })
             .addTo(odpGroup);
         }
       });
@@ -397,13 +441,15 @@ function initPppoeMap() {
         if (!addedOdps[link.child_name]) {
           addedOdps[link.child_name] = true;
           L.marker(childll, { icon: odpIcon })
-            .bindPopup('<div class="popup-title"><i class="fas fa-map-marker-alt mr-1" style="color:#f59e0b"></i>' + link.child_name + '</div><div class="popup-row" style="font-size:11px">Child ODP &rarr; <b>' + link.parent_name + '</b></div>', { maxWidth: 200 })
+            .bindPopup(buildOdpPopup(link.child_id, link.child_name,
+              '<div class="popup-row" style="font-size:11px"><i class="fas fa-sitemap mr-1" style="width:14px"></i>Child ODP &rarr; <b>' + link.parent_name + '</b></div>'), { maxWidth: 240 })
             .addTo(odpGroup);
         }
         if (!addedParents[link.parent_name]) {
           addedParents[link.parent_name] = true;
           L.marker(parentll, { icon: parentIcon })
-            .bindPopup('<div class="popup-title"><i class="fas fa-sitemap mr-1" style="color:#3b82f6"></i>' + link.parent_name + '</div><div class="popup-row" style="font-size:11px">Parent ODP</div>', { maxWidth: 200 })
+            .bindPopup(buildOdpPopup(link.parent_id, link.parent_name,
+              '<div class="popup-row" style="font-size:11px"><i class="fas fa-sitemap mr-1" style="width:14px"></i>Parent ODP</div>'), { maxWidth: 240 })
             .addTo(parentGroup);
         }
       });
@@ -420,6 +466,39 @@ function initPppoeMap() {
       alert('Gagal mengambil data. Status: ' + xhr.status);
     });
   }
+
+  // === Offline modal ===
+  window.openOfflineModal = function() {
+    var rows = '';
+    if (!customerData.length) {
+      rows = '<p class="text-center" style="padding:20px;color:var(--text-muted)">Tidak ada customer offline.</p>';
+    } else {
+      rows += '<table class="table table-sm" style="margin:0;font-size:12px">';
+      rows += '<thead style="position:sticky;top:0;background:var(--bg-surface);z-index:1">'
+            + '<tr>'
+            + '<th style="width:32px">#</th>'
+            + '<th>Nama</th>'
+            + '<th>PPPoE</th>'
+            + '<th>Router</th>'
+            + '<th>Offline Sejak</th>'
+            + '<th></th>'
+            + '</tr></thead><tbody>';
+      customerData.forEach(function(m, i) {
+        rows += '<tr>'
+          + '<td style="color:var(--text-muted)">' + (i+1) + '</td>'
+          + '<td><strong>' + (m.name||'-') + '</strong><br><span style="color:var(--text-muted);font-size:11px">' + (m.customer_id||'') + '</span></td>'
+          + '<td><code style="font-size:11px">' + (m.pppoe||'-') + '</code></td>'
+          + '<td style="font-size:11px">' + (m.router||'-') + '</td>'
+          + '<td style="color:#f59e0b;font-size:11px">' + (m.last_offline||'-') + '</td>'
+          + '<td>' + (m.id ? '<a href="/customer/'+m.id+'" target="_blank" class="btn btn-xs btn-outline-primary" style="font-size:10px;padding:1px 7px;border-radius:20px"><i class="fas fa-external-link-alt"></i></a>' : '') + '</td>'
+          + '</tr>';
+      });
+      rows += '</tbody></table>';
+    }
+    document.getElementById('offlineListBody').innerHTML  = rows;
+    document.getElementById('offlineModalCount').textContent = customerData.length + ' customer offline';
+    $('#offlineListModal').modal('show');
+  };
 
   document.getElementById('btnRefreshMap').addEventListener('click', function() {
     resetCountdown();

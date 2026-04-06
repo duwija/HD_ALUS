@@ -131,7 +131,7 @@ class DistrouterController extends Controller
                     ->whereIn('pppoe', $offlineNames)
                     ->whereNotNull('coordinate')
                     ->where('coordinate', '!=', '')
-                    ->get(['name', 'pppoe', 'coordinate', 'phone', 'address', 'customer_id', 'id_distpoint']);
+                    ->get(['id', 'name', 'pppoe', 'coordinate', 'phone', 'address', 'customer_id', 'id_distpoint']);
 
                 foreach ($customers as $c) {
                     $coords = array_map('trim', explode(',', $c->coordinate));
@@ -157,6 +157,7 @@ class DistrouterController extends Controller
                     $markers[] = [
                         'lat'          => $lat,
                         'lng'          => $lng,
+                        'id'           => $c->id,
                         'name'         => $c->name,
                         'customer_id'  => $c->customer_id,
                         'pppoe'        => $c->pppoe,
@@ -164,6 +165,7 @@ class DistrouterController extends Controller
                         'address'      => $c->address,
                         'router'       => $router->name,
                         'last_offline' => $lastLoggedOut[$c->pppoe] ?? null,
+                        'odp_id'       => $c->distpoint_name ? $c->distpoint_name->id : null,
                         'odp_lat'      => $odpLat,
                         'odp_lng'      => $odpLng,
                         'odp_name'     => $odpName,
@@ -173,6 +175,24 @@ class DistrouterController extends Controller
             } catch (\Exception $e) {
                 \Log::warning("[PppoeMap] Router {$router->name}: " . $e->getMessage());
             }
+        }
+
+        // --- Build ODP info (id + total customer count) ---
+        $odpInfo = [];
+        try {
+            $allDistpoints = \App\Distpoint::withCount('customer')
+                ->whereNotNull('coordinate')->where('coordinate', '!=', '')
+                ->get(['id', 'name', 'description']);
+            foreach ($allDistpoints as $dp) {
+                $odpInfo[$dp->id] = [
+                    'id'             => $dp->id,
+                    'name'           => $dp->name,
+                    'description'    => $dp->description,
+                    'customer_count' => $dp->customer_count,
+                ];
+            }
+        } catch (\Exception $e) {
+            \Log::warning('[PppoeMap] ODP info build: ' . $e->getMessage());
         }
 
         // --- Build ODP parent-child links ---
@@ -206,7 +226,9 @@ class DistrouterController extends Controller
                 if ($plat === 0.0 && $plng === 0.0) continue;
 
                 $odpLinks[] = [
+                    'child_id'    => $dp->id,
                     'child_lat'   => $clat, 'child_lng'   => $clng, 'child_name'  => $dp->name,
+                    'parent_id'   => $parent->id,
                     'parent_lat'  => $plat, 'parent_lng'  => $plng, 'parent_name' => $parent->name,
                 ];
             }
@@ -218,6 +240,7 @@ class DistrouterController extends Controller
             'count'     => count($markers),
             'markers'   => $markers,
             'odp_links' => $odpLinks,
+            'odp_info'  => $odpInfo,
         ]);
     }
 

@@ -60,16 +60,17 @@ public function searchforjurnal(Request $request) {
             return redirect()->back()->with('error', 'Sorry, You Are Not Allowed to Access Destination page !!');
         }
 
-        $tenantKey  = env('DB_DATABASE', 'default');
-        $tenantDir  = storage_path("logs/tenant_{$tenantKey}");
-        $rootDir    = storage_path('logs');
+        // Gunakan tenant aktif dari session multi-tenant, fallback ke DB_DATABASE
+        $tenantKey = app()->bound('tenant') ? (app('tenant')['db_database'] ?? env('DB_DATABASE', 'default')) : env('DB_DATABASE', 'default');
+        $tenantDir = storage_path("logs/tenant_{$tenantKey}");
+        $rootDir   = storage_path('logs');
 
-        // Tenant-specific channel logs (invoice, notif, payment, auth, laravel)
+        // Tenant-specific channel logs
         $tenantFiles = [];
         if (is_dir($tenantDir)) {
             foreach (glob($tenantDir . '/*.log') as $path) {
                 $name = basename($path);
-                if ($name === 'laravel.log') continue; // shown separately
+                if ($name === 'laravel.log') continue;
                 $tenantFiles[] = [
                     'name'     => "tenant_{$tenantKey}/{$name}",
                     'label'    => $name,
@@ -80,7 +81,7 @@ public function searchforjurnal(Request $request) {
         }
         usort($tenantFiles, fn($a, $b) => $b['modified'] - $a['modified']);
 
-        // Non-tenant logs from Python (olt_log_*.log, jobsprocess.log) — root storage/logs/
+        // Non-tenant logs (Python OLT logs, etc.) from root storage/logs/
         $rootFiles = [];
         foreach (glob($rootDir . '/*.log') as $path) {
             $name = basename($path);
@@ -95,7 +96,7 @@ public function searchforjurnal(Request $request) {
         usort($rootFiles, fn($a, $b) => $b['modified'] - $a['modified']);
 
         // Tenant laravel.log
-        $tenantLogPath   = storage_path("logs/tenant_{$tenantKey}/laravel.log");
+        $tenantLogPath   = $tenantDir . '/laravel.log';
         $tenantLogExists = file_exists($tenantLogPath);
         $tenantLogInfo   = $tenantLogExists ? [
             'name'     => "tenant_{$tenantKey}/laravel.log",
@@ -103,7 +104,6 @@ public function searchforjurnal(Request $request) {
             'modified' => filemtime($tenantLogPath),
         ] : null;
 
-        // App files combined = tenant files + root non-laravel files
         $appFiles = array_merge($tenantFiles, $rootFiles);
 
         return view('user/log', compact('appFiles', 'tenantLogInfo', 'tenantKey'));

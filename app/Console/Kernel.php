@@ -13,10 +13,9 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
-
-     Commands\InvoiceCron::class,
-        //
-  ];
+        Commands\InvoiceCron::class,
+        Commands\IsolirAuto::class,
+    ];
 
     /**
      * Define the application's command schedule.
@@ -26,7 +25,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        $schedule->job(new \App\Jobs\AutoIsolirCustomerJob)->dailyAt('07:47');
+        $schedule->command('isolir:auto')->dailyAt('01:00');
         $schedule->command('pppoe:collect-stats-all')->everyThreeMinutes();
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Config;
 use App\Customer;
 use App\Distrouter;
 use Illuminate\Bus\Queueable;
@@ -18,14 +19,19 @@ class EnableMikrotikJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected $customerId;
+    protected $tenantDomain;
 
     public function __construct($customerId)
     {
         $this->customerId = $customerId;
+        $tenant = app('tenant');
+        $this->tenantDomain = $tenant['domain'] ?? null;
     }
 
     public function handle()
     {
+        $this->restoreTenantContext();
+
         $customer = Customer::withTrashed()->find($this->customerId);
         if (!$customer) {
             \Log::error("Customer not found with ID {$this->customerId}");
@@ -82,6 +88,36 @@ class EnableMikrotikJob implements ShouldQueue
                 'Gagal enable PPPoE setelah ' . $maxRetries . ' percobaan internal',
                 $maxRetries
             );
+        }
+    }
+
+    private function restoreTenantContext(): void
+    {
+        if (empty($this->tenantDomain)) return;
+
+        try {
+            $tenantModel = \App\Tenant::on('isp_master')->where('domain', $this->tenantDomain)->first();
+            if (!$tenantModel) return;
+
+            $tenant = $tenantModel->toTenantArray();
+            app()->instance('tenant', $tenant);
+
+            $dbConfig = [
+                'host'     => $tenant['db_host']     ?? env('DB_HOST'),
+                'port'     => $tenant['db_port']     ?? env('DB_PORT'),
+                'database' => $tenant['db_database'] ?? env('DB_DATABASE'),
+                'username' => $tenant['db_username'] ?? env('DB_USERNAME'),
+                'password' => $tenant['db_password'] ?? env('DB_PASSWORD'),
+            ];
+            foreach ($dbConfig as $key => $value) {
+                Config::set('database.connections.mysql.' . $key, $value);
+            }
+            \DB::purge('mysql');
+            \DB::reconnect('mysql');
+
+            \Log::info("[TENANT] EnableMikrotikJob context restored: domain={$this->tenantDomain} db={$tenant['db_database']}");
+        } catch (\Exception $e) {
+            \Log::error('[TENANT] EnableMikrotikJob gagal restore context: ' . $e->getMessage());
         }
     }
 

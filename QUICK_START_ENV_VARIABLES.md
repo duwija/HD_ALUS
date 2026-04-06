@@ -68,6 +68,13 @@ NOTIF_LONG_PAUSE_EXTRA = 60
 
 # Tenant dengan gateway ketat (anti-spam)
 NOTIF_DELAY_MIN = 180
+
+# --- Isolir Job Delay (opsional, ada default) ---
+# Jeda antar job isolir massal (detik). Delay bersifat kumulatif.
+# ISOLIR_DELAY_MIN = 30
+# ISOLIR_DELAY_MAX = 60
+# ISOLIR_LONG_PAUSE_EVERY = 10
+# ISOLIR_LONG_PAUSE_EXTRA = 120
 NOTIF_DELAY_MAX = 360
 NOTIF_LONG_PAUSE_EVERY = 20
 NOTIF_LONG_PAUSE_EXTRA = 600

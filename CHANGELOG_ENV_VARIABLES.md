@@ -14,6 +14,25 @@
 #### Notes
 - Nilai ini bisa dioverride per tenant dari menu **Custom Environment Variables** di admin tenant.
 
+## [1.3.0] - 2026-04-06
+
+### 🔒 Isolir Job Delay Variables
+
+#### Added
+- `ISOLIR_DELAY_MIN` — Delay minimum antar job isolir massal (detik, default: 30)
+- `ISOLIR_DELAY_MAX` — Delay maksimum antar job isolir massal (detik, default: 60)
+- `ISOLIR_LONG_PAUSE_EVERY` — Long pause setiap N customer diproses (default: 10)
+- `ISOLIR_LONG_PAUSE_EXTRA` — Extra delay saat long pause (detik, default: 120)
+
+#### Changed
+- `SendsCustomerNotification::isolirDelay()` — method baru, delay dihitung dari `tenant_config()` dengan fallback ke nilai default
+- `SuminvoiceController::customerisolirJob()` — delay sekarang kumulatif (`delay × index`) dan bisa dikonfigurasi per-tenant via Tenant ENV
+
+#### Use Case
+Tenant dengan banyak pelanggan dan router kapasitas terbatas bisa memperlambat eksekusi isolir massal agar router tidak kewalahan. Log setiap job mencatat ETA `+Xs` untuk monitoring.
+
+---
+
 ## [1.2.0] - 2026-02-27
 
 ### 🔔 Notification Delay Variables
