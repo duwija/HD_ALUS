@@ -165,6 +165,7 @@
     document.getElementById('view-mode').style.display = 'none';
     document.getElementById('edit-mode').style.display = '';
     this.style.display = 'none';
+    initSelect2All();
     recalcEditTotals(); // hitung saldo saat edit mode dibuka
   });
   document.getElementById('btn-cancel-edit').addEventListener('click', function() {
@@ -198,6 +199,19 @@
     return opts;
   })();
 
+  // Initialize Select2 on all akun selects in edit mode
+  function initSelect2All() {
+    $('#edit-rows-body .row-akun').each(function() {
+      if (!$(this).hasClass('select2-hidden-accessible')) {
+        $(this).select2({
+          placeholder: '-- Pilih Akun --',
+          allowClear: false,
+          width: '100%',
+        });
+      }
+    });
+  }
+
   // Renumber rows
   function renumberRows() {
     document.querySelectorAll('#edit-rows-body .edit-row').forEach(function(tr, i) {
@@ -217,6 +231,12 @@
       '<td><input type="number" class="form-control form-control-sm edit-kredit row-kredit" value="0" min="0" step="0.01"></td>' +
       '<td class="text-center"><button type="button" class="btn btn-danger btn-sm btn-delete-row" title="Hapus baris"><i class="fas fa-trash"></i></button></td>';
     document.getElementById('edit-rows-body').appendChild(tr);
+    // Init Select2 on the new row's select
+    $(tr).find('.row-akun').select2({
+      placeholder: '-- Pilih Akun --',
+      allowClear: false,
+      width: '100%',
+    });
     renumberRows();
     recalcEditTotals();
   });
@@ -301,7 +321,7 @@
     document.querySelectorAll('#edit-rows-body .edit-row').forEach(function(tr) {
       formData.rows.push({
         id:          tr.querySelector('.row-id').value,
-        id_akun:     tr.querySelector('.row-akun').value,
+        id_akun:     $(tr).find('.row-akun').val(),
         description: tr.querySelector('.row-desc').value,
         debet:       tr.querySelector('.row-debet').value,
         kredit:      tr.querySelector('.row-kredit').value,
