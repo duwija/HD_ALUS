@@ -50,7 +50,7 @@
 
           <div class="form-group col-md-3">
             <label for="amount">Jumlah</label>
-            <input type="number" id="amount" name="amount" class="form-control" step="0.01" placeholder="Rp 0,00" required>
+            <input type="text" id="amount" name="amount" class="form-control" inputmode="numeric" autocomplete="off" placeholder="0" required>
           </div>
         </div>
 
@@ -80,7 +80,7 @@
 
           <div class="form-group col-md-3">
             <label for="transaction_date_display">Tgl Transaksi</label>
-            <input type="text" class="form-control" id="transaction_date_display" value="{{ date('d/m/Y') }}" autocomplete="off" required readonly>
+            <input type="text" class="form-control" id="transaction_date_display" value="{{ date('d/m/Y') }}" autocomplete="off" required placeholder="dd/mm/yyyy">
             <input type="hidden" name="transaction_date" id="transaction_date_hidden" value="{{ date('Y-m-d') }}">
           </div>
         </div>
@@ -108,6 +108,47 @@ $(document).ready(function() {
     var dd = String(d.getDate()).padStart(2, '0');
     $('#transaction_date_hidden').val(yyyy + '-' + mm + '-' + dd);
   });
+
+  // Izinkan ketik tanggal manual (format: dd/mm/yyyy)
+  $('#transaction_date_display').on('input', function() {
+    var val = $(this).val().replace(/[^0-9\/]/g, '');
+    if (val.length === 2 && val.indexOf('/') === -1) val += '/';
+    else if (val.length === 5 && val.split('/').length - 1 === 1) val += '/';
+    $(this).val(val);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+      var parts = val.split('/');
+      var dNum = parseInt(parts[0], 10);
+      var mNum = parseInt(parts[1], 10) - 1;
+      var yNum = parseInt(parts[2], 10);
+      var dateObj = new Date(yNum, mNum, dNum);
+      if (dateObj.getFullYear() === yNum && dateObj.getMonth() === mNum && dateObj.getDate() === dNum) {
+        $('#transaction_date_display').datepicker('update', val);
+        $('#transaction_date_hidden').val(yNum + '-' + String(mNum + 1).padStart(2, '0') + '-' + String(dNum).padStart(2, '0'));
+      }
+    }
+  });
+
+  // Format ribuan untuk input amount
+  $('#amount').on('input', function() {
+    var raw = $(this).val().replace(/[^0-9,]/g, '');
+    if (!raw.endsWith(',')) {
+      var num = parseFloat(raw.replace(/\./g, '').replace(',', '.')) || 0;
+      $(this).val(raw === '' ? '' : (num > 0 ? num.toLocaleString('id-ID') : '0'));
+    } else {
+      $(this).val(raw);
+    }
+  });
+
+  $('#amount').on('blur', function() {
+    if ($(this).val().trim() === '') $(this).val('0');
+  });
+
+  // Strip ribuan sebelum submit
+  $('form').on('submit', function() {
+    var raw = String($('#amount').val()).replace(/\./g, '').replace(',', '.');
+    $('#amount').val(parseFloat(raw) || 0);
+  });
+
 });
 </script>
 @endsection

@@ -35,7 +35,7 @@
           <div class="row">
             <div class="col-md-4">
               <label for="date_display" class="form-label"><i class="far fa-calendar-alt mr-1"></i> Tanggal Transaksi</label>
-              <input type="text" class="form-control" id="date_display" value="{{ now()->format('d/m/Y') }}" autocomplete="off" required readonly>
+              <input type="text" class="form-control" id="date_display" value="{{ now()->format('d/m/Y') }}" autocomplete="off" required placeholder="dd/mm/yyyy">
               <input type="hidden" name="date" id="date_hidden" value="{{ now()->format('Y-m-d') }}">
             </div>
             <div class="col-md-4">
@@ -92,8 +92,8 @@
                     </select>
                   </td>
                   <td><input type="text" name="description[]" class="form-control" placeholder="Keterangan transaksi"></td>
-                  <td><input type="number" name="debet[]" class="form-control jumlah" placeholder="0" min="0" step="0.01" required></td>
-                  <td><input type="number" name="kredit[]" class="form-control jumlah" placeholder="0" min="0" step="0.01" required></td>
+                  <td><input type="text" name="debet[]" class="form-control jumlah" placeholder="0" inputmode="numeric" autocomplete="off"></td>
+                  <td><input type="text" name="kredit[]" class="form-control jumlah" placeholder="0" inputmode="numeric" autocomplete="off"></td>
                   <td class="text-center">
                     <button type="button" class="btn btn-danger btn-sm delete-row">
                       <i class="fas fa-trash"></i>
@@ -105,10 +105,10 @@
                 <tr>
                   <td colspan="2" class="text-right"><strong>TOTAL:</strong></td>
                   <td>
-                    <input type="number" readonly name="totaldebet" id="totalAmountdebet" class="form-control" placeholder="0" min="0" step="0.01" required>
+                    <input type="text" readonly name="totaldebet" id="totalAmountdebet" class="form-control" placeholder="0">
                   </td>
                   <td>
-                    <input type="number" readonly name="totalkredit" id="totalAmountkredit" class="form-control" placeholder="0" min="0" step="0.01" required>
+                    <input type="text" readonly name="totalkredit" id="totalAmountkredit" class="form-control" placeholder="0">
                   </td>
                   <td></td>
                 </tr>
@@ -254,9 +254,43 @@
     $('#date_hidden').val(yyyy + '-' + mm + '-' + dd);
   });
 
+  // Izinkan ketik tanggal manual (format: dd/mm/yyyy)
+  $('#date_display').on('input', function() {
+    var val = $(this).val().replace(/[^0-9\/]/g, '');
+    // Auto-insert slash setelah DD dan MM
+    if (val.length === 2 && val.indexOf('/') === -1) val += '/';
+    else if (val.length === 5 && val.split('/').length - 1 === 1) val += '/';
+    $(this).val(val);
+    // Saat sudah lengkap dd/mm/yyyy
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+      var parts = val.split('/');
+      var dNum = parseInt(parts[0], 10);
+      var mNum = parseInt(parts[1], 10) - 1;
+      var yNum = parseInt(parts[2], 10);
+      var dateObj = new Date(yNum, mNum, dNum);
+      if (dateObj.getFullYear() === yNum && dateObj.getMonth() === mNum && dateObj.getDate() === dNum) {
+        $('#date_display').datepicker('update', val);
+        $('#date_hidden').val(yNum + '-' + String(mNum + 1).padStart(2, '0') + '-' + String(dNum).padStart(2, '0'));
+      }
+    }
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
     const transaksiTable = document.getElementById('transaksiTable');
     const addRowBtn = document.getElementById('addRow');
+
+    // Helper: format angka dengan pemisah ribuan (titik, locale id-ID)
+    function formatRibuan(num) {
+      if (isNaN(num) || num === 0) return '0';
+      return num.toLocaleString('id-ID');
+    }
+    // Helper: strip pemisah ribuan lalu parse ke float
+    function parseRibuan(val) {
+      if (typeof val === 'number') return val;
+      // id-ID: titik=ribuan, koma=desimal
+      var clean = String(val).replace(/\./g, '').replace(',', '.');
+      return parseFloat(clean) || 0;
+    }
 
     addRowBtn.addEventListener('click', function () {
       const newRow = document.createElement('tr');
@@ -268,8 +302,8 @@
       </select>
       </td>
       <td><input type="text" name="description[]" class="form-control" placeholder="Deskripsi"></td>
-      <td><input type="number" name="debet[]" class="form-control jumlah" placeholder="Rp. 0,00" min="0" step="0.01" required></td>
-      <td><input type="number" name="kredit[]" class="form-control jumlah" placeholder="Rp. 0,00" min="0" step="0.01" required></td>
+      <td><input type="text" name="debet[]" class="form-control jumlah" placeholder="0" inputmode="numeric" autocomplete="off"></td>
+      <td><input type="text" name="kredit[]" class="form-control jumlah" placeholder="0" inputmode="numeric" autocomplete="off"></td>
       <td><button type="button" class="btn btn-danger btn-sm delete-row">-</button></td>
       `;
       transaksiTable.appendChild(newRow);
@@ -298,14 +332,25 @@
       }
     });
 
-    // Hanya satu dari debet atau kredit yang bisa diisi
+    // Hanya satu dari debet atau kredit yang bisa diisi + format ribuan
     transaksiTable.addEventListener('input', function (e) {
+      if (e.target.name === 'debet[]' || e.target.name === 'kredit[]') {
+        // Strip semua kecuali angka dan koma (desimal)
+        var raw = e.target.value.replace(/[^0-9,]/g, '');
+        // Jangan format saat masih mengetik koma
+        if (!raw.endsWith(',')) {
+          var num = parseRibuan(raw);
+          e.target.value = raw === '' ? '' : (num > 0 ? num.toLocaleString('id-ID') : '0');
+        } else {
+          e.target.value = raw;
+        }
+      }
+
       if (e.target.name === 'debet[]') {
         const kreditInput = e.target.closest('tr').querySelector('input[name="kredit[]"]');
-        if (e.target.value) {
-          kreditInput.value = '';
+        if (parseRibuan(e.target.value) > 0) {
+          kreditInput.value = '0';
           kreditInput.readOnly = true;
-          kreditInput.value = 0 ;
         } else {
           kreditInput.readOnly = false;
         }
@@ -313,10 +358,9 @@
 
       if (e.target.name === 'kredit[]') {
         const debetInput = e.target.closest('tr').querySelector('input[name="debet[]"]');
-        if (e.target.value) {
-          debetInput.value = '';
+        if (parseRibuan(e.target.value) > 0) {
+          debetInput.value = '0';
           debetInput.readOnly = true;
-          debetInput.value = 0;
         } else {
           debetInput.readOnly = false;
         }
@@ -325,33 +369,42 @@
       updateTotal();
     });
 
+    // Blur: kosong → 0
+    transaksiTable.addEventListener('blur', function (e) {
+      if (e.target.name === 'debet[]' || e.target.name === 'kredit[]') {
+        if (e.target.value.trim() === '') {
+          e.target.value = '0';
+          updateTotal();
+        }
+      }
+    }, true);
+
     function updateTotal() {
       let totalDebet = 0;
       let totalKredit = 0;
 
   // Hitung total debet
       document.querySelectorAll('input[name="debet[]"]').forEach(input => {
-        totalDebet += parseFloat(input.value) || 0;
+        totalDebet += parseRibuan(input.value);
       });
 
   // Hitung total kredit
       document.querySelectorAll('input[name="kredit[]"]').forEach(input => {
-        totalKredit += parseFloat(input.value) || 0;
+        totalKredit += parseRibuan(input.value);
       });
 
   // Perbarui nilai total debet dan kredit
-  document.getElementById('totalAmountdebet').value = totalDebet.toFixed(2); // Format ke 2 desimal
-  document.getElementById('totalAmountkredit').value = totalKredit.toFixed(2); // Format ke 2 desimal
+  document.getElementById('totalAmountdebet').value = formatRibuan(totalDebet);
+  document.getElementById('totalAmountkredit').value = formatRibuan(totalKredit);
 
   // Cek apakah total debet dan kredit sama
   const submitButton = document.querySelector('button[id=submit]');
   if (totalDebet !== totalKredit) {
     submitButton.classList.add("disabled");
-    submitButton.setAttribute("disabled", "disabled"); // Disable the button
+    submitButton.setAttribute("disabled", "disabled");
   } else {
     submitButton.classList.remove("disabled");
-    submitButton.removeAttribute("disabled"); // Enable the button
-
+    submitButton.removeAttribute("disabled");
   }
 }
 
@@ -364,6 +417,12 @@ function generateAkunOptions() {
   return options;
 }
 
+  // Strip pemisah ribuan sebelum form disubmit agar server menerima angka murni
+  document.getElementById('transaksiForm').addEventListener('submit', function() {
+    document.querySelectorAll('input[name="debet[]"], input[name="kredit[]"]').forEach(function(el) {
+      el.value = parseRibuan(el.value);
+    });
+  });
 
 });
 

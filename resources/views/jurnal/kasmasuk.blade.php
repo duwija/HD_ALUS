@@ -42,7 +42,7 @@
         </div>
         <div class="col-md-3">
           <label for="date_display" class="form-label">Tgl Transaksi</label>
-          <input type="text" class="form-control" id="date_display" value="{{ now()->format('d/m/Y') }}" autocomplete="off" required readonly>
+          <input type="text" class="form-control" id="date_display" value="{{ now()->format('d/m/Y') }}" autocomplete="off" required placeholder="dd/mm/yyyy">
           <input type="hidden" name="date" id="date_hidden" value="{{ now()->format('Y-m-d') }}">
         </div>
         <div class="col-md-3">
@@ -99,7 +99,7 @@
             </select>
           </td>
           <td><input type="text" name="description[]" class="form-control" placeholder="Deskripsi"></td>
-          <td><input type="number" name="kredit[]" class="form-control jumlah" placeholder="Rp. 0,00" min="0" step="0.01" required></td>
+          <td><input type="text" name="kredit[]" class="form-control jumlah" placeholder="0" inputmode="numeric" autocomplete="off" required></td>
           <td><button type="button" class="btn btn-danger btn-sm delete-row">-</button></td>
         </tr>
       </tbody>
@@ -107,7 +107,7 @@
         <td colspan="2" class="text-end"><h5>Total:</h5></td>
         <td colspan="2">
           <h5>
-            <input type="number" readonly name="debet" id="totalAmount" class="form-control jumlah" placeholder="Rp. 0,00" min="0" step="0.01" required></h5>
+            <input type="text" readonly name="debet" id="totalAmount" class="form-control jumlah" placeholder="0"></h5>
           </td>
         </tr>
       </table>
@@ -227,6 +227,25 @@ $(document).ready(function() {
     var dd = String(d.getDate()).padStart(2, '0');
     $('#date_hidden').val(yyyy + '-' + mm + '-' + dd);
   });
+
+  // Izinkan ketik tanggal manual (format: dd/mm/yyyy)
+  $('#date_display').on('input', function() {
+    var val = $(this).val().replace(/[^0-9\/]/g, '');
+    if (val.length === 2 && val.indexOf('/') === -1) val += '/';
+    else if (val.length === 5 && val.split('/').length - 1 === 1) val += '/';
+    $(this).val(val);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+      var parts = val.split('/');
+      var dNum = parseInt(parts[0], 10);
+      var mNum = parseInt(parts[1], 10) - 1;
+      var yNum = parseInt(parts[2], 10);
+      var dateObj = new Date(yNum, mNum, dNum);
+      if (dateObj.getFullYear() === yNum && dateObj.getMonth() === mNum && dateObj.getDate() === dNum) {
+        $('#date_display').datepicker('update', val);
+        $('#date_hidden').val(yNum + '-' + String(mNum + 1).padStart(2, '0') + '-' + String(dNum).padStart(2, '0'));
+      }
+    }
+  });
 });
 </script>
 <script>
@@ -246,7 +265,7 @@ $(document).ready(function() {
     </select>
     </td>
     <td><input type="text" name="description[]" class="form-control" placeholder="Deskripsi"></td>
-    <td><input type="number" name="kredit[]" class="form-control jumlah" placeholder="Rp. 0,00" min="0" step="0.01" required></td>
+    <td><input type="text" name="kredit[]" class="form-control jumlah" placeholder="0" inputmode="numeric" autocomplete="off" required></td>
     <td><button type="button" class="btn btn-danger btn-sm delete-row">-</button></td>
     `;
     transaksiTable.appendChild(newRow);
@@ -261,19 +280,43 @@ $(document).ready(function() {
     }
   });
 
-    // Hitung total saat input berubah
+    // Helper: format dan parse ribuan
+  function formatRibuan(num) {
+    if (isNaN(num) || num === 0) return '0';
+    return num.toLocaleString('id-ID');
+  }
+  function parseRibuan(val) {
+    if (typeof val === 'number') return val;
+    return parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0;
+  }
+
+    // Format ribuan saat input + hitung total
   transaksiTable.addEventListener('input', function (e) {
-    if (e.target.classList.contains('jumlah')) {
+    if (e.target.name === 'kredit[]') {
+      var raw = e.target.value.replace(/[^0-9,]/g, '');
+      if (!raw.endsWith(',')) {
+        var num = parseRibuan(raw);
+        e.target.value = raw === '' ? '' : (num > 0 ? num.toLocaleString('id-ID') : '0');
+      } else {
+        e.target.value = raw;
+      }
       updateTotal();
     }
   });
 
+    // Blur: kosong → 0
+  transaksiTable.addEventListener('blur', function (e) {
+    if (e.target.name === 'kredit[]') {
+      if (e.target.value.trim() === '') { e.target.value = '0'; updateTotal(); }
+    }
+  }, true);
+
   function updateTotal() {
     let total = 0;
     document.querySelectorAll('input[name="kredit[]"]').forEach(input => {
-      total += parseFloat(input.value) || 0;
+      total += parseRibuan(input.value);
     });
-    totalAmountEl.value = total;
+    totalAmountEl.value = formatRibuan(total);
   }
 
     // Fungsi untuk mengambil daftar akun
@@ -482,6 +525,10 @@ $(document).ready(function() {
   });
 
 $('#transaksiForm').on('submit', function(e) {
+  // Strip pemisah ribuan sebelum submit
+  $('input[name="kredit[]"]').each(function() {
+    $(this).val(parseFloat(String($(this).val()).replace(/\./g, '').replace(',', '.')) || 0);
+  });
   if ($('input[name="name"]').val().trim() === "") {
         e.preventDefault(); // Cegah submit
         Swal.fire({
