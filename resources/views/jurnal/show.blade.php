@@ -108,16 +108,28 @@
                     value="{{ $jurnal->description }}" placeholder="Deskripsi">
                 </td>
                 <td>
-                  <input type="number" name="rows[{{ $index }}][debet]" class="form-control form-control-sm"
+                  <input type="number" name="rows[{{ $index }}][debet]" class="form-control form-control-sm edit-debet"
                     value="{{ $jurnal->debet }}" min="0" step="0.01" required>
                 </td>
                 <td>
-                  <input type="number" name="rows[{{ $index }}][kredit]" class="form-control form-control-sm"
+                  <input type="number" name="rows[{{ $index }}][kredit]" class="form-control form-control-sm edit-kredit"
                     value="{{ $jurnal->kredit }}" min="0" step="0.01" required>
                 </td>
               </tr>
               @endforeach
             </tbody>
+            <tfoot>
+              <tr class="font-weight-bold" id="edit-total-row">
+                <td colspan="3" class="text-right">TOTAL</td>
+                <td><input type="text" id="edit-total-debet" class="form-control form-control-sm font-weight-bold" readonly></td>
+                <td><input type="text" id="edit-total-kredit" class="form-control form-control-sm font-weight-bold" readonly></td>
+              </tr>
+              <tr id="edit-balance-row">
+                <td colspan="5">
+                  <div id="edit-balance-alert" class="mb-0 py-1 px-2 rounded text-center font-weight-bold" style="font-size:0.9rem;"></div>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
 
@@ -125,7 +137,7 @@
           <button type="button" id="btn-cancel-edit" class="btn btn-secondary mr-2">
             <i class="fas fa-times mr-1"></i> Batal
           </button>
-          <button type="submit" id="btn-save-edit" class="btn btn-success">
+          <button type="submit" id="btn-save-edit" class="btn btn-success" disabled>
             <i class="fas fa-save mr-1"></i> Simpan Perubahan
           </button>
         </div>
@@ -142,6 +154,7 @@
     document.getElementById('view-mode').style.display = 'none';
     document.getElementById('edit-mode').style.display = '';
     this.style.display = 'none';
+    recalcEditTotals(); // hitung saldo saat edit mode dibuka
   });
   document.getElementById('btn-cancel-edit').addEventListener('click', function() {
     document.getElementById('edit-mode').style.display = 'none';
@@ -164,6 +177,44 @@
       $('#edit-date-hidden').val(yyyy + '-' + mm + '-' + dd);
     });
   }
+
+  // Live recalc debet/kredit totals
+  function recalcEditTotals() {
+    var totalD = 0, totalK = 0;
+    document.querySelectorAll('#edit-rows-table .edit-debet').forEach(function(el) {
+      totalD += parseFloat(el.value) || 0;
+    });
+    document.querySelectorAll('#edit-rows-table .edit-kredit').forEach(function(el) {
+      totalK += parseFloat(el.value) || 0;
+    });
+
+    var fmtD = totalD.toLocaleString('id-ID', {minimumFractionDigits: 2});
+    var fmtK = totalK.toLocaleString('id-ID', {minimumFractionDigits: 2});
+    document.getElementById('edit-total-debet').value  = fmtD;
+    document.getElementById('edit-total-kredit').value = fmtK;
+
+    var balanceEl = document.getElementById('edit-balance-alert');
+    var saveBtn   = document.getElementById('btn-save-edit');
+    var diff = Math.abs(totalD - totalK);
+
+    if (diff < 0.01) {
+      balanceEl.className = 'mb-0 py-1 px-2 rounded text-center font-weight-bold bg-success text-white';
+      balanceEl.innerHTML = '<i class="fas fa-check-circle mr-1"></i> Debet = Kredit &mdash; Jurnal seimbang';
+      saveBtn.disabled = false;
+    } else {
+      var selisih = (totalD - totalK).toLocaleString('id-ID', {minimumFractionDigits: 2});
+      balanceEl.className = 'mb-0 py-1 px-2 rounded text-center font-weight-bold bg-danger text-white';
+      balanceEl.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> Selisih: ' + selisih + ' &mdash; Debet harus sama dengan Kredit';
+      saveBtn.disabled = true;
+    }
+  }
+
+  // Attach listeners to debet/kredit inputs
+  document.getElementById('edit-rows-table').addEventListener('input', function(e) {
+    if (e.target.classList.contains('edit-debet') || e.target.classList.contains('edit-kredit')) {
+      recalcEditTotals();
+    }
+  });
 
   // AJAX submit
   document.getElementById('form-edit-jurnal').addEventListener('submit', function(e) {
