@@ -492,7 +492,8 @@ class JurnalController extends Controller
     // Query data dari database
    $query = \App\Jurnal::with('akun_name') // Pastikan relasi "akun" sesuai dengan model
    ->whereBetween('date', [$date_from, $date_end])
-   ->orderBy('id', 'desc');
+   ->orderBy('date', 'desc')
+   ->orderBy('created_at', 'desc');
    // \Log::info($date_from);
    // \Log::info($date_end);
    // \Log::info($query->toSql());
