@@ -81,21 +81,22 @@
           <table class="table table-bordered" id="edit-rows-table">
             <thead class="thead-dark">
               <tr>
-                <th>#</th>
-                <th style="width:28%;">Akun</th>
-                <th style="width:28%;">Deskripsi</th>
-                <th style="width:17%;">Debet</th>
-                <th style="width:17%;">Kredit</th>
+                <th style="width:4%">#</th>
+                <th style="width:27%;">Akun</th>
+                <th style="width:26%;">Deskripsi</th>
+                <th style="width:16%;">Debet</th>
+                <th style="width:16%;">Kredit</th>
+                <th style="width:5%;"></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id="edit-rows-body">
               @foreach($jurnals as $index => $jurnal)
-              <tr>
-                <td>{{ $index + 1 }}
-                  <input type="hidden" name="rows[{{ $index }}][id]" value="{{ $jurnal->id }}">
+              <tr class="edit-row">
+                <td class="row-num">{{ $index + 1 }}
+                  <input type="hidden" class="row-id" value="{{ $jurnal->id }}">
                 </td>
                 <td>
-                  <select name="rows[{{ $index }}][id_akun]" class="form-control form-control-sm" required>
+                  <select class="form-control form-control-sm row-akun" required>
                     @foreach($akunList as $akun)
                       <option value="{{ $akun->akun_code }}" {{ $jurnal->id_akun == $akun->akun_code ? 'selected' : '' }}>
                         {{ $akun->akun_code }} - {{ $akun->name }}
@@ -104,16 +105,21 @@
                   </select>
                 </td>
                 <td>
-                  <input type="text" name="rows[{{ $index }}][description]" class="form-control form-control-sm"
+                  <input type="text" class="form-control form-control-sm row-desc"
                     value="{{ $jurnal->description }}" placeholder="Deskripsi">
                 </td>
                 <td>
-                  <input type="number" name="rows[{{ $index }}][debet]" class="form-control form-control-sm edit-debet"
-                    value="{{ $jurnal->debet }}" min="0" step="0.01" required>
+                  <input type="number" class="form-control form-control-sm edit-debet row-debet"
+                    value="{{ $jurnal->debet }}" min="0" step="0.01">
                 </td>
                 <td>
-                  <input type="number" name="rows[{{ $index }}][kredit]" class="form-control form-control-sm edit-kredit"
-                    value="{{ $jurnal->kredit }}" min="0" step="0.01" required>
+                  <input type="number" class="form-control form-control-sm edit-kredit row-kredit"
+                    value="{{ $jurnal->kredit }}" min="0" step="0.01">
+                </td>
+                <td class="text-center">
+                  <button type="button" class="btn btn-danger btn-sm btn-delete-row" title="Hapus baris">
+                    <i class="fas fa-trash"></i>
+                  </button>
                 </td>
               </tr>
               @endforeach
@@ -133,13 +139,18 @@
           </table>
         </div>
 
-        <div class="d-flex justify-content-end mt-3">
-          <button type="button" id="btn-cancel-edit" class="btn btn-secondary mr-2">
-            <i class="fas fa-times mr-1"></i> Batal
+        <div class="d-flex justify-content-between mt-3">
+          <button type="button" id="btn-add-row" class="btn btn-primary btn-sm">
+            <i class="fas fa-plus mr-1"></i> Tambah Baris
           </button>
-          <button type="submit" id="btn-save-edit" class="btn btn-success" disabled>
-            <i class="fas fa-save mr-1"></i> Simpan Perubahan
-          </button>
+          <div>
+            <button type="button" id="btn-cancel-edit" class="btn btn-secondary mr-2">
+              <i class="fas fa-times mr-1"></i> Batal
+            </button>
+            <button type="submit" id="btn-save-edit" class="btn btn-success" disabled>
+              <i class="fas fa-save mr-1"></i> Simpan Perubahan
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -177,6 +188,52 @@
       $('#edit-date-hidden').val(yyyy + '-' + mm + '-' + dd);
     });
   }
+
+  // Akun options HTML (built from server-side data)
+  var akunOptions = (function() {
+    var opts = '';
+    @foreach($akunList as $akun)
+    opts += '<option value="{{ $akun->akun_code }}">{{ $akun->akun_code }} - {{ addslashes($akun->name) }}</option>';
+    @endforeach
+    return opts;
+  })();
+
+  // Renumber rows
+  function renumberRows() {
+    document.querySelectorAll('#edit-rows-body .edit-row').forEach(function(tr, i) {
+      tr.querySelector('.row-num').childNodes[0].textContent = (i + 1);
+    });
+  }
+
+  // Add new blank row
+  document.getElementById('btn-add-row').addEventListener('click', function() {
+    var tr = document.createElement('tr');
+    tr.className = 'edit-row';
+    tr.innerHTML =
+      '<td class="row-num">?<input type="hidden" class="row-id" value=""></td>' +
+      '<td><select class="form-control form-control-sm row-akun" required>' + akunOptions + '</select></td>' +
+      '<td><input type="text" class="form-control form-control-sm row-desc" placeholder="Deskripsi"></td>' +
+      '<td><input type="number" class="form-control form-control-sm edit-debet row-debet" value="0" min="0" step="0.01"></td>' +
+      '<td><input type="number" class="form-control form-control-sm edit-kredit row-kredit" value="0" min="0" step="0.01"></td>' +
+      '<td class="text-center"><button type="button" class="btn btn-danger btn-sm btn-delete-row" title="Hapus baris"><i class="fas fa-trash"></i></button></td>';
+    document.getElementById('edit-rows-body').appendChild(tr);
+    renumberRows();
+    recalcEditTotals();
+  });
+
+  // Delete row
+  document.getElementById('edit-rows-body').addEventListener('click', function(e) {
+    var btn = e.target.closest('.btn-delete-row');
+    if (!btn) return;
+    var rows = document.querySelectorAll('#edit-rows-body .edit-row');
+    if (rows.length <= 1) {
+      alert('Minimal harus ada 1 baris.');
+      return;
+    }
+    btn.closest('tr').remove();
+    renumberRows();
+    recalcEditTotals();
+  });
 
   // Live recalc debet/kredit totals
   function recalcEditTotals() {
@@ -223,23 +280,23 @@
     btn.disabled = true;
     btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> Menyimpan...';
 
+    // Build rows from DOM (not serializeArray, since names were removed)
     var formData = {};
-    var data = $(this).serializeArray();
-    data.forEach(function(item) {
-      // Parse nested rows[index][field]
-      var match = item.name.match(/^rows\[(\d+)\]\[(\w+)\]$/);
-      if (match) {
-        var idx = match[1];
-        var field = match[2];
-        if (!formData.rows) formData.rows = {};
-        if (!formData.rows[idx]) formData.rows[idx] = {};
-        formData.rows[idx][field] = item.value;
-      } else {
-        formData[item.name] = item.value;
-      }
+    var memoEl = document.querySelector('#form-edit-jurnal input[name="memo"]');
+    var csrfEl = document.querySelector('#form-edit-jurnal input[name="_token"]');
+    formData.memo = memoEl ? memoEl.value : '';
+    formData._token = csrfEl ? csrfEl.value : '';
+    formData.date = document.getElementById('edit-date-hidden').value;
+    formData.rows = [];
+    document.querySelectorAll('#edit-rows-body .edit-row').forEach(function(tr) {
+      formData.rows.push({
+        id:          tr.querySelector('.row-id').value,
+        id_akun:     tr.querySelector('.row-akun').value,
+        description: tr.querySelector('.row-desc').value,
+        debet:       tr.querySelector('.row-debet').value,
+        kredit:      tr.querySelector('.row-kredit').value,
+      });
     });
-    // Convert rows object to array
-    formData.rows = Object.values(formData.rows || {});
 
     $.ajax({
       url: '/jurnal/updatebycode/{{ $code }}',

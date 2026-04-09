@@ -3063,34 +3063,72 @@ public function show($code)
 public function updateByCode(Request $request, $code)
 {
   $request->validate([
-    'date'            => 'required|date',
-    'rows'            => 'required|array|min:1',
-    'rows.*.id'       => 'required|integer',
-    'rows.*.id_akun'  => 'required|string',
+    'date'               => 'required|date',
+    'rows'               => 'required|array|min:1',
+    'rows.*.id'          => 'nullable|string',
+    'rows.*.id_akun'     => 'required|string',
     'rows.*.description' => 'nullable|string',
-    'rows.*.debet'    => 'required|numeric|min:0',
-    'rows.*.kredit'   => 'required|numeric|min:0',
+    'rows.*.debet'       => 'required|numeric|min:0',
+    'rows.*.kredit'      => 'required|numeric|min:0',
   ]);
+
+  // Get first existing row to copy shared fields (type, contact_id, category, reff, created_by)
+  $template = \App\Jurnal::where('code', $code)->whereNull('deleted_at')->first();
+  if (!$template) {
+    return response()->json(['success' => false, 'message' => 'Jurnal tidak ditemukan.'], 404);
+  }
 
   DB::beginTransaction();
   try {
-    // Update shared fields for all rows in this transaction
+    // Update shared date/memo for all existing rows
     \App\Jurnal::where('code', $code)->whereNull('deleted_at')->update([
       'date' => $request->date,
       'memo' => $request->memo ?? '',
     ]);
 
-    // Update each row individually
+    // Collect submitted IDs (non-empty = existing rows)
+    $submittedIds = collect($request->rows)
+      ->pluck('id')
+      ->filter(fn($id) => !empty($id))
+      ->map(fn($id) => (int)$id)
+      ->toArray();
+
+    // Soft-delete rows that were removed
+    \App\Jurnal::where('code', $code)
+      ->whereNull('deleted_at')
+      ->when(!empty($submittedIds), fn($q) => $q->whereNotIn('id', $submittedIds))
+      ->delete();
+
+    // Update existing rows / create new rows
     foreach ($request->rows as $row) {
-      \App\Jurnal::where('id', $row['id'])
-        ->where('code', $code)
-        ->whereNull('deleted_at')
-        ->update([
+      if (!empty($row['id'])) {
+        // Update existing
+        \App\Jurnal::where('id', (int)$row['id'])
+          ->where('code', $code)
+          ->update([
+            'id_akun'     => $row['id_akun'],
+            'description' => $row['description'] ?? '',
+            'debet'       => $row['debet'],
+            'kredit'      => $row['kredit'],
+          ]);
+      } else {
+        // Create new row, copy shared fields from template
+        \App\Jurnal::create([
+          'code'        => $code,
+          'date'        => $request->date,
+          'type'        => $template->type,
+          'reff'        => $template->reff,
+          'contact_id'  => $template->contact_id,
+          'category'    => $template->category,
+          'memo'        => $request->memo ?? '',
+          'note'        => $template->note,
+          'created_by'  => $template->created_by,
           'id_akun'     => $row['id_akun'],
           'description' => $row['description'] ?? '',
           'debet'       => $row['debet'],
           'kredit'      => $row['kredit'],
         ]);
+      }
     }
 
     DB::commit();
