@@ -273,6 +273,16 @@
     }
   });
 
+  // Default to 0 when input is left blank
+  document.getElementById('edit-rows-table').addEventListener('blur', function(e) {
+    if (e.target.classList.contains('edit-debet') || e.target.classList.contains('edit-kredit')) {
+      if (e.target.value === '' || e.target.value === null) {
+        e.target.value = 0;
+        recalcEditTotals();
+      }
+    }
+  }, true);
+
   // AJAX submit
   document.getElementById('form-edit-jurnal').addEventListener('submit', function(e) {
     e.preventDefault();
