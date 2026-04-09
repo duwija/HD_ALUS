@@ -14,11 +14,15 @@
       <form method="GET" class="mb-3 row">
         <div class="col-md-3">
           <label>Tanggal Awal</label>
-          <input type="date" name="tanggal_awal" value="{{ $tanggalAwal }}" class="form-control">
+          <input type="text" id="rk_awal_display" class="form-control" autocomplete="off" readonly
+            value="{{ \Carbon\Carbon::parse($tanggalAwal)->format('d/m/Y') }}">
+          <input type="hidden" name="tanggal_awal" id="rk_awal_hidden" value="{{ $tanggalAwal }}">
         </div>
         <div class="col-md-3">
           <label>Tanggal Akhir</label>
-          <input type="date" name="tanggal_akhir" value="{{ $tanggalAkhir }}" class="form-control">
+          <input type="text" id="rk_akhir_display" class="form-control" autocomplete="off" readonly
+            value="{{ \Carbon\Carbon::parse($tanggalAkhir)->format('d/m/Y') }}">
+          <input type="hidden" name="tanggal_akhir" id="rk_akhir_hidden" value="{{ $tanggalAkhir }}">
         </div>
         <div class="col-md-2 d-flex align-items-end">
           <button type="submit" class="btn btn-primary ">
@@ -123,4 +127,20 @@
 
 
 
+@endsection
+
+@section('footer-scripts')
+<script>
+$(document).ready(function() {
+  var dpOpts = { format: 'dd/mm/yyyy', todayHighlight: true, autoclose: true };
+  $('#rk_awal_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    $('#rk_awal_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+  $('#rk_akhir_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    $('#rk_akhir_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+});
+</script>
 @endsection

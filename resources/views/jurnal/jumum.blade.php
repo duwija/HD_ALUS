@@ -69,12 +69,11 @@
         <div class="form-group col-md-3">
           <label><i class="fas fa-calendar-alt"></i> Transaction Date Start</label>
           <div class="input-group mb-3">
-            <div class="input-group p-1 date" id="reservationdate" data-target-input="nearest">
-              <input type="text" name="date_from" id="date" class="form-control datetimepicker-input" 
-                     data-target="#reservationdate" value="{{ now()->toDateString() }}" />
-              <div class="input-group-append" data-target="#reservationdate" data-toggle="datetimepicker">
-                <div class="input-group-text"><i class="fa fa-calendar"></i></div>
-              </div>
+            <input type="text" id="jum_date_from_display" class="form-control" autocomplete="off" readonly
+                   value="{{ now()->format('d/m/Y') }}" />
+            <input type="hidden" name="date_from" id="jum_date_from_hidden" value="{{ now()->toDateString() }}" />
+            <div class="input-group-append">
+              <div class="input-group-text"><i class="fa fa-calendar"></i></div>
             </div>
           </div>
         </div>
@@ -82,12 +81,11 @@
         <div class="form-group col-md-3">
           <label><i class="fas fa-calendar-alt"></i> Transaction Date End</label>
           <div class="input-group mb-3">
-            <div class="input-group p-1 date" id="reservationdate2" data-target-input="nearest">
-              <input type="text" name="date_end" id="date2" class="form-control datetimepicker-input" 
-                     data-target="#reservationdate2" value="{{date('Y-m-d')}}" />
-              <div class="input-group-append" data-target="#reservationdate2" data-toggle="datetimepicker">
-                <div class="input-group-text"><i class="fa fa-calendar"></i></div>
-              </div>
+            <input type="text" id="jum_date_to_display" class="form-control" autocomplete="off" readonly
+                   value="{{ date('d/m/Y') }}" />
+            <input type="hidden" name="date_end" id="jum_date_to_hidden" value="{{ date('Y-m-d') }}" />
+            <div class="input-group-append">
+              <div class="input-group-text"><i class="fa fa-calendar"></i></div>
             </div>
           </div>
         </div>
@@ -142,10 +140,42 @@
     </div>
   </div>
 </section>
+
+<!-- Modal View/Edit Jurnal -->
+<div class="modal fade" id="modalViewJurnalUmum" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="fas fa-book mr-2"></i>Detail Jurnal</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="modal-jurnal-umum-content">
+        <div class="text-center p-4">
+          <i class="fa fa-spinner fa-spin fa-2x"></i><br>Memuat data...
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 @endsection
 
 @section('footer-scripts')
 <script>
+$(document).ready(function() {
+  var dpOpts = { format: 'dd/mm/yyyy', todayHighlight: true, autoclose: true };
+  $('#jum_date_from_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    $('#jum_date_from_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+  $('#jum_date_to_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    $('#jum_date_to_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+});
+
 var index = 0;
 
 $('#jurnal').click(function() {
@@ -195,13 +225,15 @@ var table = $('#jurnal-table').DataTable({
   rowCallback: function(row, data) {
     if (data.is_group) {
       index++;
-      // Set nomor dan description untuk baris grup
       $(row).addClass('bg-light text-bold');
-      $('td', row).eq(0).html(data.index); // Nomor dan description
-      $('td:gt(1)', row).remove(); // Hapus kolom lain di baris grup
-      $('td', row).eq(1).attr('colspan', 4).html(`
-        <strong>${data.description}</strong>
-      `);
+      $('td', row).eq(0).html(data.index);
+      $('td:gt(1)', row).remove();
+      $('td', row).eq(1).attr('colspan', 4).html(
+        '<div class="d-flex align-items-center justify-content-between">'
+        + '<span>' + data.description + '</span>'
+        + (data.code ? '<span class="badge badge-warning view-jurnal-umum ml-2" data-code="' + data.code + '" style="cursor:pointer;font-size:12px;padding:5px 10px;"><i class="fas fa-edit mr-1"></i>Edit</span>' : '')
+        + '</div>'
+      );
     } else if (data.akun_name === 'Subtotal') {
       // Baris Subtotal
       $(row).addClass('bg-secondary');
@@ -222,6 +254,23 @@ var table = $('#jurnal-table').DataTable({
       }
     }
   },
+});
+
+// Klik badge Edit
+$('#jurnal-table').on('click', '.view-jurnal-umum', function() {
+  var code = $(this).data('code');
+  $('#modalViewJurnalUmum').modal('show');
+  $('#modal-jurnal-umum-content').html('<div class="text-center p-4"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Memuat data...</div>');
+  $.ajax({
+    url: '/jurnal/show/' + code,
+    type: 'GET',
+    success: function(html) {
+      $('#modal-jurnal-umum-content').html(html);
+    },
+    error: function() {
+      $('#modal-jurnal-umum-content').html('<div class="alert alert-danger">Gagal memuat data jurnal.</div>');
+    }
+  });
 });
 </script>
 @endsection

@@ -1,72 +1,225 @@
 
 <section class="content-header">
-  
-  <div class="card-header">
-    <h3 class="card-title">
-      <i class="fas fa-book"></i> Jurnal dengan Code:
-      <span class="text-primary">{{ $code }}</span>
+
+  <div class="card-header d-flex align-items-center">
+    <h3 class="card-title mb-0">
+      <i class="fas fa-book"></i> Jurnal Code: <span class="text-primary">{{ $code }}</span>
     </h3>
+    <button type="button" id="btn-toggle-edit" class="btn btn-warning btn-sm ml-auto">
+      <i class="fas fa-edit mr-1"></i> Edit Jurnal
+    </button>
   </div>
 
   <div class="card-body">
-    @if($jurnals->isEmpty())
-    <div class="alert alert-warning">
-      <i class="fas fa-exclamation-circle"></i>
-      Tidak ada jurnal ditemukan untuk <strong>{{ $code }}</strong>.
+
+    {{-- ======== VIEW MODE ======== --}}
+    <div id="view-mode">
+      @if($jurnals->isEmpty())
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-circle"></i>
+        Tidak ada jurnal ditemukan untuk <strong>{{ $code }}</strong>.
+      </div>
+      @else
+      <table class="table table-bordered table-striped">
+        <thead class="thead-dark">
+          <tr>
+            <th>#</th>
+            <th>Tanggal</th>
+            <th>Deskripsi</th>
+            <th>ID Akun</th>
+            <th class="text-right">Debet</th>
+            <th class="text-right">Kredit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="bg-light font-weight-bold">
+            <td colspan="6" class="text-left">{{ $note }}</td>
+          </tr>
+          @foreach($jurnals as $index => $jurnal)
+          <tr>
+            <td>{{ $index + 1 }}</td>
+            <td>{{ \Carbon\Carbon::parse($jurnal->date)->format('d/m/Y') }}</td>
+            <td>{{ $jurnal->description }}</td>
+            <td>{{ $jurnal->id_akun }}{{ $jurnal->akun ? ' | ' . $jurnal->akun->name : '' }}</td>
+            <td class="text-right">{{ $jurnal->debet ? number_format($jurnal->debet, 0, ',', '.') : '-' }}</td>
+            <td class="text-right">{{ $jurnal->kredit ? number_format($jurnal->kredit, 0, ',', '.') : '-' }}</td>
+          </tr>
+          @endforeach
+          <tr class="bg-light font-weight-bold">
+            <td colspan="4" class="text-right">TOTAL</td>
+            <td class="text-right">{{ number_format($totalDebet, 0, ',', '.') }}</td>
+            <td class="text-right">{{ number_format($totalKredit, 0, ',', '.') }}</td>
+          </tr>
+        </tbody>
+      </table>
+      @if($memo)
+      <div class="alert alert-info mt-2 mb-0"><i class="fas fa-sticky-note mr-1"></i> <strong>Memo:</strong> {{ $memo }}</div>
+      @endif
+      @endif
     </div>
-    @else
-    <table class="table table-bordered table-striped">
-      <thead class="thead-dark">
-        <tr>
-          <th>#</th>
-          <th>Tanggal</th>
-          <th>Created At</th>
-          <th>Deskripsi</th>
 
-          <th>ID Akun</th>
-          <th class="text-right">Debet</th>
-          <th class="text-right">Kredit</th>
-        </tr>
-      </thead>
-      <tbody>
-       <tr class="bg-light font-weight-bold">
-        <td colspan="7" class="text-left">{{ $note }}</td>
+    {{-- ======== EDIT MODE ======== --}}
+    <div id="edit-mode" style="display:none;">
+      <div id="edit-alert"></div>
+      <form id="form-edit-jurnal">
+        @csrf
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label><i class="far fa-calendar-alt mr-1"></i> Tanggal Transaksi</label>
+            <input type="text" id="edit-date-display" class="form-control" autocomplete="off" readonly
+              value="{{ \Carbon\Carbon::parse(optional($jurnals->first())->date)->format('d/m/Y') }}">
+            <input type="hidden" id="edit-date-hidden" name="date"
+              value="{{ optional($jurnals->first())->date }}">
+          </div>
+          <div class="col-md-8">
+            <label><i class="fas fa-sticky-note mr-1"></i> Memo</label>
+            <input type="text" name="memo" class="form-control" value="{{ $memo }}" placeholder="Memo (opsional)">
+          </div>
+        </div>
 
-      </tr>
-      @foreach($jurnals as $index => $jurnal)
-      <tr>
-        <td>{{ $index + 1 }}</td>
-        <td>{{ \Carbon\Carbon::parse($jurnal->date)->format('Y-m-d H:i') }}</td>
-        <td>{{ $jurnal->created_at }}</td>
-        <td>{{ $jurnal->description }}</td>
+        <div class="table-responsive">
+          <table class="table table-bordered" id="edit-rows-table">
+            <thead class="thead-dark">
+              <tr>
+                <th>#</th>
+                <th style="width:28%;">Akun</th>
+                <th style="width:28%;">Deskripsi</th>
+                <th style="width:17%;">Debet</th>
+                <th style="width:17%;">Kredit</th>
+              </tr>
+            </thead>
+            <tbody>
+              @foreach($jurnals as $index => $jurnal)
+              <tr>
+                <td>{{ $index + 1 }}
+                  <input type="hidden" name="rows[{{ $index }}][id]" value="{{ $jurnal->id }}">
+                </td>
+                <td>
+                  <select name="rows[{{ $index }}][id_akun]" class="form-control form-control-sm" required>
+                    @foreach($akunList as $akun)
+                      <option value="{{ $akun->akun_code }}" {{ $jurnal->id_akun == $akun->akun_code ? 'selected' : '' }}>
+                        {{ $akun->akun_code }} - {{ $akun->name }}
+                      </option>
+                    @endforeach
+                  </select>
+                </td>
+                <td>
+                  <input type="text" name="rows[{{ $index }}][description]" class="form-control form-control-sm"
+                    value="{{ $jurnal->description }}" placeholder="Deskripsi">
+                </td>
+                <td>
+                  <input type="number" name="rows[{{ $index }}][debet]" class="form-control form-control-sm"
+                    value="{{ $jurnal->debet }}" min="0" step="0.01" required>
+                </td>
+                <td>
+                  <input type="number" name="rows[{{ $index }}][kredit]" class="form-control form-control-sm"
+                    value="{{ $jurnal->kredit }}" min="0" step="0.01" required>
+                </td>
+              </tr>
+              @endforeach
+            </tbody>
+          </table>
+        </div>
 
-        <td>
-          <span class="">
-            {{ $jurnal->id_akun }}
-            @if($jurnal->id_akun)
-            | {{ $jurnal->akun->name }}
-            @endif
-          </span>
-        </td>
-        <td class="text-right">
-          {{ $jurnal->debet ? number_format($jurnal->debet, 0, ',', '.') : '-' }}
-        </td>
-        <td class="text-right">
-          {{ $jurnal->kredit ? number_format($jurnal->kredit, 0, ',', '.') : '-' }}
-        </td>
-      </tr>
+        <div class="d-flex justify-content-end mt-3">
+          <button type="button" id="btn-cancel-edit" class="btn btn-secondary mr-2">
+            <i class="fas fa-times mr-1"></i> Batal
+          </button>
+          <button type="submit" id="btn-save-edit" class="btn btn-success">
+            <i class="fas fa-save mr-1"></i> Simpan Perubahan
+          </button>
+        </div>
+      </form>
+    </div>
 
-      @endforeach
-
-      <tr class="bg-light font-weight-bold">
-        <td colspan="5" class="text-right">TOTAL</td>
-        <td class="text-right">{{ number_format($totalDebet, 0, ',', '.') }}</td>
-        <td class="text-right">{{ number_format($totalKredit, 0, ',', '.') }}</td>
-      </tr>
-    </tbody>
-  </table>
-  @endif
-</div>
-
+  </div>
 </section>
+
+<script>
+(function() {
+  // Toggle view/edit mode
+  document.getElementById('btn-toggle-edit').addEventListener('click', function() {
+    document.getElementById('view-mode').style.display = 'none';
+    document.getElementById('edit-mode').style.display = '';
+    this.style.display = 'none';
+  });
+  document.getElementById('btn-cancel-edit').addEventListener('click', function() {
+    document.getElementById('edit-mode').style.display = 'none';
+    document.getElementById('view-mode').style.display = '';
+    document.getElementById('btn-toggle-edit').style.display = '';
+    document.getElementById('edit-alert').innerHTML = '';
+  });
+
+  // Datepicker for edit date
+  if ($.fn.datepicker) {
+    $('#edit-date-display').datepicker({
+      format: 'dd/mm/yyyy',
+      todayHighlight: true,
+      autoclose: true,
+    }).on('changeDate', function(e) {
+      var d = e.date;
+      var yyyy = d.getFullYear();
+      var mm = String(d.getMonth() + 1).padStart(2, '0');
+      var dd = String(d.getDate()).padStart(2, '0');
+      $('#edit-date-hidden').val(yyyy + '-' + mm + '-' + dd);
+    });
+  }
+
+  // AJAX submit
+  document.getElementById('form-edit-jurnal').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('btn-save-edit');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> Menyimpan...';
+
+    var formData = {};
+    var data = $(this).serializeArray();
+    data.forEach(function(item) {
+      // Parse nested rows[index][field]
+      var match = item.name.match(/^rows\[(\d+)\]\[(\w+)\]$/);
+      if (match) {
+        var idx = match[1];
+        var field = match[2];
+        if (!formData.rows) formData.rows = {};
+        if (!formData.rows[idx]) formData.rows[idx] = {};
+        formData.rows[idx][field] = item.value;
+      } else {
+        formData[item.name] = item.value;
+      }
+    });
+    // Convert rows object to array
+    formData.rows = Object.values(formData.rows || {});
+
+    $.ajax({
+      url: '/jurnal/updatebycode/{{ $code }}',
+      type: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+      data: JSON.stringify(formData),
+      success: function(res) {
+        document.getElementById('edit-alert').innerHTML =
+          '<div class="alert alert-success"><i class="fas fa-check-circle mr-1"></i>' + res.message + '</div>';
+        // Refresh the modal content after short delay
+        setTimeout(function() {
+          $.ajax({
+            url: '/jurnal/show/{{ $code }}',
+            type: 'GET',
+            success: function(html) {
+              $('#modal-jurnal-content').html(html);
+            }
+          });
+        }, 1000);
+      },
+      error: function(xhr) {
+        var msg = 'Gagal menyimpan perubahan.';
+        if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+        document.getElementById('edit-alert').innerHTML =
+          '<div class="alert alert-danger"><i class="fas fa-exclamation-circle mr-1"></i>' + msg + '</div>';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save mr-1"></i> Simpan Perubahan';
+      }
+    });
+  });
+})();
+</script>
 

@@ -1,28 +1,32 @@
 @extends('layout.main')
-@section('title', 'kas Keluar')
+@section('title', 'Kas Keluar')
 @section('content')
-<section class="content-header">
-  <div class="card card-primary card-outline">
-    <div class="card-header row mb-12 card-title">
 
-
-      <div class="mb-4">
-        <strong>Transaksi - Kas Keluar</strong>
-      </div> 
-      <div class="ml-auto ">
-        <div class="nav-item dropdown ">
-          <button class="btn btn-primary dropdown-toggle" type="button" id="transactionDropdown" data-toggle="dropdown" aria-expanded="false">
-           Transaksi
-         </button>
-         <ul class="dropdown-menu" aria-labelledby="transactionDropdown">
-          <li><a class="dropdown-item" href="/jurnal/kasmasuk"><i class="fas fa-hand-holding-usd"></i> Kas Masuk</a></li>
-          <li><a class="dropdown-item" href="/jurnal/kaskeluar"><i class="fas fa-money-bill-wave"></i> Kas Keluar</a></li>
-          <li><a class="dropdown-item" href="/jurnal/transferkas"><i class="fas fa-random"></i> Transfer Kas</a></li>
-        </ul>
+<div class="container-fluid">
+  <div class="card shadow-sm">
+    <div class="card-header-custom" style="background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%); padding: 18px 24px;">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h4 class="mb-0 font-weight-bold text-white" style="letter-spacing: 1px;">
+            <i class="fas fa-money-bill-wave mr-2"></i>KAS KELUAR
+          </h4>
+          <small class="text-white" style="opacity: 0.85;">Pencatatan transaksi kas keluar</small>
+        </div>
+        <div class="dropdown">
+          <button class="btn btn-light btn-sm dropdown-toggle" type="button" id="transactionDropdown" data-toggle="dropdown" aria-expanded="false">
+            <i class="fas fa-exchange-alt mr-1"></i> Transaksi Lainnya
+          </button>
+          <ul class="dropdown-menu dropdown-menu-right shadow" aria-labelledby="transactionDropdown">
+            <li><a class="dropdown-item" href="/jurnal/kasmasuk"><i class="fas fa-hand-holding-usd text-success mr-2"></i> Kas Masuk</a></li>
+            <li><a class="dropdown-item" href="/jurnal/kaskeluar"><i class="fas fa-money-bill-wave text-danger mr-2"></i> Kas Keluar</a></li>
+            <li><a class="dropdown-item" href="/jurnal/transferkas"><i class="fas fa-exchange-alt text-primary mr-2"></i> Transfer Kas</a></li>
+            <li><a class="dropdown-item" href="/jurnal/general"><i class="fas fa-file-invoice text-secondary mr-2"></i> Transaksi General</a></li>
+          </ul>
+        </div>
       </div>
     </div>
-  </div>
-  <div class="card-body">
+
+    <div class="card-body">
     <form id="transaksiForm" method="POST" action="/jurnal/kaskeluartransaction">
       @csrf
       <input type="hidden" name="type" class="form-control" value="kaskeluar">
@@ -37,8 +41,9 @@
           </select>
         </div>
         <div class="col-md-3">
-          <label for="date" class="form-label">Tgl Transaksi</label>
-          <input type="date" name="date" class="form-control" id="date" value="{{ now()->format('Y-m-d') }}" required>
+          <label for="date_display" class="form-label">Tgl Transaksi</label>
+          <input type="text" class="form-control" id="date_display" value="{{ now()->format('d/m/Y') }}" autocomplete="off" required readonly>
+          <input type="hidden" name="date" id="date_hidden" value="{{ now()->format('Y-m-d') }}">
         </div>
         <div class="col-md-3">
           <label for="noTransaksi" class="form-label">No Transaksi</label>
@@ -76,7 +81,7 @@
 
 
 
-  <table class="table table-bordered">
+  <table class="table table-bordered" style="margin-top: 1.5rem;">
     <thead class="table-light bg-light">
       <tr>
         <th class="col-md-3">Pembayaran Untuk</th>
@@ -124,88 +129,108 @@
     </div>
   </form>
 
-</div>
-<!-- </div> -->
-
+  </div>
+  </div>
 
 <!-- Modal untuk search customer -->
 <div class="modal fade" id="customerModal" tabindex="-1" aria-labelledby="customerModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="customerModalLabel">Cari Customer</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header" style="background-color: #4a90e2; color: white;">
+        <h5 class="modal-title" id="customerModalLabel"><i class="fas fa-search mr-2"></i>Cari Customer</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
       </div>
       <div class="modal-body">
-        <div class="row">
+        <div class="row mb-3">
           <div class="col-md-10">
-            <input type="text" id="searchCustomerText" class="form-control" placeholder="Enter Id or Name">
+            <input type="text" id="searchCustomerText" class="form-control" placeholder="Masukkan ID atau Nama Customer">
           </div>
           <div class="col-md-2">
-            <button type="button" id="searchCustomer" class="btn btn-primary">Find</button>
+            <button type="button" id="searchCustomer" class="btn btn-primary btn-block">
+              <i class="fas fa-search"></i> Cari
+            </button>
           </div>
         </div>
+        <ul id="customerList" class="list-group"></ul>
       </div>
-      <ul id="customerList" class="list-group m-2 p-1"></ul>
     </div>
   </div>
 </div>
-
-
 
 <!-- Modal untuk search contact -->
 <div class="modal fade" id="contactModal" tabindex="-1" aria-labelledby="contactModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="contactModalLabel">Cari contact</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header" style="background-color: #4a90e2; color: white;">
+        <h5 class="modal-title" id="contactModalLabel"><i class="fas fa-search mr-2"></i>Cari Contact</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
       </div>
       <div class="modal-body">
-        <div class="row">
+        <div class="row mb-3">
           <div class="col-md-10">
-            <input type="text" id="searchcontactText" class="form-control " placeholder="Enter Id or Name">
+            <input type="text" id="searchcontactText" class="form-control" placeholder="Masukkan ID atau Nama Contact">
           </div>
           <div class="col-md-2">
-            <button type="button" id="searchcontact" class="btn btn-primary">Find</button>
+            <button type="button" id="searchcontact" class="btn btn-primary btn-block">
+              <i class="fas fa-search"></i> Cari
+            </button>
           </div>
         </div>
+        <ul id="contactList" class="list-group"></ul>
       </div>
-      <ul id="contactList" class="list-group m-2 p-1 "></ul>
     </div>
   </div>
 </div>
 
+<!-- Modal untuk search employee -->
 <div class="modal fade" id="employeeModal" tabindex="-1" aria-labelledby="employeeModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="employeeModalLabel">Cari employee</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header" style="background-color: #4a90e2; color: white;">
+        <h5 class="modal-title" id="employeeModalLabel"><i class="fas fa-search mr-2"></i>Cari Employee</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
       </div>
       <div class="modal-body">
-        <div class="row">
+        <div class="row mb-3">
           <div class="col-md-10">
-            <input type="text" id="searchemployeeText" class="form-control " placeholder="Enter Id or Name">
+            <input type="text" id="searchemployeeText" class="form-control" placeholder="Masukkan ID atau Nama Employee">
           </div>
           <div class="col-md-2">
-            <button type="button" id="searchemployee" class="btn btn-primary">Find</button>
+            <button type="button" id="searchemployee" class="btn btn-primary btn-block">
+              <i class="fas fa-search"></i> Cari
+            </button>
           </div>
         </div>
+        <ul id="employeeList" class="list-group"></ul>
       </div>
-      <ul id="employeeList" class="list-group m-2 p-1 "></ul>
     </div>
   </div>
 </div>
 
-
-
-
 </div>
-
-</section>
 @endsection
 @section('footer-scripts')
+<script>
+$(document).ready(function() {
+  $('#date_display').datepicker({
+    format: 'dd/mm/yyyy',
+    todayHighlight: true,
+    autoclose: true,
+  }).on('changeDate', function(e) {
+    var d = e.date;
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    $('#date_hidden').val(yyyy + '-' + mm + '-' + dd);
+  });
+});
+</script>
 <script>
  document.addEventListener('DOMContentLoaded', function () {
   const transaksiTable = document.getElementById('transaksiTable');
@@ -461,7 +486,7 @@
 
 $('#transaksiForm').on('submit', function(e) {
   if ($('input[name="name"]').val().trim() === "") {
-        e.preventDefault(); // Cegah submit
+        e.preventDefault();
         Swal.fire({
           title: 'Error!',
           text: 'Kolom Nama Penerima wajib diisi!',
@@ -470,6 +495,35 @@ $('#transaksiForm').on('submit', function(e) {
         });
         $('input[name="name"]').focus();
         return false;
+      }
+    });
+
+    // Enter key support untuk semua modal pencarian
+    $('#searchCustomerText').on('keypress', function(e) {
+      if (e.which === 13) { e.preventDefault(); $('#searchCustomer').click(); }
+    });
+    $('#searchcontactText').on('keypress', function(e) {
+      if (e.which === 13) { e.preventDefault(); $('#searchcontact').click(); }
+    });
+    $('#searchemployeeText').on('keypress', function(e) {
+      if (e.which === 13) { e.preventDefault(); $('#searchemployee').click(); }
+    });
+
+    // Auto focus saat modal dibuka
+    $('#customerModal').on('shown.bs.modal', function() {
+      $('#searchCustomerText').val('').focus();
+    });
+    $('#contactModal').on('shown.bs.modal', function() {
+      $('#searchcontactText').val('').focus();
+    });
+    $('#employeeModal').on('shown.bs.modal', function() {
+      $('#searchemployeeText').val('').focus();
+    });
+
+    // Reset category jika ditutup tanpa pilih
+    $('#customerModal, #contactModal, #employeeModal').on('hidden.bs.modal', function () {
+      if ($('input[name="name"]').val() === '') {
+        $('#category').val('none').trigger('change');
       }
     });
   </script>

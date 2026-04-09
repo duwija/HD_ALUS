@@ -68,7 +68,9 @@
               <label class="filter-label">
                 <i class="fas fa-calendar-alt"></i> Tanggal Awal
               </label>
-              <input type="date" name="tanggal_awal" id="tanggal_awal" class="form-control" value="{{ $tanggalAwal }}">
+              <input type="text" id="ns_awal_display" class="form-control" autocomplete="off" readonly
+                value="{{ \Carbon\Carbon::parse($tanggalAwal)->format('d/m/Y') }}">
+              <input type="hidden" name="tanggal_awal" id="ns_awal_hidden" value="{{ $tanggalAwal }}">
             </div>
           </div>
           <div class="col-md-3">
@@ -76,7 +78,9 @@
               <label class="filter-label">
                 <i class="fas fa-calendar-alt"></i> Tanggal Akhir
               </label>
-              <input type="date" name="tanggal_akhir" id="tanggal_akhir" class="form-control" value="{{ $tanggalAkhir }}">
+              <input type="text" id="ns_akhir_display" class="form-control" autocomplete="off" readonly
+                value="{{ \Carbon\Carbon::parse($tanggalAkhir)->format('d/m/Y') }}">
+              <input type="hidden" name="tanggal_akhir" id="ns_akhir_hidden" value="{{ $tanggalAkhir }}">
             </div>
           </div>
           <div class="col-md-2">
@@ -208,4 +212,20 @@
     </div>
   </div>
 </section>
+@endsection
+
+@section('footer-scripts')
+<script>
+$(document).ready(function() {
+  var dpOpts = { format: 'dd/mm/yyyy', todayHighlight: true, autoclose: true };
+  $('#ns_awal_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    $('#ns_awal_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+  $('#ns_akhir_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    $('#ns_akhir_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+});
+</script>
 @endsection

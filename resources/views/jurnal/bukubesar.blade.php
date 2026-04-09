@@ -170,10 +170,11 @@ tr.bg-secondary .amount-kredit {
           <label class="filter-label">
             <i class="fas fa-calendar-alt"></i> Transaction Date Start
           </label>
-          <div class="input-group date" id="reservationdate" data-target-input="nearest">
-            <input type="text" name="date_from" id="date_from" class="form-control datetimepicker-input" 
-                   data-target="#reservationdate" value="{{date('Y-m-01')}}" />
-            <div class="input-group-append" data-target="#reservationdate" data-toggle="datetimepicker">
+          <div class="input-group">
+            <input type="text" id="bb_date_from_display" class="form-control" autocomplete="off" readonly
+                   value="{{ date('d/m/Y', strtotime(date('Y-m-01'))) }}" />
+            <input type="hidden" name="date_from" id="bb_date_from_hidden" value="{{date('Y-m-01')}}" />
+            <div class="input-group-append">
               <div class="input-group-text"><i class="fa fa-calendar"></i></div>
             </div>
           </div>
@@ -183,10 +184,11 @@ tr.bg-secondary .amount-kredit {
           <label class="filter-label">
             <i class="fas fa-calendar-alt"></i> Transaction Date End
           </label>
-          <div class="input-group date" id="reservationdate2" data-target-input="nearest">
-            <input type="text" name="date_end" id="date_end" class="form-control datetimepicker-input" 
-                   data-target="#reservationdate2" value="{{date('Y-m-d')}}" />
-            <div class="input-group-append" data-target="#reservationdate2" data-toggle="datetimepicker">
+          <div class="input-group">
+            <input type="text" id="bb_date_end_display" class="form-control" autocomplete="off" readonly
+                   value="{{ date('d/m/Y') }}" />
+            <input type="hidden" name="date_end" id="bb_date_end_hidden" value="{{date('Y-m-d')}}" />
+            <div class="input-group-append">
               <div class="input-group-text"><i class="fa fa-calendar"></i></div>
             </div>
           </div>
@@ -335,16 +337,16 @@ $(document).ready(function() {
    }
  });
  
- // Initialize date pickers with unique IDs
- if ($.fn.datetimepicker) {
-   $('#reservationdate').datetimepicker({
-     format: 'YYYY-MM-DD'
-   });
-   
-   $('#reservationdate2').datetimepicker({
-     format: 'YYYY-MM-DD'
-   });
- }
+ // Initialize date pickers
+ var dpOpts = { format: 'dd/mm/yyyy', todayHighlight: true, autoclose: true };
+ $('#bb_date_from_display').datepicker(dpOpts).on('changeDate', function(e) {
+   var d = e.date;
+   $('#bb_date_from_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+ });
+ $('#bb_date_end_display').datepicker(dpOpts).on('changeDate', function(e) {
+   var d = e.date;
+   $('#bb_date_end_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+ });
  
  $('#bukubesar').click(function() 
  {

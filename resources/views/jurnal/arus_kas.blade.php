@@ -198,13 +198,17 @@
             <label class="filter-label">
               <i class="far fa-calendar-alt"></i> Tanggal Awal
             </label>
-            <input type="date" name="tanggal_awal" class="form-control" value="{{ $tanggalAwal }}">
+            <input type="text" id="ak_awal_display" class="form-control" autocomplete="off" readonly
+              value="{{ \Carbon\Carbon::parse($tanggalAwal)->format('d/m/Y') }}">
+            <input type="hidden" name="tanggal_awal" id="ak_awal_hidden" value="{{ $tanggalAwal }}">
           </div>
           <div class="col-md-3">
             <label class="filter-label">
               <i class="far fa-calendar-check"></i> Tanggal Akhir
             </label>
-            <input type="date" name="tanggal_akhir" class="form-control" value="{{ $tanggalAkhir }}">
+            <input type="text" id="ak_akhir_display" class="form-control" autocomplete="off" readonly
+              value="{{ \Carbon\Carbon::parse($tanggalAkhir)->format('d/m/Y') }}">
+            <input type="hidden" name="tanggal_akhir" id="ak_akhir_hidden" value="{{ $tanggalAkhir }}">
           </div>
           <div class="col-md-3">
             <label class="filter-label">
@@ -567,6 +571,18 @@
 
 @section('footer-scripts')
 <script>
+$(document).ready(function() {
+  var dpOpts = { format: 'dd/mm/yyyy', todayHighlight: true, autoclose: true };
+  $('#ak_awal_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    $('#ak_awal_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+  $('#ak_akhir_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    $('#ak_akhir_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+});
+
 // Event klik badge code untuk melihat detail jurnal
 $(document).on('click', '.view-jurnal', function () {
   const code = $(this).data('code');

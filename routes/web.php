@@ -772,6 +772,7 @@ Route::get('jurnal/kaskeluar', 'JurnalController@kaskeluar');
 Route::get('jurnal/transferkas', 'JurnalController@transferkas');
 Route::get('jurnal/laporanneraca', 'JurnalController@laporanNeraca');
 Route::get('/jurnal/show/{code}', 'JurnalController@show');
+Route::post('/jurnal/updatebycode/{code}', 'JurnalController@updateByCode');
 Route::get('/jurnal/arus-kas', 'JurnalController@laporanArusKas');
 
 Route::get('/jurnal/arus-kas/pdf', 'JurnalController@exportArusKasPdf');

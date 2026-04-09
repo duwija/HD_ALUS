@@ -4,14 +4,19 @@
 
 <div class="container-fluid">
   <div class="card shadow-sm">
-    <div class="card-header-custom">
+    <div class="card-header-custom" style="background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%); padding: 18px 24px;">
       <div class="d-flex justify-content-between align-items-center">
-        <h3><i class="fas fa-file-invoice mr-2"></i>TRANSAKSI GENERAL</h3>
+        <div>
+          <h4 class="mb-0 font-weight-bold text-white" style="letter-spacing: 1px;">
+            <i class="fas fa-file-invoice mr-2"></i>TRANSAKSI GENERAL
+          </h4>
+          <small class="text-white" style="opacity: 0.85;">Pencatatan jurnal umum manual</small>
+        </div>
         <div class="dropdown">
-          <button class="btn btn-light dropdown-toggle" type="button" id="transactionDropdown" data-toggle="dropdown" aria-expanded="false">
-            <i class="fas fa-plus-circle mr-1"></i> Transaksi Lainnya
+          <button class="btn btn-light btn-sm dropdown-toggle" type="button" id="transactionDropdown" data-toggle="dropdown" aria-expanded="false">
+            <i class="fas fa-exchange-alt mr-1"></i> Transaksi Lainnya
           </button>
-          <ul class="dropdown-menu dropdown-menu-right" aria-labelledby="transactionDropdown">
+          <ul class="dropdown-menu dropdown-menu-right shadow" aria-labelledby="transactionDropdown">
             <li><a class="dropdown-item" href="/jurnal/kasmasuk"><i class="fas fa-hand-holding-usd text-success mr-2"></i> Kas Masuk</a></li>
             <li><a class="dropdown-item" href="/jurnal/kaskeluar"><i class="fas fa-money-bill-wave text-danger mr-2"></i> Kas Keluar</a></li>
             <li><a class="dropdown-item" href="/jurnal/transferkas"><i class="fas fa-exchange-alt text-primary mr-2"></i> Transfer Kas</a></li>
@@ -29,8 +34,9 @@
           <h5 class="form-section-title"><i class="fas fa-info-circle mr-2"></i>Informasi Transaksi</h5>
           <div class="row">
             <div class="col-md-4">
-              <label for="date" class="form-label"><i class="far fa-calendar-alt mr-1"></i> Tanggal Transaksi</label>
-              <input type="date" name="date" class="form-control" id="date" value="{{ now()->format('Y-m-d') }}" required>
+              <label for="date_display" class="form-label"><i class="far fa-calendar-alt mr-1"></i> Tanggal Transaksi</label>
+              <input type="text" class="form-control" id="date_display" value="{{ now()->format('d/m/Y') }}" autocomplete="off" required readonly>
+              <input type="hidden" name="date" id="date_hidden" value="{{ now()->format('Y-m-d') }}">
             </div>
             <div class="col-md-4">
               <label for="noTransaksi" class="form-label"><i class="fas fa-hashtag mr-1"></i> No Transaksi</label>
@@ -40,7 +46,7 @@
         </div>
 
         <!-- Pihak Terkait Section -->
-        <div class="form-section">
+        <div class="form-section" style="margin-top: 1.5rem;">
           <h5 class="form-section-title"><i class="fas fa-user-friends mr-2"></i>Pihak Terkait</h5>
           <div class="row">
             <div class="col-md-4">
@@ -62,7 +68,7 @@
         </div>
 
         <!-- Detail Transaksi Section -->
-        <div class="form-section">
+        <div class="form-section" style="margin-top: 1.5rem;">
           <h5 class="form-section-title"><i class="fas fa-list-ul mr-2"></i>Detail Transaksi</h5>
           <div class="table-responsive">
             <table class="table table-bordered">
@@ -110,7 +116,7 @@
             </table>
           </div>
 
-          <button type="button" class="btn btn-add-row btn-sm" id="addRow">
+          <button type="button" class="btn btn-primary btn-sm mt-2" id="addRow" style="background:#4a90e2;border-color:#357abd;">
             <i class="fas fa-plus mr-1"></i> Tambah Baris
           </button>
         </div>
@@ -236,6 +242,18 @@
 @section('footer-scripts')
 
 <script>
+  $('#date_display').datepicker({
+    format: 'dd/mm/yyyy',
+    todayHighlight: true,
+    autoclose: true,
+  }).on('changeDate', function(e) {
+    var d = e.date;
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    $('#date_hidden').val(yyyy + '-' + mm + '-' + dd);
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
     const transaksiTable = document.getElementById('transaksiTable');
     const addRowBtn = document.getElementById('addRow');
@@ -259,11 +277,18 @@
   // *** Tambahkan baris ini ***
       $(newRow).find('.select2').select2({
         dropdownParent: $(newRow)
+      }).on('select2:select', function() {
+        $(this).closest('tr').find('input[name="description[]"]').focus();
       });
 
       updateTotal();
     });
 
+
+    // Auto focus ke deskripsi saat akun dipilih
+    $('#transaksiTable').on('select2:select', 'select[name="akun[]"]', function() {
+      $(this).closest('tr').find('input[name="description[]"]').focus();
+    });
 
     // Hapus baris
     transaksiTable.addEventListener('click', function (e) {
@@ -525,6 +550,28 @@ function generateAkunOptions() {
         confirmButtonText: "OK"
       });
       $('#employeeModal').modal('hide');
+    });
+
+    // Enter key support untuk semua modal pencarian
+    $('#searchCustomerText').on('keypress', function(e) {
+      if (e.which === 13) { e.preventDefault(); $('#searchCustomer').click(); }
+    });
+    $('#searchcontactText').on('keypress', function(e) {
+      if (e.which === 13) { e.preventDefault(); $('#searchcontact').click(); }
+    });
+    $('#searchemployeeText').on('keypress', function(e) {
+      if (e.which === 13) { e.preventDefault(); $('#searchemployee').click(); }
+    });
+
+    // Auto focus saat modal dibuka
+    $('#customerModal').on('shown.bs.modal', function() {
+      $('#searchCustomerText').val('').focus();
+    });
+    $('#contactModal').on('shown.bs.modal', function() {
+      $('#searchcontactText').val('').focus();
+    });
+    $('#employeeModal').on('shown.bs.modal', function() {
+      $('#searchemployeeText').val('').focus();
     });
   });
 </script>

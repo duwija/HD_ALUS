@@ -58,10 +58,13 @@ class JurnalController extends Controller
       {
        $customer = Customer::findOrFail($id);
 
-    // Ambil semua jurnal, lalu group by code
+    // Ambil semua jurnal yang berhubungan dengan customer ini:
+    // 1. Jurnal dari invoice/jumum (contact_id = customer->id, category null)
+    // 2. Jurnal dari kas masuk/keluar/general (category = 'customer', contact_id = customer->id)
        $jurnals = Jurnal::with('akun')
        ->where('contact_id', $customer->id)
        ->orderBy('date', 'asc')
+       ->orderBy('code', 'asc')
        ->get()
         ->groupBy('code'); // 🔑 Kelompokkan berdasarkan code
 
@@ -521,6 +524,7 @@ class JurnalController extends Controller
         'index' =>++$index,
         'is_group' => true,
         'reff' => '',
+        'code' => $transactions[0]->code ?? '',
         'description' => $description. '</br><small>'.$transactions[0]->memo.'</small>',
         'user_name' => $transactions[0]->user_name,
         'date' => '',
@@ -1400,7 +1404,7 @@ public function kaskeluar()
                 'created_at' => now(),
                 'updated_at' => now(),
                 'code' => $code,
-                'contact_id' => '0000000001',
+                'contact_id' => $request->contact_id,
               ]);
               $note .= ' | ' . ($request->description[$index] ?? '');
             }
@@ -1419,7 +1423,7 @@ public function kaskeluar()
               'created_at' => now(),
               'updated_at' => now(),
               'code' => $code,
-              'contact_id' => '0000000001',
+              'contact_id' => $request->contact_id,
             ]);
 
             DB::commit();
@@ -1476,7 +1480,7 @@ public function kaskeluar()
                 'created_at' => now(),
                 'updated_at' => now(),
                 'code' => $code,
-                'contact_id' => '0000000001',
+                'contact_id' => $request->contact_id,
               ]);
               $note .= ' | ' . ($request->description[$index] ?? '');
             }
@@ -1496,7 +1500,6 @@ public function kaskeluar()
               'created_at' => now(),
               'updated_at' => now(),
               'code' => $code,
-              'contact_id' => '0000000001',
             ]);
 
             DB::commit();
@@ -3040,13 +3043,62 @@ public function show($code)
   $totalDebet  = $jurnals->sum('debet');
   $totalKredit = $jurnals->sum('kredit');
 
+  $akunList = \App\Akun::orderBy('akun_code', 'asc')
+    ->select('akun_code', 'name', 'group')
+    ->whereNull('parent')
+    ->orWhereNotNull('parent')
+    ->get();
+
   return view('jurnal.show', [
    'note'        => optional($jurnals->first())->note,
-   'code' => $code,
-   'jurnals' => $jurnals,
-   'totalDebet' => $totalDebet,
+   'memo'        => optional($jurnals->first())->memo,
+   'code'        => $code,
+   'jurnals'     => $jurnals,
+   'totalDebet'  => $totalDebet,
    'totalKredit' => $totalKredit,
+   'akunList'    => $akunList,
  ]);
+}
+
+public function updateByCode(Request $request, $code)
+{
+  $request->validate([
+    'date'            => 'required|date',
+    'rows'            => 'required|array|min:1',
+    'rows.*.id'       => 'required|integer',
+    'rows.*.id_akun'  => 'required|string',
+    'rows.*.description' => 'nullable|string',
+    'rows.*.debet'    => 'required|numeric|min:0',
+    'rows.*.kredit'   => 'required|numeric|min:0',
+  ]);
+
+  DB::beginTransaction();
+  try {
+    // Update shared fields for all rows in this transaction
+    \App\Jurnal::where('code', $code)->whereNull('deleted_at')->update([
+      'date' => $request->date,
+      'memo' => $request->memo ?? '',
+    ]);
+
+    // Update each row individually
+    foreach ($request->rows as $row) {
+      \App\Jurnal::where('id', $row['id'])
+        ->where('code', $code)
+        ->whereNull('deleted_at')
+        ->update([
+          'id_akun'     => $row['id_akun'],
+          'description' => $row['description'] ?? '',
+          'debet'       => $row['debet'],
+          'kredit'      => $row['kredit'],
+        ]);
+    }
+
+    DB::commit();
+    return response()->json(['success' => true, 'message' => 'Jurnal berhasil diperbarui.']);
+  } catch (\Exception $e) {
+    DB::rollBack();
+    return response()->json(['success' => false, 'message' => 'Gagal update: ' . $e->getMessage()], 500);
+  }
 }
 
     /**

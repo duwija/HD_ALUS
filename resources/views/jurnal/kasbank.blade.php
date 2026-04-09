@@ -26,13 +26,17 @@
       <div class="filter-section">
         <form method="GET" action="{{ url()->current() }}" class="form-row align-items-end">
           <div class="col-md-4 mb-3">
-            <label for="date_from"><i class="far fa-calendar-alt mr-1"></i> Tanggal Awal</label>
-            <input type="date" name="date_from" id="date_from" class="form-control"
+            <label for="date_from_display"><i class="far fa-calendar-alt mr-1"></i> Tanggal Awal</label>
+            <input type="text" id="date_from_display" class="form-control" autocomplete="off" readonly
+              value="{{ \Carbon\Carbon::parse(request('date_from', \Carbon\Carbon::today()->toDateString()))->format('d/m/Y') }}">
+            <input type="hidden" name="date_from" id="date_from_hidden"
               value="{{ request('date_from', \Carbon\Carbon::today()->toDateString()) }}">
           </div>
           <div class="col-md-4 mb-3">
-            <label for="date_to"><i class="far fa-calendar-alt mr-1"></i> Tanggal Akhir</label>
-            <input type="date" name="date_to" id="date_to" class="form-control"
+            <label for="date_to_display"><i class="far fa-calendar-alt mr-1"></i> Tanggal Akhir</label>
+            <input type="text" id="date_to_display" class="form-control" autocomplete="off" readonly
+              value="{{ \Carbon\Carbon::parse(request('date_to', \Carbon\Carbon::today()->toDateString()))->format('d/m/Y') }}">
+            <input type="hidden" name="date_to" id="date_to_hidden"
               value="{{ request('date_to', \Carbon\Carbon::today()->toDateString()) }}">
           </div>
           <div class="col-md-4 mb-3">
@@ -185,6 +189,29 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+$(document).ready(function() {
+  var dpOpts = {
+    format: 'dd/mm/yyyy',
+    todayHighlight: true,
+    autoclose: true,
+  };
+  $('#date_from_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    $('#date_from_hidden').val(yyyy + '-' + mm + '-' + dd);
+  });
+  $('#date_to_display').datepicker(dpOpts).on('changeDate', function(e) {
+    var d = e.date;
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    $('#date_to_hidden').val(yyyy + '-' + mm + '-' + dd);
+  });
+});
+</script>
 
 <script>
   // Bar Chart untuk Kas Bank per Akun
