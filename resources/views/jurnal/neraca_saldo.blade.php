@@ -68,7 +68,8 @@
               <label class="filter-label">
                 <i class="fas fa-calendar-alt"></i> Tanggal Awal
               </label>
-              <input type="text" id="ns_awal_display" class="form-control" autocomplete="off" readonly
+              <input type="text" id="ns_awal_display" class="form-control" autocomplete="off"
+                placeholder="dd/mm/yyyy"
                 value="{{ \Carbon\Carbon::parse($tanggalAwal)->format('d/m/Y') }}">
               <input type="hidden" name="tanggal_awal" id="ns_awal_hidden" value="{{ $tanggalAwal }}">
             </div>
@@ -78,7 +79,8 @@
               <label class="filter-label">
                 <i class="fas fa-calendar-alt"></i> Tanggal Akhir
               </label>
-              <input type="text" id="ns_akhir_display" class="form-control" autocomplete="off" readonly
+              <input type="text" id="ns_akhir_display" class="form-control" autocomplete="off"
+                placeholder="dd/mm/yyyy"
                 value="{{ \Carbon\Carbon::parse($tanggalAkhir)->format('d/m/Y') }}">
               <input type="hidden" name="tanggal_akhir" id="ns_akhir_hidden" value="{{ $tanggalAkhir }}">
             </div>
@@ -226,6 +228,26 @@ $(document).ready(function() {
     var d = e.date;
     $('#ns_akhir_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
   });
+
+  function applyManualDate(displayId, hiddenId) {
+    document.getElementById(displayId).addEventListener('input', function() {
+      var raw = this.value.replace(/[^0-9]/g, '');
+      var out = '';
+      if (raw.length > 0) out += raw.substring(0, 2);
+      if (raw.length >= 2) out += '/' + raw.substring(2, 4);
+      if (raw.length >= 4) out += '/' + raw.substring(4, 8);
+      this.value = out;
+      if (raw.length >= 8) {
+        var dd = raw.substring(0,2), mm = raw.substring(2,4), yyyy = raw.substring(4,8);
+        if (parseInt(dd)>=1 && parseInt(dd)<=31 && parseInt(mm)>=1 && parseInt(mm)<=12 && parseInt(yyyy)>=2000) {
+          document.getElementById(hiddenId).value = yyyy + '-' + mm + '-' + dd;
+          $('#' + displayId).datepicker('update', dd + '/' + mm + '/' + yyyy);
+        }
+      }
+    });
+  }
+  applyManualDate('ns_awal_display', 'ns_awal_hidden');
+  applyManualDate('ns_akhir_display', 'ns_akhir_hidden');
 });
 </script>
 @endsection

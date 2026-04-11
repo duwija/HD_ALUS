@@ -175,7 +175,8 @@
               <label class="filter-label">
                 <i class="fas fa-calendar-alt"></i> Tanggal Akhir
               </label>
-              <input type="text" id="neraca_akhir_display" class="form-control" autocomplete="off" readonly
+              <input type="text" id="neraca_akhir_display" class="form-control" autocomplete="off"
+                placeholder="dd/mm/yyyy"
                 value="{{ \Carbon\Carbon::parse($tanggalAkhir)->format('d/m/Y') }}">
               <input type="hidden" name="tanggal_akhir" id="neraca_akhir_hidden" value="{{ $tanggalAkhir }}">
             </div>
@@ -383,6 +384,22 @@ $(document).ready(function() {
   }).on('changeDate', function(e) {
     var d = e.date;
     $('#neraca_akhir_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  });
+
+  document.getElementById('neraca_akhir_display').addEventListener('input', function() {
+    var raw = this.value.replace(/[^0-9]/g, '');
+    var out = '';
+    if (raw.length > 0) out += raw.substring(0, 2);
+    if (raw.length >= 2) out += '/' + raw.substring(2, 4);
+    if (raw.length >= 4) out += '/' + raw.substring(4, 8);
+    this.value = out;
+    if (raw.length >= 8) {
+      var dd = raw.substring(0,2), mm = raw.substring(2,4), yyyy = raw.substring(4,8);
+      if (parseInt(dd)>=1 && parseInt(dd)<=31 && parseInt(mm)>=1 && parseInt(mm)<=12 && parseInt(yyyy)>=2000) {
+        document.getElementById('neraca_akhir_hidden').value = yyyy + '-' + mm + '-' + dd;
+        $('#neraca_akhir_display').datepicker('update', dd + '/' + mm + '/' + yyyy);
+      }
+    }
   });
 });
 </script>

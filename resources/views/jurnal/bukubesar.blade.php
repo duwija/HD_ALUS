@@ -171,7 +171,8 @@ tr.bg-secondary .amount-kredit {
             <i class="fas fa-calendar-alt"></i> Transaction Date Start
           </label>
           <div class="input-group">
-            <input type="text" id="bb_date_from_display" class="form-control" autocomplete="off" readonly
+            <input type="text" id="bb_date_from_display" class="form-control" autocomplete="off"
+                   placeholder="dd/mm/yyyy"
                    value="{{ date('d/m/Y', strtotime(date('Y-m-01'))) }}" />
             <input type="hidden" name="date_from" id="bb_date_from_hidden" value="{{date('Y-m-01')}}" />
             <div class="input-group-append">
@@ -185,7 +186,8 @@ tr.bg-secondary .amount-kredit {
             <i class="fas fa-calendar-alt"></i> Transaction Date End
           </label>
           <div class="input-group">
-            <input type="text" id="bb_date_end_display" class="form-control" autocomplete="off" readonly
+            <input type="text" id="bb_date_end_display" class="form-control" autocomplete="off"
+                   placeholder="dd/mm/yyyy"
                    value="{{ date('d/m/Y') }}" />
             <input type="hidden" name="date_end" id="bb_date_end_hidden" value="{{date('Y-m-d')}}" />
             <div class="input-group-append">
@@ -347,6 +349,28 @@ $(document).ready(function() {
    var d = e.date;
    $('#bb_date_end_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
  });
+
+ function applyManualDateBB(displayId, hiddenId) {
+   var el = document.getElementById(displayId);
+   el.addEventListener('input', function() {
+     var raw = this.value.replace(/[^0-9]/g, '');
+     var out = '';
+     if (raw.length > 0) out += raw.substring(0, 2);
+     if (raw.length >= 2) out += '/' + raw.substring(2, 4);
+     if (raw.length >= 4) out += '/' + raw.substring(4, 8);
+     this.value = out;
+     if (raw.length >= 8) {
+       var dd = raw.substring(0,2), mm = raw.substring(2,4), yyyy = raw.substring(4,8);
+       var d = parseInt(dd), m = parseInt(mm), y = parseInt(yyyy);
+       if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 2000) {
+         document.getElementById(hiddenId).value = yyyy + '-' + mm + '-' + dd;
+         $('#' + displayId).datepicker('update', dd + '/' + mm + '/' + yyyy);
+       }
+     }
+   });
+ }
+ applyManualDateBB('bb_date_from_display', 'bb_date_from_hidden');
+ applyManualDateBB('bb_date_end_display', 'bb_date_end_hidden');
  
  $('#bukubesar').click(function() 
  {
