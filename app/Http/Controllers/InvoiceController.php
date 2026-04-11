@@ -560,7 +560,9 @@ else
     //$customer = \App\customer::findOrFail($id);
    // dd($invoice);
 
-    return view ('invoice/create',['invoice' =>$invoice, 'customer'=>$customer,'duedate'=>$dueDate, 'pajak'=>$pajak]);
+    $addons = $customer->addons;
+
+    return view ('invoice/create',['invoice' =>$invoice, 'customer'=>$customer,'duedate'=>$dueDate, 'pajak'=>$pajak, 'addons'=>$addons]);
 
 }
 }

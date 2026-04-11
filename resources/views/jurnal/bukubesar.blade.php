@@ -267,8 +267,8 @@ tr.bg-secondary .amount-kredit {
       <!-- Modal View Jurnal -->
       <div class="modal fade" id="modalViewJurnal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-xl" role="document">
-          <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
+          <div class="modal-content" style="overflow:hidden;">
+            <div class="modal-header bg-primary text-white" style="border-top-left-radius:calc(.3rem - 1px);border-top-right-radius:calc(.3rem - 1px);">
               <h5 class="modal-title">Detail Jurnal</h5>
               <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
                 <span aria-hidden="true">&times;</span>
@@ -413,7 +413,7 @@ columns: [
     name: 'debet', 
     className: 'dt-right',
     render: function (data, type, row) {
-      if (!data || data === '-' || data === '0') return '-';
+      if (!data || data === '-' || data === '0' || data === '0,00') return '-';
       return `<span class="amount-debet">${data}</span>`;
     }
   },
@@ -422,7 +422,7 @@ columns: [
     name: 'kredit', 
     className: 'dt-right',
     render: function (data, type, row) {
-      if (!data || data === '-' || data === '0') return '-';
+      if (!data || data === '-' || data === '0' || data === '0,00') return '-';
       return `<span class="amount-kredit">${data}</span>`;
     }
   },

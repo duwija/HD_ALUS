@@ -64,6 +64,16 @@
              <th style="width: 25%" class="text-right">NPWP :</th>
              <td><strong>{{strtoupper($customer->npwp)}} </strong> </td>
            </tr>
+           @if($addons->isNotEmpty())
+           <tr>
+             <th style="width: 25%" class="text-right">Add-ons :</th>
+             <td>
+               @foreach($addons as $addon)
+                 <span class="badge badge-info mr-1" style="font-size:0.85em;">{{ $addon->name }}@if($addon->price) &nbsp;Rp {{ number_format($addon->price, 0, ',', '.') }}@endif</span>
+               @endforeach
+             </td>
+           </tr>
+           @endif
 
 
 
@@ -198,7 +208,7 @@
                 <td style="color:white; background-color: green" >{{ 'Invoiced' }}</td>
                 @endif --}}
                 <td>{{ $invoice->qty }}</td>
-                <td>{{ $invoice->qty * $invoice->amount }}</td>
+                <td>{{ number_format($invoice->qty * $invoice->amount, 0, ',', '.') }}</td>
                 <td>
                  <a href="/invoice/{{ $encrypt->encrypt($invoice->id) }}/delete/{{$customer->id}}" title="delete" class="btn btn-danger btn-sm "> <i class="fa fa-times"> </i> Delete</a>
                </td>
@@ -273,7 +283,7 @@
 
 <div class="modal fade" id="modal-additeminvoice">
   <div class="modal-dialog modal-lg">
-    <div class="modal-content card card-primary card-outline ">
+    <div class="modal-content card card-primary card-outline" style="overflow:hidden;">
             <!-- <div class="modal-header">
              <h5 class="modal-title">drap Marker to Right Posision</h5> 
               
@@ -379,7 +389,7 @@
             </div>
             <div class="form-group col-md-6">
               <label for="amount">amount</label>
-              <input type="number" class="form-control @error('amount') is-invalid @enderror " name="amount" id="amount"  placeholder="Item amount" value="{{old('amount')}}">
+              <input type="text" class="form-control @error('amount') is-invalid @enderror" name="amount" id="amount" inputmode="numeric" autocomplete="off" placeholder="Item amount" value="{{old('amount')}}">
               @error('amount')
               <div class="error invalid-feedback">{{ $message }}</div>
               @enderror
@@ -409,21 +419,43 @@
 @endsection
 
 <script type="text/javascript">
-
- function typeChange() {
-
-   var str = document.getElementById('monthly_fee').value;
-
-   if (str==1)
-   {
-    document.getElementById('description').value="Monthly Fee";
-
-    document.getElementById('amount').value=(JSON.parse("{{ json_encode($customer->plan_price) }}"));
-    document.getElementById('qty').value="1";
+  function parseRibuan(val) {
+    return parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  function formatRibuan(num) {
+    if (!num || num === 0) return '';
+    return Math.round(num).toLocaleString('id-ID');
   }
 
-}
+  // Format amount input on typing
+  document.addEventListener('DOMContentLoaded', function() {
+    var amountEl = document.getElementById('amount');
+    if (amountEl) {
+      amountEl.addEventListener('input', function() {
+        var raw = this.value.replace(/[^0-9,]/g, '');
+        if (!raw.endsWith(',')) {
+          var num = parseRibuan(raw);
+          this.value = raw === '' ? '' : (num > 0 ? num.toLocaleString('id-ID') : '0');
+        } else {
+          this.value = raw;
+        }
+      });
+      // Strip separator before modal form submit
+      amountEl.closest('form').addEventListener('submit', function() {
+        amountEl.value = parseRibuan(amountEl.value);
+      });
+    }
+  });
 
+  function typeChange() {
+    var str = document.getElementById('monthly_fee').value;
+    if (str == 1) {
+      document.getElementById('description').value = "Monthly Fee";
+      var planPrice = JSON.parse("{{ json_encode($customer->plan_price) }}");
+      document.getElementById('amount').value = planPrice ? Math.round(planPrice).toLocaleString('id-ID') : '';
+      document.getElementById('qty').value = "1";
+    }
+  }
 </script>
 <script type="text/javascript">
   function updateTax() {

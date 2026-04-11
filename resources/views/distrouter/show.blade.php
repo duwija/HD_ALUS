@@ -1,5 +1,5 @@
 @extends('layout.main')
-@section('title','Router — {{ $distrouter->name }}')
+@section('title','Router — ' . $distrouter->name)
 @section('content')
 <style>
   .dr-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-sm); overflow:hidden; margin-bottom:18px; }

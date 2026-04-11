@@ -69,8 +69,8 @@
         <div class="form-group col-md-3">
           <label><i class="fas fa-calendar-alt"></i> Transaction Date Start</label>
           <div class="input-group mb-3">
-            <input type="text" id="jum_date_from_display" class="form-control" autocomplete="off" readonly
-                   value="{{ now()->format('d/m/Y') }}" />
+            <input type="text" id="jum_date_from_display" class="form-control" autocomplete="off"
+                   placeholder="dd/mm/yyyy" value="{{ now()->format('d/m/Y') }}" />
             <input type="hidden" name="date_from" id="jum_date_from_hidden" value="{{ now()->toDateString() }}" />
             <div class="input-group-append">
               <div class="input-group-text"><i class="fa fa-calendar"></i></div>
@@ -81,8 +81,8 @@
         <div class="form-group col-md-3">
           <label><i class="fas fa-calendar-alt"></i> Transaction Date End</label>
           <div class="input-group mb-3">
-            <input type="text" id="jum_date_to_display" class="form-control" autocomplete="off" readonly
-                   value="{{ date('d/m/Y') }}" />
+            <input type="text" id="jum_date_to_display" class="form-control" autocomplete="off"
+                   placeholder="dd/mm/yyyy" value="{{ date('d/m/Y') }}" />
             <input type="hidden" name="date_end" id="jum_date_to_hidden" value="{{ date('Y-m-d') }}" />
             <div class="input-group-append">
               <div class="input-group-text"><i class="fa fa-calendar"></i></div>
@@ -144,8 +144,8 @@
 <!-- Modal View/Edit Jurnal -->
 <div class="modal fade" id="modalViewJurnalUmum" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
+    <div class="modal-content" style="overflow:hidden;">
+      <div class="modal-header bg-primary text-white" style="border-top-left-radius:calc(.3rem - 1px);border-top-right-radius:calc(.3rem - 1px);">
         <h5 class="modal-title"><i class="fas fa-book mr-2"></i>Detail Jurnal</h5>
         <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
           <span aria-hidden="true">&times;</span>
@@ -174,6 +174,25 @@ $(document).ready(function() {
     var d = e.date;
     $('#jum_date_to_hidden').val(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
   });
+
+  // Helper: parse dd/mm/yyyy dan update hidden + datepicker
+  function applyManualDate(displayId, hiddenId) {
+    var val = $('#' + displayId).val().replace(/[^0-9\/]/g, '');
+    if (val.length === 2 && val.indexOf('/') === -1) val += '/';
+    else if (val.length === 5 && val.split('/').length - 1 === 1) val += '/';
+    $('#' + displayId).val(val);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+      var parts = val.split('/');
+      var dNum = parseInt(parts[0], 10), mNum = parseInt(parts[1], 10) - 1, yNum = parseInt(parts[2], 10);
+      var dateObj = new Date(yNum, mNum, dNum);
+      if (dateObj.getFullYear() === yNum && dateObj.getMonth() === mNum && dateObj.getDate() === dNum) {
+        $('#' + displayId).datepicker('update', val);
+        $('#' + hiddenId).val(yNum + '-' + String(mNum+1).padStart(2,'0') + '-' + String(dNum).padStart(2,'0'));
+      }
+    }
+  }
+  $('#jum_date_from_display').on('input', function() { applyManualDate('jum_date_from_display', 'jum_date_from_hidden'); });
+  $('#jum_date_to_display').on('input', function() { applyManualDate('jum_date_to_display', 'jum_date_to_hidden'); });
 });
 
 var index = 0;
@@ -219,8 +238,18 @@ var table = $('#jurnal-table').DataTable({
     { data: null, name: null, orderable: false, searchable: false, className: 'dt-center' },
     { data: 'date', name: 'date', className: 'dt-left', orderable: false, searchable: false },
     { data: 'akun_name', name: 'akun_name', className: 'dt-left', orderable: false, searchable: false },
-    { data: 'debet', name: 'debet', className: 'dt-right' },
-    { data: 'kredit', name: 'kredit', className: 'dt-right' },
+    { data: 'debet', name: 'debet', className: 'dt-right',
+      render: function(data) {
+        if (!data || data === '-' || data === '0' || data === '0,00') return '-';
+        return '<span class="amount-debet">' + data + '</span>';
+      }
+    },
+    { data: 'kredit', name: 'kredit', className: 'dt-right',
+      render: function(data) {
+        if (!data || data === '-' || data === '0' || data === '0,00') return '-';
+        return '<span class="amount-kredit">' + data + '</span>';
+      }
+    },
   ],
   rowCallback: function(row, data) {
     if (data.is_group) {
@@ -248,9 +277,13 @@ var table = $('#jurnal-table').DataTable({
       // Add color classes to amounts
       if (data.debet && data.debet !== '0,00') {
         $('td', row).eq(3).html(`<span class="amount-debet">${data.debet}</span>`);
+      } else {
+        $('td', row).eq(3).html('-');
       }
       if (data.kredit && data.kredit !== '0,00') {
         $('td', row).eq(4).html(`<span class="amount-kredit">${data.kredit}</span>`);
+      } else {
+        $('td', row).eq(4).html('-');
       }
     }
   },

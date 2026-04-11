@@ -1,7 +1,7 @@
 
 <section class="content-header">
 
-  <div class="card-header d-flex align-items-center">
+  <div class="card-header d-flex align-items-center" style="border-top-left-radius:0;border-top-right-radius:0;">
     <h3 class="card-title mb-0">
       <i class="fas fa-book"></i> Jurnal Code: <span class="text-primary">{{ $code }}</span>
     </h3>
@@ -25,8 +25,8 @@
           <tr>
             <th>#</th>
             <th>Tanggal</th>
+            <th>Akun</th>
             <th>Deskripsi</th>
-            <th>ID Akun</th>
             <th class="text-right">Debet</th>
             <th class="text-right">Kredit</th>
           </tr>
@@ -39,8 +39,8 @@
           <tr>
             <td>{{ $index + 1 }}</td>
             <td>{{ \Carbon\Carbon::parse($jurnal->date)->format('d/m/Y') }}</td>
-            <td>{{ $jurnal->description }}</td>
             <td>{{ $jurnal->id_akun }}{{ $jurnal->akun ? ' | ' . $jurnal->akun->name : '' }}</td>
+            <td>{{ $jurnal->description }}</td>
             <td class="text-right">{{ $jurnal->debet ? number_format($jurnal->debet, 0, ',', '.') : '-' }}</td>
             <td class="text-right">{{ $jurnal->kredit ? number_format($jurnal->kredit, 0, ',', '.') : '-' }}</td>
           </tr>
@@ -109,12 +109,12 @@
                     value="{{ $jurnal->description }}" placeholder="Deskripsi">
                 </td>
                 <td>
-                  <input type="number" class="form-control form-control-sm edit-debet row-debet"
-                    value="{{ $jurnal->debet }}" min="0" step="0.01">
+                  <input type="text" class="form-control form-control-sm edit-debet row-debet"
+                    value="{{ $jurnal->debet ? number_format($jurnal->debet, 0, ',', '.') : '0' }}" inputmode="numeric" autocomplete="off">
                 </td>
                 <td>
-                  <input type="number" class="form-control form-control-sm edit-kredit row-kredit"
-                    value="{{ $jurnal->kredit }}" min="0" step="0.01">
+                  <input type="text" class="form-control form-control-sm edit-kredit row-kredit"
+                    value="{{ $jurnal->kredit ? number_format($jurnal->kredit, 0, ',', '.') : '0' }}" inputmode="numeric" autocomplete="off">
                 </td>
                 <td class="text-center">
                   <button type="button" class="btn btn-danger btn-sm btn-delete-row" title="Hapus baris">
@@ -160,6 +160,12 @@
 
 <script>
 (function() {
+  function getModalContainer() {
+    return document.getElementById('modal-jurnal-umum-content')
+        || document.getElementById('modal-jurnal-content')
+        || document.querySelector('.modal-body');
+  }
+
   // Toggle view/edit mode
   document.getElementById('btn-toggle-edit').addEventListener('click', function() {
     document.getElementById('view-mode').style.display = 'none';
@@ -227,8 +233,8 @@
       '<td class="row-num">?<input type="hidden" class="row-id" value=""></td>' +
       '<td><select class="form-control form-control-sm row-akun" required>' + akunOptions + '</select></td>' +
       '<td><input type="text" class="form-control form-control-sm row-desc" placeholder="Deskripsi"></td>' +
-      '<td><input type="number" class="form-control form-control-sm edit-debet row-debet" value="0" min="0" step="0.01"></td>' +
-      '<td><input type="number" class="form-control form-control-sm edit-kredit row-kredit" value="0" min="0" step="0.01"></td>' +
+      '<td><input type="text" class="form-control form-control-sm edit-debet row-debet" value="0" inputmode="numeric" autocomplete="off"></td>' +
+      '<td><input type="text" class="form-control form-control-sm edit-kredit row-kredit" value="0" inputmode="numeric" autocomplete="off"></td>' +
       '<td class="text-center"><button type="button" class="btn btn-danger btn-sm btn-delete-row" title="Hapus baris"><i class="fas fa-trash"></i></button></td>';
     document.getElementById('edit-rows-body').appendChild(tr);
     // Init Select2 on the new row's select
@@ -255,18 +261,28 @@
     recalcEditTotals();
   });
 
+  // Helper: parse ribuan id-ID (titik=ribuan, koma=desimal)
+  function parseRibuan(val) {
+    if (typeof val === 'number') return val;
+    return parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  function formatRibuan(num) {
+    if (!num || num === 0) return '0';
+    return num.toLocaleString('id-ID');
+  }
+
   // Live recalc debet/kredit totals
   function recalcEditTotals() {
     var totalD = 0, totalK = 0;
     document.querySelectorAll('#edit-rows-table .edit-debet').forEach(function(el) {
-      totalD += parseFloat(el.value) || 0;
+      totalD += parseRibuan(el.value);
     });
     document.querySelectorAll('#edit-rows-table .edit-kredit').forEach(function(el) {
-      totalK += parseFloat(el.value) || 0;
+      totalK += parseRibuan(el.value);
     });
 
-    var fmtD = totalD.toLocaleString('id-ID', {minimumFractionDigits: 2});
-    var fmtK = totalK.toLocaleString('id-ID', {minimumFractionDigits: 2});
+    var fmtD = formatRibuan(totalD);
+    var fmtK = formatRibuan(totalK);
     document.getElementById('edit-total-debet').value  = fmtD;
     document.getElementById('edit-total-kredit').value = fmtK;
 
@@ -279,7 +295,7 @@
       balanceEl.innerHTML = '<i class="fas fa-check-circle mr-1"></i> Debet = Kredit &mdash; Jurnal seimbang';
       saveBtn.disabled = false;
     } else {
-      var selisih = (totalD - totalK).toLocaleString('id-ID', {minimumFractionDigits: 2});
+      var selisih = formatRibuan(Math.abs(totalD - totalK));
       balanceEl.className = 'mb-0 py-1 px-2 rounded text-center font-weight-bold bg-danger text-white';
       balanceEl.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> Selisih: ' + selisih + ' &mdash; Debet harus sama dengan Kredit';
       saveBtn.disabled = true;
@@ -289,6 +305,13 @@
   // Attach listeners to debet/kredit inputs
   document.getElementById('edit-rows-table').addEventListener('input', function(e) {
     if (e.target.classList.contains('edit-debet') || e.target.classList.contains('edit-kredit')) {
+      var raw = e.target.value.replace(/[^0-9,]/g, '');
+      if (!raw.endsWith(',')) {
+        var num = parseRibuan(raw);
+        e.target.value = raw === '' ? '' : (num > 0 ? num.toLocaleString('id-ID') : '0');
+      } else {
+        e.target.value = raw;
+      }
       recalcEditTotals();
     }
   });
@@ -297,7 +320,7 @@
   document.getElementById('edit-rows-table').addEventListener('blur', function(e) {
     if (e.target.classList.contains('edit-debet') || e.target.classList.contains('edit-kredit')) {
       if (e.target.value === '' || e.target.value === null) {
-        e.target.value = 0;
+        e.target.value = '0';
         recalcEditTotals();
       }
     }
@@ -323,8 +346,8 @@
         id:          tr.querySelector('.row-id').value,
         id_akun:     $(tr).find('.row-akun').val(),
         description: tr.querySelector('.row-desc').value,
-        debet:       tr.querySelector('.row-debet').value,
-        kredit:      tr.querySelector('.row-kredit').value,
+        debet:       parseRibuan(tr.querySelector('.row-debet').value),
+        kredit:      parseRibuan(tr.querySelector('.row-kredit').value),
       });
     });
 
@@ -335,18 +358,18 @@
       headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
       data: JSON.stringify(formData),
       success: function(res) {
-        document.getElementById('edit-alert').innerHTML =
-          '<div class="alert alert-success"><i class="fas fa-check-circle mr-1"></i>' + res.message + '</div>';
-        // Refresh the modal content after short delay
-        setTimeout(function() {
-          $.ajax({
-            url: '/jurnal/show/{{ $code }}',
-            type: 'GET',
-            success: function(html) {
-              $('#modal-jurnal-content').html(html);
-            }
-          });
-        }, 1000);
+        // Langsung reload konten modal dengan data terbaru
+        $.ajax({
+          url: '/jurnal/show/{{ $code }}',
+          type: 'GET',
+          success: function(html) {
+            $(getModalContainer()).html(html);
+          },
+          error: function() {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save mr-1"></i> Simpan Perubahan';
+          }
+        });
       },
       error: function(xhr) {
         var msg = 'Gagal menyimpan perubahan.';

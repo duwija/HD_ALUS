@@ -478,7 +478,7 @@ function generateAkunOptions() {
           }
           data.forEach(customer => {
             $('#customerList').append(
-              `<li class="dropdown-hover list-group-item list-group-item-action customer-item" data-id="${customer.customer_id}" data-name="${customer.name}">${customer.customer_id}  |
+              `<li class="dropdown-hover list-group-item list-group-item-action customer-item" data-id="${customer.id}" data-name="${customer.name}">${customer.customer_id}  |
                 ${customer.name}  
                 </li>`
                 );
