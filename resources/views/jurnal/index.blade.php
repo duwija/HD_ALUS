@@ -97,11 +97,19 @@
 
 
     <div class="card card-primary card-outline">
-      <div class="card-header">
+      <div class="card-header d-flex align-items-center justify-content-between">
         <h3 class="card-title font-weight-bold">NERACA SALDO </h3>
-
-
-
+        <div class="dropdown">
+          <button class="btn btn-light btn-sm dropdown-toggle" type="button" id="transactionDropdown" data-toggle="dropdown" aria-expanded="false">
+            <i class="fas fa-exchange-alt mr-1"></i> Transaksi Lainnya
+          </button>
+          <ul class="dropdown-menu dropdown-menu-right shadow" aria-labelledby="transactionDropdown">
+            <li><a class="dropdown-item" href="/jurnal/kasmasuk"><i class="fas fa-hand-holding-usd text-success mr-2"></i> Kas Masuk</a></li>
+            <li><a class="dropdown-item" href="/jurnal/kaskeluar"><i class="fas fa-money-bill-wave text-danger mr-2"></i> Kas Keluar</a></li>
+            <li><a class="dropdown-item" href="/jurnal/transferkas"><i class="fas fa-exchange-alt text-primary mr-2"></i> Transfer Kas</a></li>
+            <li><a class="dropdown-item" href="/jurnal/general"><i class="fas fa-file-invoice text-secondary mr-2"></i> Transaksi General</a></li>
+          </ul>
+        </div>
       </div>
 
       <div class="card-body">

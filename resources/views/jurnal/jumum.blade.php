@@ -55,12 +55,25 @@
 
 <section class="content-header">
   <div class="card shadow-sm">
-    <div class="card-header-custom">
-      <h3>
-        <i class="fas fa-book mr-2"></i>
-        JURNAL UMUM (GENERAL JOURNAL)
-      </h3>
-      <small style="opacity: 0.9;">Semua transaksi jurnal dalam periode tertentu</small>
+    <div class="card-header-custom" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h3>
+          <i class="fas fa-book mr-2"></i>
+          JURNAL UMUM (GENERAL JOURNAL)
+        </h3>
+        <small style="opacity: 0.9;">Semua transaksi jurnal dalam periode tertentu</small>
+      </div>
+      <div class="dropdown">
+        <button class="btn btn-light btn-sm dropdown-toggle" type="button" id="transactionDropdown" data-toggle="dropdown" aria-expanded="false">
+          <i class="fas fa-exchange-alt mr-1"></i> Transaksi Lainnya
+        </button>
+        <ul class="dropdown-menu dropdown-menu-right shadow" aria-labelledby="transactionDropdown">
+          <li><a class="dropdown-item" href="/jurnal/kasmasuk"><i class="fas fa-hand-holding-usd text-success mr-2"></i> Kas Masuk</a></li>
+          <li><a class="dropdown-item" href="/jurnal/kaskeluar"><i class="fas fa-money-bill-wave text-danger mr-2"></i> Kas Keluar</a></li>
+          <li><a class="dropdown-item" href="/jurnal/transferkas"><i class="fas fa-exchange-alt text-primary mr-2"></i> Transfer Kas</a></li>
+          <li><a class="dropdown-item" href="/jurnal/general"><i class="fas fa-file-invoice text-secondary mr-2"></i> Transaksi General</a></li>
+        </ul>
+      </div>
     </div>
 
     <div class="card-body">

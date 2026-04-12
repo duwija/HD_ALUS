@@ -110,6 +110,11 @@
             <input type="text" readonly name="debet" id="totalAmount" class="form-control jumlah" placeholder="0"></h5>
           </td>
         </tr>
+      <tr id="selisihRow">
+        <td colspan="4" class="text-end">
+          <span id="selisihInfo" style="font-size:0.9em;"></span>
+        </td>
+      </tr>
       </table>
 
       <button type="button" class="btn btn-primary btn-sm" id="addRow">+ Tambah Data</button>
@@ -317,6 +322,14 @@ $(document).ready(function() {
       total += parseRibuan(input.value);
     });
     totalAmountEl.value = formatRibuan(total);
+
+    // Keterangan selisih (debet = kredit by design, tapi tampilkan status)
+    var selisihInfo = document.getElementById('selisihInfo');
+    if (total > 0) {
+      selisihInfo.innerHTML = '<i class="fas fa-check-circle" style="color:#28a745;"></i> <span style="color:#28a745;font-weight:600;">Seimbang — Debet = Kredit = Rp ' + formatRibuan(total) + '</span>';
+    } else {
+      selisihInfo.innerHTML = '';
+    }
   }
 
     // Fungsi untuk mengambil daftar akun

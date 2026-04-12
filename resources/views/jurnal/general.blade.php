@@ -112,6 +112,18 @@
                   </td>
                   <td></td>
                 </tr>
+                <tr id="selisihRow" style="display:none;">
+                  <td colspan="2" class="text-right"><strong style="color:#dc3545;">SELISIH:</strong></td>
+                  <td colspan="2">
+                    <span id="selisihText" style="color:#dc3545;font-weight:bold;font-size:0.95em;"></span>
+                  </td>
+                  <td></td>
+                </tr>
+                <tr id="seimbangRow" style="display:none;">
+                  <td colspan="5" class="text-right">
+                    <span style="color:#28a745;font-weight:600;font-size:0.9em;"><i class="fas fa-check-circle mr-1"></i>Seimbang</span>
+                  </td>
+                </tr>
               </tfoot>
             </table>
           </div>
@@ -396,6 +408,26 @@
   // Perbarui nilai total debet dan kredit
   document.getElementById('totalAmountdebet').value = formatRibuan(totalDebet);
   document.getElementById('totalAmountkredit').value = formatRibuan(totalKredit);
+
+  // Keterangan selisih
+  var selisihRow = document.getElementById('selisihRow');
+  var seimbangRow = document.getElementById('seimbangRow');
+  var selisihText = document.getElementById('selisihText');
+  var selisih = totalDebet - totalKredit;
+  if (totalDebet > 0 || totalKredit > 0) {
+    if (selisih !== 0) {
+      selisihRow.style.display = '';
+      seimbangRow.style.display = 'none';
+      var arah = selisih > 0 ? 'Debet lebih besar' : 'Kredit lebih besar';
+      selisihText.textContent = 'Rp ' + formatRibuan(Math.abs(selisih)) + ' (' + arah + ')';
+    } else {
+      selisihRow.style.display = 'none';
+      seimbangRow.style.display = '';
+    }
+  } else {
+    selisihRow.style.display = 'none';
+    seimbangRow.style.display = 'none';
+  }
 
   // Cek apakah total debet dan kredit sama
   const submitButton = document.querySelector('button[id=submit]');
