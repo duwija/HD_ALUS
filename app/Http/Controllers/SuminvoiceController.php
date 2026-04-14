@@ -481,7 +481,11 @@ public function winpay()
             $baseAmount      = (float) $suminvoice->total_amount;
             $fee             = $gw ? $gw->calculateFee($baseAmount) : 0;
             $totalAmount     = (int) ($baseAmount + $fee);
-            $merchantOrderId = $suminvoice->number;
+
+            // Append ms-timestamp suffix so each attempt has a unique merchantOrderId.
+            // Duitku rejects reuse of the same merchantOrderId (1 ID hanya bisa dibayar sekali).
+            $attemptMs       = (string) round(microtime(true) * 1000);
+            $merchantOrderId = $suminvoice->number . '-' . $attemptMs;
 
             // POP API: Signature = SHA256(merchantCode + timestamp_ms + apiKey) — tanpa separator
             $timestamp = round(microtime(true) * 1000);

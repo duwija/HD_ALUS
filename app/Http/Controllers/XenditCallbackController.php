@@ -999,7 +999,10 @@ return("ACCEPTED");
     public function update_duitku(Request $request)
     {
         $date        = now()->toDateTimeString();
-        $number      = $request->merchantOrderId;  // ini = suminvoice.number
+        $number      = $request->merchantOrderId;  // raw merchantOrderId (may contain -timestamp suffix)
+        // Strip unique ms-timestamp suffix appended on each payment attempt
+        // Format baru: <nomor_invoice>-<13_digit_ms_timestamp>; format lama: tanpa suffix
+        $invoiceNumber = preg_match('/^(.+)-\d{13}$/', $number, $_m) ? $_m[1] : $number;
         $amount      = $request->amount;
         $merchantCode= $request->merchantCode;
         $resultCode  = $request->resultCode;
@@ -1034,27 +1037,27 @@ return("ACCEPTED");
             return response()->json(['success' => false, 'message' => 'Payment not completed']);
         }
 
-        $cekstatus = \App\Suminvoice::where('number', $number)->first();
+        $cekstatus = \App\Suminvoice::where('number', $invoiceNumber)->first();
         if (!$cekstatus) {
-            // Cek apakah ini bundle payment
+            // Cek apakah ini bundle payment (bundle_ref tidak pakai suffix, gunakan $number asli)
             $bundle = \DB::table('payment_bundles')->where('bundle_ref', $number)->first();
             if ($bundle) {
                 $noteStr = 'DUITKU ' . ($paymentCode) . ' | ref:' . ($reference) . ' | Rp' . number_format($amount, 0, ',', '.');
                 return $this->processBundleCallback($bundle, (float)$amount, 'DUITKU', $noteStr);
             }
-            \Log::channel('payment')->error('Duitku: Invoice tidak ditemukan: ' . $number);
+            \Log::channel('payment')->error('Duitku: Invoice tidak ditemukan: ' . $invoiceNumber . ' (raw: ' . $number . ')');
             return response()->json(['success' => false, 'message' => 'Invoice not found'], 404);
         }
 
         if ($cekstatus->payment_status == 1) {
-            \Log::channel('payment')->info('[DUITKU] INV no: ' . $number . ' | Sudah dibayar, tidak diproses ulang.');
+            \Log::channel('payment')->info('[DUITKU] INV no: ' . $invoiceNumber . ' | Sudah dibayar, tidak diproses ulang.');
             return response()->json(['success' => true]);
         }
 
         DB::beginTransaction();
         try {
-            $invoice = \App\Suminvoice::where('number', $number)->lockForUpdate()->first();
-            if (!$invoice) throw new \Exception('Invoice tidak ditemukan setelah lock: ' . $number);
+            $invoice = \App\Suminvoice::where('number', $invoiceNumber)->lockForUpdate()->first();
+            if (!$invoice) throw new \Exception('Invoice tidak ditemukan setelah lock: ' . $invoiceNumber);
 
             $customers = \App\Customer::where('id', $invoice->id_customer)->first();
             if (!$customers) throw new \Exception('Customer tidak ditemukan untuk invoice: ' . $number);
