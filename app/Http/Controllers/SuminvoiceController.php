@@ -511,7 +511,7 @@ public function winpay()
                 'phoneNumber'     => $intlPhone,
                 'callbackUrl'     => $callbackUrl,
                 'returnUrl'       => $returnUrl,
-                'expiryPeriod'    => 1440,
+                'expiryPeriod'    => 28800, // 20 hari
                 'customerDetail'  => [
                     'firstName'   => $firstName,
                     'lastName'    => $lastName,
@@ -840,7 +840,7 @@ public function winpay()
                     'phoneNumber'     => $intlPhone,
                     'callbackUrl'     => url('/duitku/callback'),
                     'returnUrl'       => $returnUrl,
-                    'expiryPeriod'    => 1440,
+                    'expiryPeriod'    => 28800, // 20 hari
                     'customerDetail'  => [
                         'firstName'   => $firstName,
                         'lastName'    => $lastName,
