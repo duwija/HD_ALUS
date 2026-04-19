@@ -145,6 +145,7 @@ class TenantManagementController extends Controller
                 "public/tenants/{$rescode}/img",
                 "public/tenants/{$rescode}/storage",
                 "public/tenants/{$rescode}/upload",
+                "public/tenants/{$rescode}/upload/customerfiles",
                 "public/tenants/{$rescode}/backup",
                 "public/tenants/{$rescode}/users",
             ];
