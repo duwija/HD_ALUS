@@ -219,7 +219,9 @@ class CreateInvJob implements ShouldQueue
                         $message .= "\n*Batas Pembayaran:* " . $due_date;
                         $message .= "\n\n";
                         $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-                        $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedUrl;
+                        $originalInvUrl = "https://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedUrl;
+                        try { $invLink = \App\ShortUrl::shorten($originalInvUrl); } catch (\Throwable $e) { $invLink = $originalInvUrl; }
+                        $message .= "\n" . $invLink;
                         $message .= "\n\n";
                         $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
                         $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));

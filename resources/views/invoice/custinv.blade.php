@@ -237,7 +237,8 @@
         /* Select-all bar */
         .select-bar {
             background: #fff; border-radius: var(--radius); box-shadow: var(--shadow);
-            padding: 10px 14px; margin-bottom: 10px;
+            padding: 10px 14px;
+            margin-bottom: 10px;
             display: flex; align-items: center; justify-content: space-between;
             border: 1px dashed var(--primary);
         }
@@ -266,6 +267,64 @@
             border-radius: 10px; font-size: 14px; font-weight: 700;
             cursor: pointer; display: flex; align-items: center; gap: 6px;
             white-space: nowrap; font-family: inherit;
+        }
+        @media (max-width: 599px) {
+            .content-wrap { padding: 0 12px; }
+            .customer-card { padding: 14px; }
+            .info-grid { grid-template-columns: 1fr; gap: 8px; }
+
+            .inv-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            .inv-actions {
+                width: 100%;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .inv-actions .btn-action {
+                flex: 1 1 calc(50% - 3px);
+                justify-content: center;
+                min-height: 34px;
+            }
+
+            .bundle-bar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+                padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+            }
+            .bundle-bar-info { min-width: 0; }
+            .bundle-bar-label { font-size: 10px; }
+            .bundle-bar-gw { font-size: 14px; line-height: 1.2; }
+            .bundle-bar-count { font-size: 10px; }
+            .bundle-bar-actions {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .btn-bundle-pay {
+                width: 100%;
+                justify-content: center;
+                white-space: normal;
+                text-align: center;
+                padding: 10px 12px;
+                line-height: 1.25;
+            }
+
+            .pay-bar {
+                padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+            }
+            .btn-pay-now {
+                padding: 11px 14px;
+                font-size: 13px;
+            }
+        }
+        @media (max-width: 380px) {
+            .inv-actions .btn-action { flex: 1 1 100%; }
         }
         /* Modal */
         .modal-overlay {

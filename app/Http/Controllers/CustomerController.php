@@ -1529,6 +1529,7 @@ public function table_invoice(Request $request)
         ->get();
         $merchant = \App\Merchant::pluck('name', 'id');
         $olt = \App\Olt::pluck('name', 'id');
+        $oltVendors = \App\Olt::select('id','vendor','type','name')->get()->keyBy('id');
 
         // $topologycustomer = \App\topologycustomer::findOrFail($id);
        //  $customer_coordinate = \App\Customer::findOrFail($id);
@@ -1558,7 +1559,7 @@ public function table_invoice(Request $request)
         $map = app('map')->create_map();
 
         
-        return view ('customer/edit',['customer' => \App\Customer::findOrFail($id),'map' => $map, 'status' => $status, 'distpoint' => $distpoint,'sale' =>$sale, 'distrouter' => $distrouter, 'plan' => $plan, 'olt' =>$olt, 'merchant'=>$merchant, 'addons' => \App\Addon::orderBy('name')->get(), 'customerAddons' => \App\Customer::findOrFail($id)->addons->pluck('id')->toArray() ] );
+        return view ('customer/edit',['customer' => \App\Customer::findOrFail($id),'map' => $map, 'status' => $status, 'distpoint' => $distpoint,'sale' =>$sale, 'distrouter' => $distrouter, 'plan' => $plan, 'olt' =>$olt, 'merchant'=>$merchant, 'addons' => \App\Addon::orderBy('name')->get(), 'customerAddons' => \App\Customer::findOrFail($id)->addons->pluck('id')->toArray(), 'oltVendors' => $oltVendors ] );
 
     }
 

@@ -884,15 +884,29 @@
         @php
         $portId = null;
         $value = null;
+        $isHsgqOlt = false;
 
         if (isset($customer->id_onu) && strpos($customer->id_onu, ':') !== false) {
           list($key, $value) = explode(":", $customer->id_onu, 2);
-          $portId = config('zteframeslotportid')[$key] ?? null;
+          
+          // Check if OLT is HSGQ
+          $oltData = \App\Olt::find($customer->id_olt);
+          if ($oltData) {
+            $oltVendorCheck = strtolower(($oltData->vendor ?? '') . ' ' . ($oltData->type ?? '') . ' ' . ($oltData->name ?? ''));
+            $isHsgqOlt = str_contains($oltVendorCheck, 'hsgq');
+          }
+          
+          if ($isHsgqOlt) {
+            // HSGQ: pass PON number directly as portId
+            $portId = $key;
+          } else {
+            $portId = config('zteframeslotportid')[$key] ?? null;
+          }
         }
         @endphp
 
         @if($portId !== null && $value !== null)
-        <form onsubmit="confirmSubmit(event, 'Reboot This ONU!')" action="{{ url('/olt/reboot/' . $customer->id_olt . '/' . $portId . '/' . $value) }}" method="POST">
+        <form action="{{ url('/olt/reboot/' . $customer->id_olt . '/' . $portId . '/' . $value) }}" method="POST">
           @csrf
           <button type="submit" class="btn btn-warning px-4" title="Reboot">
             <i class="fas fa-sync-alt"></i> Reboot
@@ -1119,6 +1133,34 @@
 @section('footer-scripts')
 
 <script>
+// ── Confirm Submit (SweetAlert) ──────────────────────────
+function confirmSubmit(event, message) {
+  event.preventDefault();
+  Swal.fire({
+    title: 'Are You Sure?',
+    text: message,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#3085d6',
+    cancelButtonColor: '#d33',
+    confirmButtonText: 'Yes, Sure!',
+    cancelButtonText: 'Cancel'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      Swal.fire({
+        title: 'Loading...',
+        html: '<div class="loading-spinner" style="margin-top: 20px;"><i class="fas fa-spinner fa-spin fa-3x"></i></div>',
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        allowEnterKey: false,
+        didOpen: () => { Swal.showLoading(); }
+      });
+      event.target.submit();
+    }
+  });
+}
+
 // ── Customer Tag: Add new tag via AJAX ──────────────────────────
 $('#btn-add-customer-tag').on('click', function() {
   var tagName = $('#new_customer_tag').val().trim();
@@ -2017,12 +2059,21 @@ function confirmDeleteCustomer(customerId) {
           type: 'area',
           events: {
             load: function () {
+              requestDatta();
               setInterval(function () { requestDatta(); }, 1000);
             }
           }
         },
+        time: { useUTC: false },
         title: { text: 'Traffic Monitoring' },
-        xAxis: { type: 'datetime', tickPixelInterval: 150, maxZoom: 20 * 1000 },
+        xAxis: {
+          type: 'datetime',
+          tickPixelInterval: 150,
+          maxZoom: 20 * 1000,
+          labels: {
+            format: '{value:%H:%M:%S}'
+          }
+        },
         yAxis: {
           minPadding: 0.2,
           maxPadding: 0.2,
@@ -2036,7 +2087,12 @@ function confirmDeleteCustomer(customerId) {
         series: [{ name: 'TX', data: [] }, { name: 'RX', data: [] }],
         tooltip: {
           headerFormat: '<b>{series.name}</b><br/>',
-          pointFormat: '{point.x:%Y-%m-%d %H:%M:%S}<br/>{point.y}'
+          pointFormat: '{point.x:%H:%M:%S}<br/>{point.y}',
+          formatter: function() {
+            return '<b>' + this.series.name + '</b><br/>' +
+              Highcharts.dateFormat('%H:%M:%S', this.x) + '<br/>' +
+              convert(this.y);
+          }
         }
       });
     });

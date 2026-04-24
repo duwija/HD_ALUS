@@ -2350,7 +2350,9 @@ if($customers->notification == 1)
  $message .= "\n*Batas Pembayaran:* " . $request->due_date;
  $message .= "\n\n";
  $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
- $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedurl;
+ $_invUrlRaw = "https://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedurl;
+ try { $_invLink = \App\ShortUrl::shorten($_invUrlRaw); } catch (\Throwable $e) { $_invLink = $_invUrlRaw; }
+ $message .= "\n" . $_invLink;
  $message .= "\n\n";
  $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
  $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
@@ -3175,7 +3177,9 @@ if($customers->notification == 1)
     $message .= "\nSejumlah Rp.".$jumlah ." Sudah kami TERIMA";
     $message .= "\n\n";
     $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-    $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedurl;
+    $_invUrlRaw2 = "https://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedurl;
+    try { $_invLink2 = \App\ShortUrl::shorten($_invUrlRaw2); } catch (\Throwable $e) { $_invLink2 = $_invUrlRaw2; }
+    $message .= "\n" . $_invLink2;
     $message .= "\n\n";
     $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
     $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
@@ -3404,6 +3408,26 @@ public function send_reminder_inv(Request $request, $id)
         }
         $duedate = $suminvoice->due_date ?: 'N/A';
         $encryptedurl = '/invoice/cst/' . Crypt::encryptString($customer->id);
+        $originalInvUrl3 = "https://" . tenant_config('domain_name', env("DOMAIN_NAME")) . $encryptedurl;
+        try {
+            $invLink3 = \App\ShortUrl::shorten($originalInvUrl3);
+        } catch (\Throwable $e) {
+            Log::warning('[ShortUrl] send_reminder_inv fallback to original URL', [
+                'suminvoice_id' => $suminvoice->id,
+                'customer_id' => $customer->id,
+                'tenant' => tenant_config('domain_name', env('DOMAIN_NAME')),
+                'original_url' => $originalInvUrl3,
+                'error' => $e->getMessage(),
+            ]);
+            $invLink3 = $originalInvUrl3;
+        }
+        Log::info('[WA Reminder] endpoint hit', [
+            'suminvoice_id' => $suminvoice->id,
+            'customer_id' => $customer->id,
+            'type' => $type,
+            'short_url_used' => strpos($invLink3, '/s/') !== false,
+            'inv_link' => $invLink3,
+        ]);
         $formattedDate = Carbon::parse($suminvoice->date)->translatedFormat('M Y');
 
         // if ($type == 'wa') {
@@ -3443,7 +3467,7 @@ public function send_reminder_inv(Request $request, $id)
                 $message .= "\n*Batas Pembayaran:* " . $duedate;
                 $message .= "\n\n";
                 $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-                $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "" . $encryptedurl;
+                $message .= "\n" . $invLink3;
                 $message .= "\n\n";
                 $message .= "".config("app.signature")."";
             }
@@ -3459,7 +3483,7 @@ public function send_reminder_inv(Request $request, $id)
                 $message .= "\n*Batas Pembayaran:* " . $duedate;
                 $message .= "\n\n";
                 $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-                $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "" . $encryptedurl;
+                $message .= "\n" . $invLink3;
                 $message .= "\n\n";
                 $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
                 $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
@@ -3468,7 +3492,18 @@ public function send_reminder_inv(Request $request, $id)
             }
 
             // $msgresult = \App\Suminvoice::wa_payment($customer->phone, $message);
+            Log::info('[WA Reminder] sending whatsapp', [
+                'suminvoice_id' => $suminvoice->id,
+                'customer_id' => $customer->id,
+                'short_url_used' => strpos($invLink3, '/s/') !== false,
+            ]);
             $msgresult = WaGatewayHelper::wa_payment($customer->phone, $message);
+
+            Log::info('[WA Reminder] whatsapp result', [
+                'suminvoice_id' => $suminvoice->id,
+                'customer_id' => $customer->id,
+                'result' => $msgresult,
+            ]);
 
             if (isset($msgresult['status']) && $msgresult['status'] === 'success') {
                 return response()->json([

@@ -469,6 +469,8 @@
       <a href="/olt/addonu/{{$customer->id}}/{{$customer->id_olt}}" class="btn btn-primary">Onu </a>
     </div>
   </div>
+  <small class="text-muted" id="onu_format_hint">Format: x/x/x:xx</small>
+  <div class="invalid-feedback" id="onu_format_error" style="display:none;"></div>
 
 </div>
 
@@ -676,6 +678,137 @@
 
     $('#addons').on('change', updateAddonTotal);
     updateAddonTotal();
+
+    // === ONU ID Auto-Format ===
+    var oltVendors = @json($oltVendors ?? []);
+
+    function getOltType(oltId) {
+      var olt = oltVendors[oltId];
+      if (!olt) return 'zte';
+      var v = ((olt.vendor || '') + ' ' + (olt.type || '') + ' ' + (olt.name || '')).toLowerCase();
+      if (v.indexOf('hsgq') !== -1) return 'hsgq';
+      return 'zte';
+    }
+
+    function updateOnuPlaceholder() {
+      var oltId = $('#id_olt').val();
+      var type = getOltType(oltId);
+      var input = $('#id_onu');
+      var hint = $('#onu_format_hint');
+      if (type === 'hsgq') {
+        input.attr('placeholder', 'PON:ONU contoh 2:1');
+        hint.text('Format HSGQ: PON:ONU (contoh: 2:1)');
+      } else {
+        input.attr('placeholder', 'x/x/x:xx contoh 0/2/1:3');
+        hint.text('Format ZTE: frame/slot/port:onu (contoh: 0/2/1:3)');
+      }
+      validateOnuId();
+    }
+
+    function formatOnuId(value, type) {
+      // Remove semua karakter selain angka, titik dua, dan slash
+      var clean = value.replace(/[^0-9:\/]/g, '');
+      if (type === 'hsgq') {
+        // HSGQ: hanya angka dan satu titik dua -> x:x
+        clean = clean.replace(/\//g, ''); // hapus slash
+        var parts = clean.split(':');
+        if (parts.length > 2) {
+          clean = parts[0] + ':' + parts.slice(1).join('');
+        }
+        // Auto-insert : setelah angka pertama jika belum ada
+        if (clean.length >= 2 && clean.indexOf(':') === -1) {
+          clean = clean.charAt(0) + ':' + clean.substring(1);
+        }
+      } else {
+        // ZTE: x/x/x:xx
+        // Auto-insert / dan : pada posisi yang tepat
+        var digits = clean.replace(/[\/\:]/g, '');
+        if (digits.length > 0 && clean.indexOf('/') === -1 && clean.indexOf(':') === -1) {
+          var result = '';
+          var slashCount = 0;
+          for (var i = 0; i < digits.length; i++) {
+            result += digits[i];
+            if (slashCount < 2 && i < digits.length - 1 && (i === 0 || (slashCount === 1 && i >= 1))) {
+              // Don't auto-insert if user is still typing first digit
+              if (digits.length > 3) {
+                result += '/';
+                slashCount++;
+              }
+            }
+          }
+          // Only auto-format if enough digits
+          if (digits.length >= 4 && result.indexOf(':') === -1) {
+            // Try to parse as frame/slot/port:onu
+            clean = digits[0] + '/' + digits[1] + '/' + digits[2] + ':' + digits.substring(3);
+          }
+        }
+      }
+      return clean;
+    }
+
+    function validateOnuId() {
+      var oltId = $('#id_olt').val();
+      var type = getOltType(oltId);
+      var value = $('#id_onu').val().trim();
+      var errorEl = $('#onu_format_error');
+      var input = $('#id_onu');
+
+      if (!value) {
+        errorEl.hide();
+        input.removeClass('is-invalid');
+        return true;
+      }
+
+      var valid = false;
+      var msg = '';
+      if (type === 'hsgq') {
+        // Format: PON:ONU (misal 2:1)
+        valid = /^\d{1,2}:\d{1,3}$/.test(value);
+        msg = 'Format HSGQ harus PON:ONU (contoh: 2:1, 8:12)';
+      } else {
+        // Format: x/x/x:xx (misal 0/2/1:3)
+        valid = /^\d{1,2}\/\d{1,2}\/\d{1,2}:\d{1,3}$/.test(value);
+        msg = 'Format ZTE harus frame/slot/port:onu (contoh: 0/2/1:3)';
+      }
+
+      if (!valid) {
+        errorEl.text(msg).show();
+        input.addClass('is-invalid');
+      } else {
+        errorEl.hide();
+        input.removeClass('is-invalid');
+      }
+      return valid;
+    }
+
+    // Event: OLT berubah -> update placeholder & validasi
+    $('#id_olt').on('change', function() {
+      updateOnuPlaceholder();
+      // Update link Onu button
+      var oltId = $(this).val();
+      var customerId = '{{ $customer->id }}';
+      $(this).closest('.row, .form-row').find('a[href*="addonu"]').attr('href', '/olt/addonu/' + customerId + '/' + oltId);
+    });
+
+    // Event: input ONU ID -> auto-format
+    $('#id_onu').on('input', function() {
+      var oltId = $('#id_olt').val();
+      var type = getOltType(oltId);
+      var cursorPos = this.selectionStart;
+      var oldLen = this.value.length;
+      var formatted = formatOnuId(this.value, type);
+      if (formatted !== this.value) {
+        this.value = formatted;
+        var newPos = cursorPos + (formatted.length - oldLen);
+        this.setSelectionRange(newPos, newPos);
+      }
+    });
+
+    // Event: blur -> validasi final
+    $('#id_onu').on('blur', validateOnuId);
+
+    // Init on page load
+    updateOnuPlaceholder();
   });
 </script>
 

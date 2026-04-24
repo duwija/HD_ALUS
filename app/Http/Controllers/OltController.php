@@ -489,30 +489,47 @@ class OltController extends Controller
                     $statusOid = $onuStatus . '.' . $ifIndex;
                     $statusValue = $this->safeSnmpGet($snmp, $statusOid);
                     
+                    // Check power values for all ONUs to determine actual cause
+                    $encodedIndex = encode_hsgq_index($ponNum, $onuId);
+                    $rxPowerOid = $zteoid['oidOnuRxPower'] . '.' . $encodedIndex . '.0.0';
+                    $txPowerOid = $zteoid['oidOnuTxPowerOnu'] . '.' . $encodedIndex . '.0.0';
+                    
+                    $rxPowerValue = $this->safeSnmpGet($snmp, $rxPowerOid);
+                    $txPowerValue = $this->safeSnmpGet($snmp, $txPowerOid);
+                    
+                    // Check if power values are valid
+                    $rxValid = $rxPowerValue && !str_contains($rxPowerValue, 'No Such') && !str_contains($rxPowerValue, 'N/A');
+                    $txValid = $txPowerValue && !str_contains($txPowerValue, 'No Such') && !str_contains($txPowerValue, 'N/A');
+                    
+                    // Extract numeric RX power value for threshold check
+                    $rxNumeric = null;
+                    if ($rxValid && preg_match('/-?\d+/', $rxPowerValue, $rxMatch)) {
+                        $rxNumeric = (int)$rxMatch[0];
+                    }
+                    
                     // Map IF-MIB to HSGQ status codes using regex (handles "INTEGER: 1", "INTEGER: up(1)", etc.)
                     if (preg_match('/\b(1|up)\b/', $statusValue)) {
-                        $statusValue = '3'; // working (initially)
-                        
-                        // Verify with power values to detect offline ONUs and determine cause
-                        $encodedIndex = encode_hsgq_index($ponNum, $onuId);
-                        $rxPowerOid = $zteoid['oidOnuRxPower'] . '.' . $encodedIndex . '.0.0';
-                        $txPowerOid = $zteoid['oidOnuTxPowerOnu'] . '.' . $encodedIndex . '.0.0';
-                        
-                        $rxPowerValue = $this->safeSnmpGet($snmp, $rxPowerOid);
-                        $txPowerValue = $this->safeSnmpGet($snmp, $txPowerOid);
-                        
-                        // Check if power values are valid
-                        $rxValid = $rxPowerValue && !str_contains($rxPowerValue, 'No Such') && !str_contains($rxPowerValue, 'N/A');
-                        $txValid = $txPowerValue && !str_contains($txPowerValue, 'No Such') && !str_contains($txPowerValue, 'N/A');
-                        
-                        // Determine offline cause based on power status
+                        // ifOperStatus = UP
                         if (!$rxValid && !$txValid) {
-                            $statusValue = '5'; // powerdown - Both powers lost
+                            $statusValue = '5'; // powerdown - Both powers lost but interface still up
                         } elseif (!$rxValid || !$txValid) {
-                            $statusValue = '4'; // los - Laser out (one power missing)
+                            $statusValue = '4'; // los - One power missing
+                        } elseif ($rxNumeric !== null && $rxNumeric < -2800) {
+                            $statusValue = '4'; // los - RX power too low (< -28 dBm)
+                        } else {
+                            $statusValue = '3'; // working
                         }
                     } else {
-                        $statusValue = '0'; // offline
+                        // ifOperStatus = DOWN - check power to determine cause
+                        if (!$rxValid && !$txValid) {
+                            $statusValue = '5'; // powerdown - ONU has no power (dying gasp)
+                        } elseif (!$rxValid || !$txValid) {
+                            $statusValue = '4'; // los - Fiber issue (one power missing)
+                        } elseif ($rxNumeric !== null && $rxNumeric < -2800) {
+                            $statusValue = '4'; // los - RX power too low
+                        } else {
+                            $statusValue = '6'; // dyinggasp - Interface down but power values present
+                        }
                     }
                     
                     $pon_int = $ponNum;
@@ -930,7 +947,7 @@ public function onudelete($oltId, $oltPonIndex, $onuId)
 }
 public function onureboot($oltId, $oltPonIndex, $onuId)
 {
-   // dd($request);
+    \Log::info('[REBOOT] onureboot called', ['oltId' => $oltId, 'oltPonIndex' => $oltPonIndex, 'onuId' => $onuId]);
 
     $olt = \App\Olt::findOrFail($oltId);
     
@@ -959,31 +976,46 @@ public function onureboot($oltId, $oltPonIndex, $onuId)
             $ip = $olt->ip;
             $login = $olt->user;
             $password = $olt->password;
-            $port = $olt->port ?? 23;
-            $timeout = 10;
+            $port = (string)($olt->port ?? 23);
+            $timeout = '10';
             
             // Execute Python script for HSGQ ONU reboot via Telnet
-            $processReboot = new Process(["python3", env("PHYTON_DIR")."reboot_hsgq_ont.py", 
-                $ip, $login, $password, $port, $timeout, 
-                $ponNum, $onuNum]);
+            $scriptPath = env("PHYTON_DIR")."reboot_hsgq_ont.py";
+            \Log::info('[REBOOT] Running python script', ['script' => $scriptPath, 'ip' => $ip, 'pon' => $ponNum, 'onu' => $onuNum]);
             
-            // Set timeout to 45 seconds to prevent gateway timeout
-            $processReboot->setTimeout(45);
+            $processReboot = new Process(["python3", $scriptPath, 
+                $ip, $login, $password, $port, $timeout, 
+                (string)$ponNum, (string)$onuNum]);
+            
+            // Set timeout to 60 seconds
+            $processReboot->setTimeout(60);
             
             $processReboot->run();
+            
+            \Log::info('[REBOOT] Python script finished', [
+                'exitCode' => $processReboot->getExitCode(),
+                'output' => $processReboot->getOutput(),
+                'errorOutput' => $processReboot->getErrorOutput(),
+            ]);
             
             if (!$processReboot->isSuccessful()) {
                 throw new ProcessFailedException($processReboot);
             }
             
-            $message = $processReboot->getOutput();
-            $parts = explode(":", $message);
-            return redirect()->back()->with($parts[0], $parts[1]);
+            $message = trim($processReboot->getOutput());
+            // Get only the last meaningful line (result line), not debug/timestamp lines
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect()->back()->with('warning', 'Reboot command sent: ' . $lastLine);
+            }
+            return redirect()->back()->with(trim($parts[0]), trim($parts[1]));
             
         } catch (ProcessFailedException $e) {
-            return redirect('/olt/'.$oltId)->with('error', 'Reboot error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Reboot error: ' . $e->getMessage());
         } catch (\Exception $e) {
-            return redirect('/olt/'.$oltId)->with('error', 'Reboot error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Reboot error: ' . $e->getMessage());
         }
     }
     
@@ -1052,12 +1084,115 @@ public function onu_detail(Request $request)
     $timeout = 10;
     $id_onu = $request->id_onu;
 
+    // Detect vendor type
+    $oltVendor = strtolower($olt->vendor ?? '');
+    $oltType = strtolower($olt->type ?? '');
+    $oltName = strtolower($olt->name ?? '');
+    $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
 
-
-    //dd($ip, $login, $password, $port, $pon_int, $onu_num);
-
-
-
+    if ($isHSGQ) {
+        // HSGQ: Use SNMP to get ONU detail (no CLI command available for detail)
+        try {
+            $zteoid = get_olt_oid_config($olt);
+            $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+            
+            // Parse id_onu format "PON:ONU" (e.g., "2:1")
+            list($ponNum, $onuIdNum) = explode(':', $id_onu);
+            $ponNum = (int)$ponNum;
+            $onuIdNum = (int)$onuIdNum;
+            $encodedIndex = encode_hsgq_index($ponNum, $onuIdNum);
+            $powerDivisor = $zteoid['powerDivisor'] ?? 100;
+            
+            // Fetch all ONU info via SNMP
+            $onuNameVal = str_replace(['STRING: ', '"'], '', $this->safeSnmpGet($snmp, $zteoid['oidOnuName'] . ".$encodedIndex"));
+            $onuVendorVal = str_replace(['STRING: ', '"'], '', $this->safeSnmpGet($snmp, $zteoid['oidOnuVendor'] . ".$encodedIndex"));
+            $onuModelVal = str_replace(['STRING: ', '"'], '', $this->safeSnmpGet($snmp, $zteoid['oidOnuModel'] . ".$encodedIndex"));
+            $onuSnRaw = str_replace(['Hex-STRING: ', 'STRING: ', '"'], '', $this->safeSnmpGet($snmp, $zteoid['oidOnuSn'] . ".$encodedIndex"));
+            $onuSnVal = $this->convertMacToAscii($onuSnRaw);
+            $onuUptimeRaw = str_replace(['Timeticks:', '"'], '', $this->safeSnmpGet($snmp, $zteoid['oidOnuUptime'] . ".$encodedIndex"));
+            // Format timeticks: extract "(NNNN) H:MM:SS.xx" -> convert to readable
+            $onuUptimeVal = '-';
+            if (preg_match('/\((\d+)\)/', $onuUptimeRaw, $tm)) {
+                $totalSeconds = (int)($tm[1] / 100);
+                $days = intdiv($totalSeconds, 86400);
+                $hours = intdiv($totalSeconds % 86400, 3600);
+                $mins = intdiv($totalSeconds % 3600, 60);
+                $secs = $totalSeconds % 60;
+                $onuUptimeVal = ($days > 0 ? "{$days}d " : '') . "{$hours}h {$mins}m {$secs}s";
+            }
+            $onuLastRegVal = str_replace(['STRING: ', 'Timeticks:', '"'], '', $this->safeSnmpGet($snmp, $zteoid['oidOnuLastReg'] . ".$encodedIndex"));
+            
+            // Optics
+            $rxPowerRaw = $this->safeSnmpGet($snmp, $zteoid['oidOnuRxPower'] . ".$encodedIndex.0.0");
+            $txPowerRaw = $this->safeSnmpGet($snmp, $zteoid['oidOnuTxPowerOnu'] . ".$encodedIndex.0.0");
+            $distanceRaw = str_replace(['INTEGER: ', '"'], '', $this->safeSnmpGet($snmp, $zteoid['oidOnuDistance'] . ".$encodedIndex.0.0"));
+            $voltageRaw = str_replace(['INTEGER: ', '"'], '', $this->safeSnmpGet($snmp, ($zteoid['oidOnuVoltage'] ?? '') . ".$encodedIndex.0.0"));
+            $tempRaw = str_replace(['INTEGER: ', '"'], '', $this->safeSnmpGet($snmp, ($zteoid['oidOnuTemperature'] ?? '') . ".$encodedIndex.0.0"));
+            
+            // Parse power values
+            $rxDbm = '-';
+            if ($rxPowerRaw && !str_contains($rxPowerRaw, 'No Such')) {
+                if (preg_match('/-?\d+/', $rxPowerRaw, $m)) {
+                    $rxDbm = round((int)$m[0] / $powerDivisor, 2) . ' dBm';
+                }
+            }
+            $txDbm = '-';
+            if ($txPowerRaw && !str_contains($txPowerRaw, 'No Such')) {
+                if (preg_match('/-?\d+/', $txPowerRaw, $m)) {
+                    $txDbm = round((int)$m[0] / $powerDivisor, 2) . ' dBm';
+                }
+            }
+            
+            // Get IF-MIB status
+            $ifDescrWalk = @$snmp->walk($zteoid['oidIfDescr']);
+            $ifStatus = 'Unknown';
+            if ($ifDescrWalk) {
+                foreach ($ifDescrWalk as $oid => $val) {
+                    $desc = str_replace(['STRING: ', '"'], '', $val);
+                    if (preg_match('/ONU' . $ponNum . '\/' . $onuIdNum . '$/', $desc)) {
+                        $parts = explode('.', $oid);
+                        $ifIdx = (int)end($parts);
+                        $statusRaw = $this->safeSnmpGet($snmp, $zteoid['oidIfOperStatus'] . '.' . $ifIdx);
+                        if (preg_match('/\b(1|up)\b/', $statusRaw)) {
+                            $ifStatus = '<span class="badge badge-success">Online</span>';
+                        } else {
+                            $ifStatus = '<span class="badge badge-danger">Offline</span>';
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            // Build HTML output
+            $html = '<div class="table-responsive">';
+            $html .= '<table class="table table-sm table-bordered">';
+            $html .= '<tr><th colspan="2" class="bg-primary text-white">ONU Information - HSGQ GPON</th></tr>';
+            $html .= '<tr><td><strong>ONU ID</strong></td><td>PON' . $ponNum . '/' . $onuIdNum . '</td></tr>';
+            $html .= '<tr><td><strong>Status</strong></td><td>' . $ifStatus . '</td></tr>';
+            $html .= '<tr><td><strong>Name/Description</strong></td><td>' . ($onuNameVal ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Vendor</strong></td><td>' . ($onuVendorVal ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Model</strong></td><td>' . ($onuModelVal ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Serial Number</strong></td><td>' . ($onuSnVal ?: '-') . '</td></tr>';
+            $html .= '<tr><th colspan="2" class="bg-info text-white">Optical Information</th></tr>';
+            $html .= '<tr><td><strong>ONU RX Power</strong></td><td>' . $rxDbm . '</td></tr>';
+            $html .= '<tr><td><strong>ONU TX Power</strong></td><td>' . $txDbm . '</td></tr>';
+            $html .= '<tr><td><strong>Distance</strong></td><td>' . ($distanceRaw ?: '-') . ' m</td></tr>';
+            $html .= '<tr><td><strong>Voltage</strong></td><td>' . ($voltageRaw ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Temperature</strong></td><td>' . ($tempRaw ?: '-') . '</td></tr>';
+            $html .= '<tr><th colspan="2" class="bg-secondary text-white">Registration</th></tr>';
+            $html .= '<tr><td><strong>Uptime</strong></td><td>' . ($onuUptimeVal ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Last Registration</strong></td><td>' . ($onuLastRegVal ?: '-') . '</td></tr>';
+            $html .= '</table>';
+            $html .= '</div>';
+            
+            echo $html;
+            return;
+            
+        } catch (\Exception $e) {
+            echo '<div class="alert alert-danger">Error fetching HSGQ ONU detail: ' . htmlspecialchars($e->getMessage()) . '</div>';
+            return;
+        }
+    }
 
     $processreboot = new Process(["python3", env("PHYTON_DIR")."onudetail.py", 
         $ip, $login, $password, $port, $timeout, 
@@ -1560,12 +1695,42 @@ public function getOltPon($id)
                                                          // HSGQ: Use IF-MIB ifOperStatus (1=up, 2=down)
                                                          $hasilStatusRaw = $this->safeSnmpGet($snmp, $oidOnuStatus.'.'.$ifIndex);
                                                          
-                                                         // Parse status: can be "INTEGER: 1", "INTEGER: up(1)", or just "1"
-                                                         // Extract numeric value
+                                                         // Check power values to determine actual ONU state
+                                                         $rxPowerCheckOid = $zteoid['oidOnuRxPower'].".$encodedIndex.0.0";
+                                                         $txPowerCheckOid = $zteoid['oidOnuTxPowerOnu'].".$encodedIndex.0.0";
+                                                         $rxPwrVal = $this->safeSnmpGet($snmp, $rxPowerCheckOid);
+                                                         $txPwrVal = $this->safeSnmpGet($snmp, $txPowerCheckOid);
+                                                         
+                                                         $rxPwrValid = $rxPwrVal && !str_contains($rxPwrVal, 'No Such') && !str_contains($rxPwrVal, 'N/A');
+                                                         $txPwrValid = $txPwrVal && !str_contains($txPwrVal, 'No Such') && !str_contains($txPwrVal, 'N/A');
+                                                         
+                                                         $rxPwrNum = null;
+                                                         if ($rxPwrValid && preg_match('/-?\d+/', $rxPwrVal, $rxM)) {
+                                                             $rxPwrNum = (int)$rxM[0];
+                                                         }
+                                                         
                                                          if (preg_match('/\b(1|up)\b/', $hasilStatusRaw)) {
-                                                             $hasilStatus = '3'; // working (map IF-MIB up(1) to HSGQ working(3))
+                                                             // ifOperStatus = UP
+                                                             if (!$rxPwrValid && !$txPwrValid) {
+                                                                 $hasilStatus = '5'; // powerdown
+                                                             } elseif (!$rxPwrValid || !$txPwrValid) {
+                                                                 $hasilStatus = '4'; // los
+                                                             } elseif ($rxPwrNum !== null && $rxPwrNum < -2800) {
+                                                                 $hasilStatus = '4'; // los - RX power too low
+                                                             } else {
+                                                                 $hasilStatus = '3'; // working
+                                                             }
                                                          } else {
-                                                             $hasilStatus = '0'; // offline (map IF-MIB down(2) to HSGQ offline(0))
+                                                             // ifOperStatus = DOWN - check power to determine cause
+                                                             if (!$rxPwrValid && !$txPwrValid) {
+                                                                 $hasilStatus = '5'; // powerdown (dying gasp - no power)
+                                                             } elseif (!$rxPwrValid || !$txPwrValid) {
+                                                                 $hasilStatus = '4'; // los - fiber issue
+                                                             } elseif ($rxPwrNum !== null && $rxPwrNum < -2800) {
+                                                                 $hasilStatus = '4'; // los - RX power too low
+                                                             } else {
+                                                                 $hasilStatus = '6'; // dyinggasp - interface down but power present
+                                                             }
                                                          }
                                                      } elseif ($isC600Series) {
                                                          // C620: Status OID uses encoded index (branch .500)
@@ -2702,6 +2867,185 @@ public function coba($host, $community)
         }
 
         list($frameSlotPort, $ontId) = explode(":", $request->id_onu);
+
+        // Detect vendor type
+        $oltVendor = strtolower($olt->vendor ?? '');
+        $oltType = strtolower($olt->type ?? '');
+        $oltName = strtolower($olt->name ?? '');
+        $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+
+        if ($isHSGQ) {
+            // HSGQ: id_onu format is "PON:ONU_ID" (e.g., "2:1")
+            $ponNum = (int)$frameSlotPort;
+            $onuIdNum = (int)$ontId;
+            $encodedIndex = encode_hsgq_index($ponNum, $onuIdNum);
+            $powerDivisor = $zteoid['powerDivisor'] ?? 100;
+
+            // Build OIDs using HSGQ enterprise format
+            $onuName = $zteoid['oidOnuName'] . ".$encodedIndex";
+            $onuModel = $zteoid['oidOnuModel'] . ".$encodedIndex";
+            $onuSn = $zteoid['oidOnuSn'] . ".$encodedIndex";
+            $onuUptime = $zteoid['oidOnuUptime'] . ".$encodedIndex";
+            $onuDistance = $zteoid['oidOnuDistance'] . ".$encodedIndex.0.0";
+            $rxPowerOid = $zteoid['oidOnuRxPower'] . ".$encodedIndex.0.0";
+            $txPowerOid = $zteoid['oidOnuTxPowerOnu'] . ".$encodedIndex.0.0";
+
+            $modalId = $ponNum . "-" . $onuIdNum;
+
+            // Get ifIndex by walking ifDescr to find matching ONU
+            $ifDescrWalk = @$snmp->walk($zteoid['oidIfDescr']);
+            $ifIndex = null;
+            if ($ifDescrWalk) {
+                foreach ($ifDescrWalk as $oid => $val) {
+                    $desc = str_replace(['STRING: ', '"'], '', $val);
+                    if (preg_match('/ONU' . $ponNum . '\/' . $onuIdNum . '$/', $desc)) {
+                        $parts = explode('.', $oid);
+                        $ifIndex = (int)end($parts);
+                        break;
+                    }
+                }
+            }
+
+            // Get status via ifOperStatus
+            $statusRaw = $ifIndex ? $this->safeSnmpGet($snmp, $zteoid['oidIfOperStatus'] . '.' . $ifIndex) : '';
+            
+            // Check power values to determine actual status
+            $rxPowerValue = $this->safeSnmpGet($snmp, $rxPowerOid);
+            $txPowerValue = $this->safeSnmpGet($snmp, $txPowerOid);
+            
+            $rxValid = $rxPowerValue && !str_contains($rxPowerValue, 'No Such') && !str_contains($rxPowerValue, 'N/A');
+            $txValid = $txPowerValue && !str_contains($txPowerValue, 'No Such') && !str_contains($txPowerValue, 'N/A');
+            
+            $rxNumeric = null;
+            if ($rxValid && preg_match('/-?\d+/', $rxPowerValue, $rxM)) {
+                $rxNumeric = (int)$rxM[0];
+            }
+            $txNumeric = null;
+            if ($txValid && preg_match('/-?\d+/', $txPowerValue, $txM)) {
+                $txNumeric = (int)$txM[0];
+            }
+
+            if (preg_match('/\b(1|up)\b/', $statusRaw)) {
+                if (!$rxValid && !$txValid) {
+                    $result_status = 'powerdown';
+                } elseif (!$rxValid || !$txValid) {
+                    $result_status = 'los';
+                } elseif ($rxNumeric !== null && $rxNumeric < -2800) {
+                    $result_status = 'los';
+                } else {
+                    $result_status = 'working';
+                }
+            } else {
+                if (!$rxValid && !$txValid) {
+                    $result_status = 'powerdown';
+                } elseif (!$rxValid || !$txValid) {
+                    $result_status = 'los';
+                } elseif ($rxNumeric !== null && $rxNumeric < -2800) {
+                    $result_status = 'los';
+                } else {
+                    $result_status = 'dyinggasp';
+                }
+            }
+
+            // Fetch ONU details
+            $onuNameValue = str_replace(['STRING: ', '"'], "", $this->safeSnmpGet($snmp, $onuName));
+            $onuModelValue = str_replace(['STRING: ', '"'], "", $this->safeSnmpGet($snmp, $onuModel));
+            $onuSnRaw = str_replace(['Hex-STRING: ', 'STRING: ', '"'], "", $this->safeSnmpGet($snmp, $onuSn));
+            $onuSnAscii = $this->convertMacToAscii($onuSnRaw);
+            $onuDistanceValue = str_replace(['INTEGER: ', '"'], "", $this->safeSnmpGet($snmp, $onuDistance));
+            $onUptimeValue = str_replace(['Timeticks:', '"'], "", $this->safeSnmpGet($snmp, $onuUptime));
+
+            // Calculate power in dBm (HSGQ: value / 100)
+            $rxDbm = ($rxNumeric !== null) ? round($rxNumeric / $powerDivisor, 2) : null;
+            $txDbm = ($txNumeric !== null) ? round($txNumeric / $powerDivisor, 2) : null;
+
+            if ($result_status == 'working') {
+                $displayStatus = 'Rx: ' . ($rxDbm ?? '-') . ' | Tx: ' . ($txDbm ?? '-');
+                echo '<button id="powerButton" class="btn bg-success btn-sm pb-1" data-toggle="modal" data-target="#powerModal' . $modalId . '">' . $displayStatus . '</button>
+                <div class="modal fade" id="powerModal' . $modalId . '">
+                <div class="modal-dialog">
+                <div class="modal-content">
+                <div class="modal-header">
+                <h5 class="modal-title"><strong>Status ONU ' . $olt->name . ' ' . $frameSlotPort . ':' . $ontId . '</strong></h5>
+                </div>
+                <div class="modal-body">
+                <p>Onu Name : ' . $onuNameValue . '</p>
+                <p>Onu Model : ' . $onuModelValue . '</p>
+                <p>Onu Sn : ' . $onuSnAscii . '</p>
+                <p>Onu Rx Power : ' . ($rxDbm ?? '-') . ' dBm</p>
+                <p>Onu Tx Power : ' . ($txDbm ?? '-') . ' dBm</p>
+                <p>Onu Cable Length : ' . $onuDistanceValue . ' m</p>
+                <p>Olt Rx Power : N/A</p>
+                <p>Onu Last Offline : N/A</p>
+                <p>Onu Last Online : N/A</p>
+                <p>Onu Uptime : ' . $onUptimeValue . '</p>
+                </div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+                </div>
+                </div>
+                </div>';
+            } elseif ($result_status == 'los') {
+                echo '<a class="badge-danger badge btn-sm p-2 ml-2 mr-2 text-white">' . $result_status . '</a>
+                <div class="modal fade" id="powerModal' . $modalId . '">
+                <div class="modal-dialog">
+                <div class="modal-content">
+                <div class="modal-header">
+                <h5 class="modal-title"><strong>Status ONU ' . $olt->name . ' ' . $frameSlotPort . ':' . $ontId . '</strong></h5>
+                </div>
+                <div class="modal-body">
+                <p>Onu Name : ' . $onuNameValue . '</p>
+                <p>Onu Model : ' . $onuModelValue . '</p>
+                <p>Onu Sn : ' . $onuSnAscii . '</p>
+                <p>Onu Rx Power : - dBm</p>
+                <p>Onu Tx Power : - dBm</p>
+                <p>Onu Cable Length : ' . $onuDistanceValue . ' m</p>
+                <p>Olt Rx Power : N/A</p>
+                <p>Onu Last Offline : N/A</p>
+                <p>Onu Last Online : N/A</p>
+                <p>Onu Uptime : -</p>
+                </div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+                </div>
+                </div>
+                </div>';
+            } elseif ($result_status == 'dyinggasp') {
+                echo '<button id="powerButton" class="btn bg-warning btn-sm pb-1" data-toggle="modal" data-target="#powerModal' . $modalId . '">' . $result_status . '</button>
+                <div class="modal fade" id="powerModal' . $modalId . '">
+                <div class="modal-dialog">
+                <div class="modal-content">
+                <div class="modal-header">
+                <h5 class="modal-title"><strong>Status ONU ' . $olt->name . ' ' . $frameSlotPort . ':' . $ontId . '</strong></h5>
+                </div>
+                <div class="modal-body">
+                <p>Onu Name : ' . $onuNameValue . '</p>
+                <p>Onu Model : ' . $onuModelValue . '</p>
+                <p>Onu Sn : ' . $onuSnAscii . '</p>
+                <p>Onu Rx Power : - dBm</p>
+                <p>Onu Tx Power : - dBm</p>
+                <p>Onu Cable Length : ' . $onuDistanceValue . ' m</p>
+                <p>Olt Rx Power : N/A</p>
+                <p>Onu Last Offline : N/A</p>
+                <p>Onu Last Online : N/A</p>
+                <p>Onu Uptime : -</p>
+                </div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+                </div>
+                </div>
+                </div>';
+            } elseif ($result_status == 'powerdown') {
+                echo '<a class="badge-secondary badge btn-sm p-2 ml-2 mr-2 text-white">' . $result_status . '</a>';
+            } else {
+                echo '<a class="badge-warning btn btn-sm ml-2 mr-2 text-white">' . $result_status . '</a>';
+            }
+
+            return; // HSGQ handled, exit early
+        }
 
     // Validasi frame-slot-port ID
         if (!isset($frameSlotPortString[$frameSlotPort])) {

@@ -1,121 +1,198 @@
 import sys
-import telnetlib
+import socket
 import time
 import datetime
-import socket
 import os
+import subprocess
+import re
 
 # ==========================================================
 # Usage:
 # python3 reboot_hsgq_ont.py <ip> <username> <password> <port> <timeout> <pon> <onu>
 # Example:
-# python3 reboot_hsgq_ont.py 103.153.149.200 root media123 23 20 7 46
+# python3 reboot_hsgq_ont.py 172.30.10.5 root media123 23 10 2 1
 # ==========================================================
 
-ip = sys.argv[1]
-login = sys.argv[2]
+ip       = sys.argv[1]
+login    = sys.argv[2]
 password = sys.argv[3]
-port = int(sys.argv[4])
-timeout = int(sys.argv[5])
-pon_int = sys.argv[6]
-onu_num = sys.argv[7]
+port     = int(sys.argv[4])
+timeout  = int(sys.argv[5])
+pon_int  = sys.argv[6]
+onu_num  = sys.argv[7]
 
 log_path = os.path.dirname(os.path.abspath(__file__)) + "/logs"
 os.makedirs(log_path, exist_ok=True)
 
 # ---------- Helpers ----------
 
-def read_until_prompt(tn, prompt, timeout=5):
-    if isinstance(prompt, str):
-        prompt = prompt.encode()
-    return tn.read_until(prompt, timeout).decode('ascii', errors='ignore')
-
 def log(msg, logfile):
     line = f"{datetime.datetime.now()} {msg}"
-    print(line)
     logfile.write(line + "\n")
     logfile.flush()
 
-def send_slow(tn, cmd, delay=0.03):
-    """Send command char-by-char to simulate human typing"""
-    for c in cmd:
-        tn.write(c.encode())
-        time.sleep(delay)
+def recv_until(s, expect, wait=12):
+    """Read from socket until expected bytes found or timeout."""
+    if isinstance(expect, str):
+        expect = expect.encode()
+    buf = b''
+    deadline = time.time() + wait
+    while time.time() < deadline:
+        s.settimeout(2)
+        try:
+            chunk = s.recv(1024)
+            if not chunk:
+                break
+            buf += chunk
+            if expect.lower() in buf.lower():
+                return buf
+        except socket.timeout:
+            pass
+    return buf
 
-# ---------- Main Function ----------
+def encode_hsgq_index(pon, onu):
+    return 0x01000000 + (int(pon) << 8) + int(onu)
 
-def telnet_hsgq(host, port, username, password, pon, onu, log_path):
+def get_onu_uptime_ticks(host, community, pon, onu):
+    """Return ONU uptime timeticks (integer) via SNMP, or None if unavailable."""
     try:
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
-        log_file_path = f"{log_path}/hsgq_olt_log_{today}.log"
+        idx = encode_hsgq_index(pon, onu)
+        oid = f".1.3.6.1.4.1.50224.3.12.2.1.21.{idx}"
+        result = subprocess.run(
+            ["snmpget", "-v2c", "-c", community, "-t", "2", "-r", "1", host, oid],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        output = (result.stdout or result.stderr or "").strip()
+        match = re.search(r"\((\d+)\)", output)
+        if not match:
+            return None
+        return int(match.group(1))
+    except Exception:
+        return None
 
-        with open(log_file_path, 'a') as log_file:
+# ---------- Main ----------
 
+def telnet_hsgq(host, port, username, pwd, pon, onu, log_path):
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    log_file_path = f"{log_path}/hsgq_olt_log_{today}.log"
+
+    with open(log_file_path, 'a') as log_file:
+        try:
             log("CONNECTING TO OLT ...", log_file)
-            tn = telnetlib.Telnet(host, port, timeout=timeout)
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((host, port))
 
-            # ---- LOGIN ----
-            read_until_prompt(tn, "Login:", timeout=5)
-            send_slow(tn, username + "\n")
+            # Wait for username prompt (OLT sends IAC negotiation + banner first)
+            banner = recv_until(s, 'username:', wait=15)
+            if b'username:' not in banner.lower():
+                log(f"ERROR: No username prompt. Got: {repr(banner[-50:])}", log_file)
+                print("error:No username prompt from OLT")
+                return
+            log("GOT USERNAME PROMPT", log_file)
 
-            read_until_prompt(tn, "Password:", timeout=5)
-            send_slow(tn, password + "\n")
+            # Send login
+            s.sendall((username + '\r\n').encode())
+            out = recv_until(s, 'password:', wait=12)
+            if b'password:' not in out.lower():
+                log(f"ERROR: No password prompt. Got: {repr(out[-50:])}", log_file)
+                print("error:No password prompt from OLT")
+                return
+            log("GOT PASSWORD PROMPT", log_file)
 
-            read_until_prompt(tn, ">", timeout=5)
+            s.sendall((pwd + '\r\n').encode())
+            out = recv_until(s, '>', wait=12)
+            if b'>' not in out:
+                log(f"ERROR: No > prompt after login. Got: {repr(out[-80:])}", log_file)
+                print("error:Login failed - no prompt")
+                return
             log("LOGIN SUCCESS", log_file)
 
-            # ---- ENABLE ----
-            send_slow(tn, "enable\n")
-            read_until_prompt(tn, "#", timeout=5)
+            # Enable mode
+            s.sendall(b'enable\r\n')
+            out = recv_until(s, '#', wait=10)
+            if b'#' not in out:
+                log(f"ERROR: No # prompt after enable. Got: {repr(out[-80:])}", log_file)
+                print("error:Cannot enter enable mode")
+                return
             log("ENTER ENABLE MODE", log_file)
 
-            # ---- CONFIG ----
-            send_slow(tn, "configure\n")
-            read_until_prompt(tn, "#", timeout=5)
+            # Config mode
+            s.sendall(b'config\r\n')
+            out = recv_until(s, '#', wait=10)
             log("ENTER CONFIG MODE", log_file)
 
-            # ---- SEND REBOOT COMMAND (NOT in interface mode) ----
-            # HSGQ reboot syntax: ont reset {pon} {onu} (from config mode, NOT interface mode)
-            log(f"SEND REBOOT COMMAND: ont reset {pon} {onu}", log_file)
-            send_slow(tn, f"ont reset {pon} {onu}\n")
-            
-            # Wait and capture all output including async messages
-            log("WAITING FOR RESPONSE AND ASYNC MESSAGES...", log_file)
-            time.sleep(8)  # Wait longer for async message
-            
-            # Read all output
-            full_output = tn.read_very_eager().decode('ascii', errors='ignore')
-            log("FULL OUTPUT:", log_file)
-            for l in full_output.splitlines():
-                if l.strip():
-                    log("  " + l, log_file)
+            # Capture uptime before command for reboot verification fallback.
+            before_ticks = get_onu_uptime_ticks(host, "public_ro", pon, onu)
+            log(f"SNMP UPTIME BEFORE: {before_ticks}", log_file)
 
-            # Check for error in response
-            if "error" in full_output.lower() or "invalid" in full_output.lower() or "fail" in full_output.lower() or "not exist" in full_output.lower():
+            # HSGQ firmware on this OLT accepts ONT reset command in config mode.
+            # Use TAB between tokens so CLI parses token boundaries reliably.
+            reset_cmd = f'ont\treset\t{pon}\t{onu}\r\n'.encode()
+            log(f"SEND REBOOT COMMAND: ont reset {pon} {onu}", log_file)
+            s.sendall(reset_cmd)
+
+            # Wait and capture all OLT response
+            log("WAITING FOR RESPONSE (10s)...", log_file)
+            time.sleep(10)
+            s.settimeout(2)
+            full_output = b''
+            try:
+                while True:
+                    chunk = s.recv(1024)
+                    if not chunk:
+                        break
+                    full_output += chunk
+            except socket.timeout:
+                pass
+
+            decoded = full_output.decode('ascii', errors='ignore')
+            log(f"FULL OUTPUT: {repr(decoded)}", log_file)
+
+            # Fallback verification: if no explicit CLI confirmation, check SNMP uptime reset.
+            after_ticks = get_onu_uptime_ticks(host, "public_ro", pon, onu)
+            log(f"SNMP UPTIME AFTER: {after_ticks}", log_file)
+
+            # Remove echo of our command from output
+            cleaned = decoded.replace(f'ont reset {pon} {onu}', '').replace(f'ont reset {pon}{onu}', '').strip()
+
+            lowered = decoded.lower()
+            if (
+                "error" in lowered
+                or "invalid" in lowered
+                or "fail" in lowered
+                or "not exist" in lowered
+                or "unknown command" in lowered
+            ):
                 log("REBOOT COMMAND FAILED", log_file)
-                print(f"error:Failed to reboot ONU PON{pon}/{onu}")
-            elif "manual reboot" in full_output.lower() or "link down" in full_output.lower():
+                print(f"error:Failed to reboot ONU PON{pon}/{onu} - {cleaned[:100]}")
+            elif "reset ont fail" in lowered:
+                log("REBOOT COMMAND REJECTED", log_file)
+                print(f"error:Reboot rejected by OLT for ONU PON{pon}/{onu} - {cleaned[:100]}")
+            elif "link down" in lowered or "offline" in lowered:
                 log("REBOOT CONFIRMED - ONU LINK DOWN", log_file)
                 print(f"success:ONU PON{pon}/{onu} rebooted successfully!")
+            elif before_ticks is not None and after_ticks is not None and after_ticks < before_ticks:
+                log("REBOOT CONFIRMED - SNMP UPTIME RESET", log_file)
+                print(f"success:ONU PON{pon}/{onu} rebooted successfully! (uptime reset)")
             else:
-                log("REBOOT COMMAND SENT (no async confirmation received)", log_file)
-                print(f"warning:ONU PON{pon}/{onu} reboot command sent but no confirmation received")
-            
-            # ---- EXIT CONFIG MODE ----
-            send_slow(tn, "exit\n")
-            time.sleep(1)
-            send_slow(tn, "exit\n")
-            tn.close()
+                log("REBOOT COMMAND SENT (no explicit confirmation)", log_file)
+                print(f"warning:ONU PON{pon}/{onu} reboot command sent (not confirmed)")
+
+            s.sendall(b'exit\r\n')
+            time.sleep(0.5)
+            s.sendall(b'exit\r\n')
+            time.sleep(0.5)
+            s.close()
             log("SESSION CLOSED", log_file)
 
-    except socket.timeout:
-        print("error:Connection timeout")
-    except ConnectionRefusedError:
-        print("error:Telnet refused by host")
-    except EOFError:
-        print("error:Connection closed by OLT")
-    except Exception as e:
-        print(f"error:Unexpected - {e}")
+        except ConnectionRefusedError:
+            print("error:Telnet connection refused")
+        except socket.timeout:
+            print("error:Connection timeout")
+        except Exception as e:
+            print(f"error:Unexpected - {e}")
 
 # ---------- RUN ----------
 telnet_hsgq(ip, port, login, password, pon_int, onu_num, log_path)

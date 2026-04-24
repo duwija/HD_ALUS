@@ -476,6 +476,9 @@ Route::get('/invoice/createinv','CustomerController@createinv');
 // Public route - Customer invoice view (no auth required)
 Route::get('/invoice/cst/{id}','InvoiceController@custinv');
 
+// Short URL redirect (public - for WA invoice links)
+Route::get('/s/{code}', [App\Http\Controllers\ShortUrlController::class, 'redirect'])->name('short.redirect');
+
 Route::get('/payment','PaymentController@search');
 Route::post('/payment/show','PaymentController@show');
 Route::post('/payment/mytransaction', 'PaymentController@mytransaction');
@@ -928,6 +931,8 @@ Route::prefix('wa')->group(function () {
     // ====== API Gateway ======
 	Route::post('webhook', [WhatsappController::class, 'webhook']);
 	Route::post('{session}/send', [WhatsappController::class, 'send']);
+    Route::post('{session}/send-media', [WhatsappController::class, 'sendMedia']);
+    Route::post('{session}/read', [WhatsappController::class, 'markRead']);
 	Route::post('{session}/ack', [WhatsappController::class, 'ack']);
 
     // ====== Session Management ======
@@ -943,6 +948,7 @@ Route::prefix('wa')->group(function () {
 	Route::get('{session}/groups', [WhatsappController::class, 'getGroups']);
 	Route::get('{session}/chats', [WhatsappController::class, 'chats'])->name('wa.chats');
 	Route::get('{session}/history', [WhatsappController::class, 'history'])->name('wa.history');
+    Route::get('{session}/media', [WhatsappController::class, 'media'])->name('wa.media');
 
     // ====== QR Status ======
 	Route::get('{session}/qr-status', [WhatsappController::class, 'qrStatus']);
@@ -961,19 +967,38 @@ Route::prefix('wa')->group(function () {
     // ====== Health & Session Start ======
 	Route::post('start', function (\Illuminate\Http\Request $request) {
 		$session = $request->input('session');
+		if (!$session) return response()->json(['error' => 'session required'], 400);
 		$gateway = rtrim(tenant_config('wa_gateway_url', env('WA_GATEWAY_URL', 'http://127.0.0.1:3005')), '/') . '/api';
-		$response = Http::post("{$gateway}/start", [ "session" => $session ]);
-		return response()->json($response->json());
+		try {
+			$response = Http::timeout(10)->post("{$gateway}/start", [ "session" => $session ]);
+			return response()->json($response->json());
+		} catch (\Exception $e) {
+			return response()->json(['status' => 'error', 'message' => 'Gateway offline'], 503);
+		}
 	});
 
 	Route::get('status', function() {
 		$gateway = rtrim(tenant_config('wa_gateway_url', env('WA_GATEWAY_URL', 'http://127.0.0.1:3005')), '/') . '/api';
-		return response()->json(Http::get("{$gateway}/health")->json());
+		try {
+			$data = Http::timeout(8)->get("{$gateway}/health")->json();
+			// Normalize: jika sessions berupa object {name: {status:..}}, konversi ke array nama
+			$sessions = $data['sessions'] ?? [];
+			if (is_array($sessions) && !array_is_list($sessions)) {
+				$data['sessions'] = array_keys($sessions);
+			}
+			return response()->json($data);
+		} catch (\Exception $e) {
+			return response()->json(['status' => 'error', 'sessions' => [], 'message' => 'Gateway offline']);
+		}
 	});
 	
 	Route::get('{session}/status', function($session) {
 		$gateway = rtrim(tenant_config('wa_gateway_url', env('WA_GATEWAY_URL', 'http://127.0.0.1:3005')), '/') . '/api';
-		return response()->json(Http::get("{$gateway}/{$session}/qr")->json());
+		try {
+			return response()->json(Http::timeout(8)->get("{$gateway}/{$session}/qr")->json());
+		} catch (\Exception $e) {
+			return response()->json(['status' => 'gateway_offline', 'qr' => null]);
+		}
 	});
 
 	Route::get('{session}/stats', fn($session) =>

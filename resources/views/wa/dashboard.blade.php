@@ -143,57 +143,108 @@
 // ====================================================
 // 🔄 LOAD SESSION LIST
 // ====================================================
+    let isLoadingSessions = false;
+
     async function loadSessions() {
-        const res = await fetch("/wa/status");
-        const data = await res.json();
-        const sessions = data.sessions ?? [];
+        if (isLoadingSessions) return;
+        isLoadingSessions = true;
 
-        const tbody = document.getElementById("sessionList");
-        tbody.innerHTML = "";
+        try {
+            const res = await fetch("/wa/status");
+            const data = await res.json();
 
-        for (let s of sessions) {
-            let st = await fetch(`/wa/${s}/status`).then(r => r.json()).catch(()=>({status:'error'}));
+            if (data.status === 'error') {
+                showGatewayOffline();
+                return;
+            }
 
-            const tr = document.createElement("tr");
+            // sessions bisa array ["WA_01"] atau object {WA_01: {...}}
+            let sessions = data.sessions ?? [];
+            if (!Array.isArray(sessions)) {
+                sessions = Object.keys(sessions);
+            }
 
-            let badge = "secondary";
-            if (st.status === "authenticated") badge = "success";
-            else if (st.status === "not_authenticated") badge = "warning";
-            else if (st.status === "initializing") badge = "info";
+            const tbody = document.getElementById("sessionList");
+            tbody.innerHTML = "";
 
-            const messageCount = await fetch(`/wa/${s}/stats`).then(r=>r.json()).then(j=>j.count).catch(()=>"-");
+            if (sessions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Belum ada session. Buat session baru di atas.</td></tr>';
+                return;
+            }
 
-            tr.innerHTML = `
-            <td><a href="/wa/chat?session=${s}" class="btn btn-info btn-sm">${s}</a></td>
+            // Fetch semua status & stats secara paralel
+            const statusPromises = sessions.map(s =>
+                fetch(`/wa/${s}/status`).then(r => r.json()).catch(() => ({ status: 'error' }))
+            );
+            const statsPromises = sessions.map(s =>
+                fetch(`/wa/${s}/stats`).then(r => r.json()).then(j => j.count).catch(() => "-")
+            );
 
-            <td><span class="badge badge-${badge}">${st.status}</span></td>
+            const [allStatus, allStats] = await Promise.all([
+                Promise.all(statusPromises),
+                Promise.all(statsPromises)
+            ]);
 
-            <td>${st.number ?? "-"}</td>
-            <td>${st.name ?? "-"}</td>
-            <td>${st.platform ?? "-"}</td>
-            <td>${messageCount}</td>
+            for (let i = 0; i < sessions.length; i++) {
+                const s = sessions[i];
+                const st = allStatus[i];
+                const messageCount = allStats[i];
 
-            <td>
-            ${makeActions(s, st.status)}
-            </td>
-            `;
+                const tr = document.createElement("tr");
 
-            tbody.appendChild(tr);
+                let badge = "secondary";
+                let statusText = st.status || "unknown";
+                if (statusText === "authenticated") badge = "success";
+                else if (statusText === "not_authenticated") badge = "warning";
+                else if (statusText === "initializing") badge = "info";
+                else if (statusText === "gateway_offline") { badge = "danger"; statusText = "offline"; }
+                else if (statusText === "auth_failure" || statusText === "auth_failed_permanent") badge = "danger";
+                else if (statusText === "init_failed") badge = "danger";
+
+                tr.innerHTML = `
+                <td><a href="/wa/chat?session=${s}" class="btn btn-info btn-sm">${s}</a></td>
+                <td><span class="badge badge-${badge}">${statusText}</span></td>
+                <td>${st.number ?? "-"}</td>
+                <td>${st.name ?? "-"}</td>
+                <td>${st.platform ?? "-"}</td>
+                <td>${messageCount}</td>
+                <td>${makeActions(s, statusText)}</td>
+                `;
+
+                tbody.appendChild(tr);
+            }
+        } catch (e) {
+            showGatewayOffline();
+        } finally {
+            isLoadingSessions = false;
         }
+    }
+
+    function showGatewayOffline() {
+        const tbody = document.getElementById("sessionList");
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i> Gateway offline — tidak bisa terhubung ke WA server</td></tr>';
     }
 
     function makeActions(session, status) {
         let out = "";
 
-        const deleteBtn = `<button class="btn btn-outline-danger btn-sm ml-2" onclick="deleteSession('${session}')">Hapus.</button>`;
+        const deleteBtn = `<button class="btn btn-outline-danger btn-sm ml-2" onclick="deleteSession('${session}')">Hapus</button>`;
 
         if (status === "authenticated") {
             out += `
             <button class="btn btn-danger btn-sm" onclick="logoutSession('${session}')">Logout</button>
             <button class="btn btn-warning btn-sm ml-1" onclick="restartSession('${session}')">Restart</button>
             `;
+        } else if (status === "initializing") {
+            out += `<span class="text-info mr-2"><i class="fas fa-spinner fa-spin"></i> Memuat...</span>`;
+            out += `<button class="btn btn-warning btn-sm" onclick="restartSession('${session}')">Restart</button>`;
+        } else if (status === "offline" || status === "gateway_offline") {
+            out += `<span class="text-danger mr-2">Gateway offline</span>`;
+        } else if (status === "auth_failed_permanent" || status === "init_failed") {
+            out += `<button class="btn btn-warning btn-sm" onclick="restartSession('${session}')">Restart</button>`;
         } else {
             out += `<button class="btn btn-primary btn-sm" onclick="showQr('${session}')">Scan QR</button>`;
+            out += `<button class="btn btn-warning btn-sm ml-1" onclick="restartSession('${session}')">Restart</button>`;
         }
 
         return out + deleteBtn;
@@ -207,6 +258,7 @@
         $('#qrModal').modal('show');
         document.getElementById("qrImage").style.display = "none";
         document.getElementById("qrLoading").style.display = "block";
+        document.getElementById("qrLoading").innerText = "Mengambil QR...";
 
         let countdown = 60;
         document.getElementById("qrCountdown").innerText = `QR refresh dalam ${countdown}s`;
@@ -217,25 +269,44 @@
             document.getElementById("qrCountdown").innerText = `QR refresh dalam ${countdown}s`;
         }, 1000);
 
-        qrInterval = setInterval(async () => {
-            let res = await fetch(`/wa/${session}/status`).then(r=>r.json());
+        // Poll immediately then every 3s
+        const pollQr = async () => {
+            try {
+                let res = await fetch(`/wa/${session}/status`).then(r => r.json());
 
-            if (res.status === "authenticated") {
-                clearInterval(qrInterval);
-                clearInterval(qrCountdownInterval);
-                $('#qrModal').modal('hide');
-                loadSessions();
-                return;
+                if (res.status === "authenticated") {
+                    clearInterval(qrInterval);
+                    clearInterval(qrCountdownInterval);
+                    $('#qrModal').modal('hide');
+                    Swal.fire("Berhasil!", "WhatsApp sudah terhubung", "success");
+                    loadSessions();
+                    return;
+                }
+
+                if (res.status === "gateway_offline") {
+                    document.getElementById("qrLoading").innerText = "Gateway offline...";
+                    document.getElementById("qrLoading").style.display = "block";
+                    document.getElementById("qrImage").style.display = "none";
+                    return;
+                }
+
+                if ((res.status === "not_authenticated" || res.status === "initializing") && res.qr) {
+                    document.getElementById("qrImage").src =
+                    "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodeURIComponent(res.qr);
+
+                    document.getElementById("qrLoading").style.display = "none";
+                    document.getElementById("qrImage").style.display = "block";
+                } else if (!res.qr) {
+                    document.getElementById("qrLoading").innerText = "Menunggu QR dari server...";
+                    document.getElementById("qrLoading").style.display = "block";
+                }
+            } catch (e) {
+                document.getElementById("qrLoading").innerText = "Gagal terhubung ke gateway";
             }
+        };
 
-            if (res.status === "not_authenticated" && res.qr) {
-                document.getElementById("qrImage").src =
-                "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodeURIComponent(res.qr);
-
-                document.getElementById("qrLoading").style.display = "none";
-                document.getElementById("qrImage").style.display = "block";
-            }
-        }, 2500);
+        await pollQr();
+        qrInterval = setInterval(pollQr, 3000);
     }
 
     $('#qrModal').on('hidden.bs.modal', function () {
@@ -263,7 +334,7 @@
             
             const data = await res.json();
             
-            if (data.status === 'success' || data.status === 'deleted') {
+            if (data.status === 'success' || data.status === 'deleted' || res.ok) {
                 Swal.fire("Berhasil!", "Session berhasil dihapus", "success");
                 loadSessions();
             } else {
@@ -299,7 +370,7 @@
             
             const data = await res.json();
             
-            if (data.status === 'success') {
+            if (data.status === 'success' || data.status === 'logged_out' || res.ok) {
                 Swal.fire("Berhasil!", "Session berhasil logout", "success");
                 loadSessions();
             } else {
@@ -332,7 +403,7 @@
             
             const data = await res.json();
             
-            if (data.status === 'success') {
+            if (data.status === 'success' || data.status === 'restarted' || res.ok) {
                 Swal.fire("Berhasil!", "Session berhasil direstart", "success");
                 loadSessions();
             } else {
@@ -349,25 +420,38 @@
     document.getElementById("addSessionForm").addEventListener("submit", async e => {
         e.preventDefault();
 
-        const name = document.getElementById("newSession").value;
+        const name = document.getElementById("newSession").value.trim();
+        if (!name) return;
 
-        const res = await fetch("/wa/start", {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({session: name})
-        });
+        try {
+            const res = await fetch("/wa/start", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                },
+                body: JSON.stringify({session: name})
+            });
 
-        const data = await res.json();
+            const data = await res.json();
 
-        Swal.fire("Info", "Session dibuat. QR akan tampil jika belum login.", "success")
-        .then(()=> loadSessions());
+            if (data.status === 'error') {
+                Swal.fire("Error", data.message || "Gagal membuat session", "error");
+            } else {
+                document.getElementById("newSession").value = "";
+                Swal.fire("Info", "Session dibuat. QR akan tampil jika belum login.", "success")
+                .then(() => loadSessions());
+            }
+        } catch (error) {
+            Swal.fire("Error", "Gagal terhubung ke gateway", "error");
+        }
     });
 
 // ====================================================
 // AUTO REFRESH LIST
 // ====================================================
     loadSessions();
-    setInterval(loadSessions, 8000);
+    setInterval(loadSessions, 15000);
 
 </script>
 @endsection

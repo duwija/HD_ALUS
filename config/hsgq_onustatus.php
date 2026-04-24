@@ -10,4 +10,5 @@ return [
     '3' => 'working',      // active (online)
     '4' => 'los',          // LOS - Laser out (no signal from ONU)
     '5' => 'powerdown',    // Power down (ONU powered off)
+    '6' => 'dyinggasp',    // Dying gasp (interface down but power present)
 ];

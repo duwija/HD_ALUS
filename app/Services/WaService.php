@@ -231,17 +231,54 @@ class WaService
         $paymentWa = tenant_config('payment_wa',   env('PAYMENT_WA',   ''));
         $signature = tenant_config('signature',    env('SIGNATURE',    ''));
 
-        $msg  = "*[Pengingat Pembayaran Internet]*\n\n";
-        $msg .= "Pelanggan Yth.\n\n";
-        $msg .= "Nama : {$name}\n";
-        $msg .= "CID  : {$cid}\n";
-        $msg .= "Kami ingin mengingatkan bahwa tagihan Anda sudah tersedia.\n";
-        $msg .= "Agar tetap bisa menikmati layanan kami, mohon selesaikan pembayaran tepat waktu.\n\n";
-        $msg .= "Informasi lebih lanjut, klik link berikut:\n";
-        $msg .= "http://{$domain}{$encryptedurl}\n\n";
-        $msg .= "Jika sudah melakukan pembayaran, abaikan pesan ini.\n";
-        $msg .= "Jika ada pertanyaan, hubungi CS kami di {$paymentWa}\n\n";
-        $msg .= "{$signature}";
+        // Buat short URL agar link tidak terdeteksi spam oleh WA
+        $originalUrl = "https://{$domain}{$encryptedurl}";
+        try {
+            $link = \App\ShortUrl::shorten($originalUrl);
+        } catch (\Throwable $e) {
+            $link = $originalUrl; // fallback ke URL asli jika gagal
+        }
+
+        // Template rotation ringan (3 varian) agar pesan tidak identik di setiap blast.
+        try {
+            $variant = random_int(1, 3);
+        } catch (\Throwable $e) {
+            $variant = mt_rand(1, 3);
+        }
+
+        if ($variant === 1) {
+            $msg  = "*[Pengingat Pembayaran Internet]*\n\n";
+            $msg .= "Pelanggan Yth.\n\n";
+            $msg .= "Nama : {$name}\n";
+            $msg .= "CID  : {$cid}\n";
+            $msg .= "Kami ingin mengingatkan bahwa tagihan Anda sudah tersedia.\n";
+            $msg .= "Agar tetap bisa menikmati layanan kami, mohon selesaikan pembayaran tepat waktu.\n\n";
+            $msg .= "Informasi lebih lanjut, klik link berikut:\n";
+            $msg .= "{$link}\n\n";
+            $msg .= "Jika sudah melakukan pembayaran, abaikan pesan ini.\n";
+            $msg .= "Jika ada pertanyaan, hubungi CS kami di {$paymentWa}\n\n";
+            $msg .= "{$signature}";
+        } elseif ($variant === 2) {
+            $msg  = "*[Info Tagihan Internet]*\n\n";
+            $msg .= "Halo {$name},\n";
+            $msg .= "Tagihan untuk CID *{$cid}* sudah tersedia.\n";
+            $msg .= "Mohon lakukan pembayaran sebelum jatuh tempo agar layanan tetap aktif.\n\n";
+            $msg .= "Cek detail tagihan di sini:\n";
+            $msg .= "{$link}\n\n";
+            $msg .= "Jika sudah membayar, pesan ini bisa diabaikan.\n";
+            $msg .= "Bantuan CS: {$paymentWa}\n\n";
+            $msg .= "{$signature}";
+        } else {
+            $msg  = "*[Reminder Pembayaran]*\n\n";
+            $msg .= "Yth. {$name} (CID: {$cid}),\n";
+            $msg .= "Ini pengingat bahwa masih ada tagihan internet yang perlu dibayarkan.\n";
+            $msg .= "Silakan selesaikan pembayaran agar layanan tetap berjalan lancar.\n\n";
+            $msg .= "Link tagihan:\n";
+            $msg .= "{$link}\n\n";
+            $msg .= "Jika pembayaran sudah dilakukan, mohon abaikan pesan ini.\n";
+            $msg .= "Hubungi CS {$paymentWa} untuk pertanyaan lebih lanjut.\n\n";
+            $msg .= "{$signature}";
+        }
 
         return $msg;
     }

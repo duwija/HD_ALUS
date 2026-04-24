@@ -39,6 +39,10 @@ class WhatsappController extends Controller
             $response = Http::get($this->getGatewayUrl() . '/health');
             $data = $response->json();
             $sessions = $data['sessions'] ?? [];
+            // Normalize: if sessions is object {WA_01: {...}}, convert to ["WA_01", ...]
+            if (is_array($sessions) && !array_is_list($sessions)) {
+                $sessions = array_keys($sessions);
+            }
         } catch (\Exception $e) {
             $sessions = [];
         }
@@ -149,6 +153,30 @@ class WhatsappController extends Controller
     ]);
 
     return response()->json($result->json());
+}
+
+public function markRead(Request $request, $session)
+{
+    $data = $request->validate([
+        'chatId' => 'required|string',
+    ]);
+
+    try {
+        $response = Http::timeout(15)->post("{$this->getGatewayUrl()}/{$session}/read", $data);
+        return response()->json($response->json(), $response->status());
+    } catch (\Exception $e) {
+        Log::error('markRead(): failed', [
+            'error' => $e->getMessage(),
+            'session' => $session,
+            'chatId' => $data['chatId'],
+        ]);
+
+        return response()->json([
+            'error' => 'Gagal menandai chat sebagai dibaca',
+            'message' => $e->getMessage(),
+            'session' => $session,
+        ], 503);
+    }
 }
 
 
@@ -366,6 +394,48 @@ public function ack(Request $request, $session)
                 'error' => 'Gateway offline or session not ready',
                 'message' => $e->getMessage(),
                 'session' => $session
+            ], 503);
+        }
+    }
+
+    public function media(Request $request, $session)
+    {
+        $chatId = $request->query('chatId');
+        $messageId = $request->query('messageId');
+
+        if (!$chatId || !$messageId) {
+            return response()->json(['error' => 'chatId and messageId are required'], 400);
+        }
+
+        try {
+            $url = "{$this->getGatewayUrl()}/{$session}/media?chatId=" . urlencode($chatId) . "&messageId=" . urlencode($messageId);
+            $response = Http::timeout(60)->withOptions(['stream' => true])->get($url);
+
+            if (!$response->successful()) {
+                return response()->json([
+                    'error' => 'Gateway responded with error',
+                    'status' => $response->status(),
+                ], $response->status());
+            }
+
+            $contentType = $response->header('Content-Type', 'application/octet-stream');
+            $disposition = $response->header('Content-Disposition', 'inline');
+
+            return response($response->body(), 200)
+                ->header('Content-Type', $contentType)
+                ->header('Content-Disposition', $disposition)
+                ->header('Cache-Control', 'private, max-age=60');
+        } catch (\Exception $e) {
+            Log::error("media(): failed", [
+                'error' => $e->getMessage(),
+                'session' => $session,
+                'chatId' => $chatId,
+                'messageId' => $messageId,
+            ]);
+
+            return response()->json([
+                'error' => 'Gagal ambil media dari gateway',
+                'message' => $e->getMessage(),
             ], 503);
         }
     }

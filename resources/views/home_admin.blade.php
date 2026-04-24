@@ -528,7 +528,7 @@
           $color       = $bgClass[abs(crc32($job)) % count($bgClass)];
           $tooltipText = "Progress {$job}: {$percent}% dari {$count} tiket";
         @endphp
-        <div class="col-md-4 col-lg-3 col-6">
+        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
           <div class="info-box mb-3 bg-light shadow-sm">
             <span class="info-box-icon {{ $color }} elevation-1">
               <i class="fas fa-user-tie"></i>
