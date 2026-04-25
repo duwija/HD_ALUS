@@ -230,7 +230,40 @@ return [
                 'payment_gateway' => true,
             ],
         ],
-        
+
+        // Tenant 6: Maharani
+        'maharani.alus.co.id' => [
+            'tenant_id' => 6,
+            'domain' => 'maharani.alus.co.id',
+            'app_name' => 'MAHARANI',
+            'signature' => 'Maharani Alusnet',
+            'rescode' => 'MR',
+
+            // Database Config
+            'db_host' => '127.0.0.1',
+            'db_port' => '3306',
+            'db_database' => 'maharani',
+            'db_username' => 'root',
+            'db_password' => 'Abc234def1!@',
+
+            // Mail Config
+            'mail_from' => 'trikamedia.bali@gmail.com',
+
+            // WhatsApp Config (Qontak)
+            'whatsapp_token' => null,
+
+            // Payment Gateway
+            'xendit_key' => null,
+
+            // Features enabled
+            'features' => [
+                'accounting' => true,
+                'ticketing' => true,
+                'whatsapp' => true,
+                'payment_gateway' => true,
+            ],
+        ],
+
     ],
     
     /*

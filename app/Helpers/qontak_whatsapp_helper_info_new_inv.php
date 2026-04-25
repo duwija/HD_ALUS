@@ -21,13 +21,14 @@ if (!function_exists('qontak_whatsapp_helper_info_new_inv')) {
                 } else {
                     $hp = $nohp;
                 }
+                $buttonUrl = ltrim((string) $url, '/');
 
                 // Data yang dikirim ke API WhatsApp Resmi
                 $payload = [
                     "to_number" => $hp,
                     "to_name" => $name,
-                    "message_template_id" => env('WA_TAMPLATE_ID_2'),
-                    "channel_integration_id" => env('WA_CHANNEL_INTEGRATION_ID'),
+                    "message_template_id" => tenant_config('WA_TAMPLATE_ID_2', env('WA_TAMPLATE_ID_2')),
+                    "channel_integration_id" => tenant_config('WA_CHANNEL_INTEGRATION_ID', env('WA_CHANNEL_INTEGRATION_ID')),
                     "language" => ["code" => "id"],
                     "parameters" => [
                         "body" => [
@@ -41,7 +42,7 @@ if (!function_exists('qontak_whatsapp_helper_info_new_inv')) {
                             [
                                 "index" => "0",
                                 "type" => "url",
-                                "value" => $url
+                                "value" => $buttonUrl
 
                             ]
                         ]
@@ -50,9 +51,9 @@ if (!function_exists('qontak_whatsapp_helper_info_new_inv')) {
 
 
                 // Kirim request ke API WhatsApp Resmi
-                $response = $client->post(env('WHATSAPP_API_URL'), [
+                $response = $client->post(tenant_config('WHATSAPP_API_URL', env('WHATSAPP_API_URL')), [
                     'headers' => [
-                        'Authorization' => 'Bearer ' . env('ACCESS_TOKEN'), // Tambahkan spasi setelah "Bearer"
+                        'Authorization' => 'Bearer ' . tenant_config('ACCESS_TOKEN', env('ACCESS_TOKEN')),
                         'Content-Type' => 'application/json'
                     ],
                     'json' => $payload

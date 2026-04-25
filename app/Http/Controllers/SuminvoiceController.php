@@ -31,6 +31,7 @@ use App\Mail\EmailNotification;
 use App\Mail\EmailReceivePayment;
 use App\AppCustomerNotification;
 use App\Services\FcmService;
+use App\Services\WaService;
 use App\Helpers\WaGatewayHelper;
 use Illuminate\Support\Facades\Mail;
 
@@ -3168,25 +3169,21 @@ $encryptedurl = Crypt::encryptString($customers->id);
 
 if($customers->notification == 1)
 {
-    $message  = "\n\n";
-    $message .= "\nPelanggan Yth. ";
-    $message .= "\n\n";
-    $message .= "\nNama : " . $customers->name;
-    $message .= "\nCID : " . $customers->customer_id ;
-    $message .= "\nKami ingin menginformasikan bahwa Tagihan no #".$request->number;
-    $message .= "\nSejumlah Rp.".$jumlah ." Sudah kami TERIMA";
-    $message .= "\n\n";
-    $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-    $_invUrlRaw2 = "https://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedurl;
-    try { $_invLink2 = \App\ShortUrl::shorten($_invUrlRaw2); } catch (\Throwable $e) { $_invLink2 = $_invUrlRaw2; }
-    $message .= "\n" . $_invLink2;
-    $message .= "\n\n";
-    $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
-    $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
-    $message .= "\n\n";
-    $message .= "".config("app.signature")."";
+    $msgresult = WaService::sendPaymentConfirmation(
+        $customers->phone,
+        $customers->name,
+        (string) $request->number,
+        $customers->customer_id,
+        (string) $jumlah,
+        '/invoice/cst/' . $encryptedurl,
+        'OFFLINE'
+    );
 
-    $msgresult = WaGatewayHelper::wa_payment($customers->phone, $message);
+    Log::info('[OFFLINE PAYMENT] WA sent', [
+        'customer_id' => $customers->customer_id,
+        'result' => $msgresult,
+        'provider_priority' => 'qontak_if_template_exists',
+    ]);
 
 
 } elseif ($customers->notification == 2) {
@@ -3458,63 +3455,76 @@ public function send_reminder_inv(Request $request, $id)
 
             if ($suminvoice->payment_status == 1)
             {
-                $message = "*[Informasi Pembayaran Internet]*";
-                $message .= "\n\n";
-                $message .= "Yth. " . $customer->name . ",";
-                $message .= "\n\n";
-                $message .= "Tagihan Anda dengan Customer ID (CID) *" . $customer->customer_id . "* telah DIBAYAR.";
-                $message .= "\n*Total Tagihan:* Rp." . number_format($suminvoice->total_amount, 0, ',', '.') . "";
-                $message .= "\n*Batas Pembayaran:* " . $duedate;
-                $message .= "\n\n";
-                $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-                $message .= "\n" . $invLink3;
-                $message .= "\n\n";
-                $message .= "".config("app.signature")."";
+                // Prioritas: jika template konfirmasi pembayaran Qontak tersedia,
+                // kirim via Qontak. Fallback otomatis ke provider tenant/gateway.
+                $response = WaService::sendPaymentConfirmation(
+                    $customer->phone,
+                    $customer->name,
+                    (string) $suminvoice->number,
+                    $customer->customer_id,
+                    (string) $suminvoice->total_amount,
+                    $encryptedurl,
+                    'MANUAL'
+                );
+
+                Log::info('[WA Reminder] payment-confirmation routed by WaService', [
+                    'suminvoice_id' => $suminvoice->id,
+                    'customer_id' => $customer->id,
+                    'provider_priority' => 'qontak_if_template_exists',
+                    'result' => $response,
+                ]);
+
+                $respLower = strtolower((string) $response);
+                if (str_starts_with($respLower, 'error') || str_contains($respLower, 'failed')) {
+                    return response()->json([
+                        'message' => 'Failed to send WhatsApp notification.',
+                        'detail' => $response,
+                    ], 400);
+                }
+
+                return response()->json([
+                    'message' => 'WhatsApp notification sent successfully.',
+                    'detail' => $response,
+                ]);
             }
             else
             {
+                // Prioritas: jika template Qontak reminder tersedia, kirim via Qontak.
+                // Fallback otomatis ke provider tenant/gateway jika konfigurasi Qontak tidak lengkap.
+                $response = WaService::sendReminder(
+                    $customer->phone,
+                    $customer->name,
+                    $customer->customer_id,
+                    $encryptedurl,
+                    'WA_TAMPLATE_ID_1',
+                    [
+                        'invoice_no' => '#' . $suminvoice->number,
+                        'amount' => $suminvoice->total_amount,
+                        'billing_month' => $formattedDate,
+                        'due_date' => $duedate,
+                    ]
+                );
 
-                $message = "*[Informasi Pembayaran Internet]*";
-                $message .= "\n\n";
-                $message .= "Yth. " . $customer->name . ",";
-                $message .= "\n\n";
-                $message .= "Tagihan Anda dengan Customer ID (CID) *" . $customer->customer_id . "* telah diterbitkan.";
-                $message .= "\n*Total Tagihan:* Rp." . number_format($suminvoice->total_amount, 0, ',', '.') . "";
-                $message .= "\n*Batas Pembayaran:* " . $duedate;
-                $message .= "\n\n";
-                $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-                $message .= "\n" . $invLink3;
-                $message .= "\n\n";
-                $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
-                $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
-                $message .= "\n\n";
-                $message .= "".config("app.signature")."";
-            }
+                Log::info('[WA Reminder] routed by WaService', [
+                    'suminvoice_id' => $suminvoice->id,
+                    'customer_id' => $customer->id,
+                    'provider_priority' => 'qontak_if_template_exists',
+                    'result' => $response,
+                ]);
 
-            // $msgresult = \App\Suminvoice::wa_payment($customer->phone, $message);
-            Log::info('[WA Reminder] sending whatsapp', [
-                'suminvoice_id' => $suminvoice->id,
-                'customer_id' => $customer->id,
-                'short_url_used' => strpos($invLink3, '/s/') !== false,
-            ]);
-            $msgresult = WaGatewayHelper::wa_payment($customer->phone, $message);
+                $respLower = strtolower((string) $response);
+                if (str_starts_with($respLower, 'error') || str_contains($respLower, 'failed')) {
+                    return response()->json([
+                        'message' => 'Failed to send WhatsApp notification.',
+                        'detail' => $response,
+                    ], 400);
+                }
 
-            Log::info('[WA Reminder] whatsapp result', [
-                'suminvoice_id' => $suminvoice->id,
-                'customer_id' => $customer->id,
-                'result' => $msgresult,
-            ]);
-
-            if (isset($msgresult['status']) && $msgresult['status'] === 'success') {
                 return response()->json([
-                    'message' => $msgresult['message'] ?? 'WhatsApp notification sent successfully.'
+                    'message' => 'WhatsApp notification sent successfully.',
+                    'detail' => $response,
                 ]);
             }
-
-            return response()->json([
-                'message' => $msgresult['message'] ?? 'Failed to send WhatsApp notification.'
-            ], 400);
-
 
         } elseif ($type == 'email') {
             if (!empty($customer->email)){

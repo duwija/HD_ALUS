@@ -36,15 +36,22 @@ class WaService
      * @param  string  $encryptedurl URL terenkripsi link tagihan
      * @return string  Hasil dari API provider
      */
-    public static function sendReminder(string $phone, string $name, string $cid, string $encryptedurl): string
+    public static function sendReminder(
+        string $phone,
+        string $name,
+        string $cid,
+        string $encryptedurl,
+        string $templateKey = 'WA_TAMPLATE_ID_4',
+        array $context = []
+    ): string
     {
-        $provider = strtolower((string) tenant_config('WA_PROVIDER', tenant_config('wa_provider', 'gateway')));
+        $provider = static::resolveReminderProvider($templateKey);
 
         Log::channel('notif')->info("[WA:{$provider}] Kirim reminder CID {$cid} | {$name} → {$phone}");
 
         try {
             return match ($provider) {
-                'qontak'  => static::sendViaQontak($phone, $name, $cid, $encryptedurl),
+                'qontak'  => static::sendViaQontak($phone, $name, $cid, $encryptedurl, $templateKey, $context),
                 'fonnte'  => static::sendViaFonnte($phone, static::buildReminderMessage($name, $cid, $encryptedurl)),
                 'wablas'  => static::sendViaWablas($phone, static::buildReminderMessage($name, $cid, $encryptedurl)),
                 default   => static::sendViaGateway($phone, static::buildReminderMessage($name, $cid, $encryptedurl)),
@@ -80,6 +87,35 @@ class WaService
         }
     }
 
+    /**
+     * Kirim konfirmasi pembayaran.
+     * Prioritas otomatis ke Qontak jika WA_TAMPLATE_ID_3 tersedia.
+     */
+    public static function sendPaymentConfirmation(
+        string $phone,
+        string $name,
+        string $invoiceNo,
+        string $cid,
+        $amount,
+        string $openUrl,
+        string $source = ''
+    ): string
+    {
+        $provider = static::resolveReminderProvider('WA_TAMPLATE_ID_3');
+
+        try {
+            return match ($provider) {
+                'qontak'  => static::sendViaQontakPaymentConfirmation($phone, $name, $invoiceNo, $cid, (string) $amount, $openUrl),
+                'fonnte'  => static::sendViaFonnte($phone, static::buildPaymentConfirmationMessage($name, $invoiceNo, $cid, (string) $amount, $openUrl, $source)),
+                'wablas'  => static::sendViaWablas($phone, static::buildPaymentConfirmationMessage($name, $invoiceNo, $cid, (string) $amount, $openUrl, $source)),
+                default   => static::sendViaGateway($phone, static::buildPaymentConfirmationMessage($name, $invoiceNo, $cid, (string) $amount, $openUrl, $source)),
+            };
+        } catch (\Throwable $e) {
+            Log::channel('notif')->error("[WA:{$provider}] Payment confirmation error CID {$cid}: " . $e->getMessage());
+            return 'Error: ' . $e->getMessage();
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────
     //  Provider implementations
     // ──────────────────────────────────────────────────────────────
@@ -102,15 +138,22 @@ class WaService
      *   WA_QONTAK_TEMPLATE_ID    (message template ID)
      *   WA_QONTAK_CHANNEL_ID     (channel integration ID)
      */
-    protected static function sendViaQontak(string $phone, string $name, string $cid, string $encryptedurl): string
+    protected static function sendViaQontak(
+        string $phone,
+        string $name,
+        string $cid,
+        string $encryptedurl,
+        string $templateKey = 'WA_TAMPLATE_ID_4',
+        array $context = []
+    ): string
     {
         // Format nomor
         $hp = static::formatPhone($phone);
 
-        $apiUrl    = tenant_config('WA_QONTAK_API_URL',     env('WHATSAPP_API_URL',         'https://service-chat.qontak.com/api/open/v1/broadcasts/whatsapp/direct'));
-        $token     = tenant_config('WA_QONTAK_TOKEN',       env('ACCESS_TOKEN',              ''));
-        $templateId = tenant_config('WA_QONTAK_TEMPLATE_ID', env('WA_TAMPLATE_ID_4',         ''));
-        $channelId  = tenant_config('WA_QONTAK_CHANNEL_ID',  env('WA_CHANNEL_INTEGRATION_ID', ''));
+        $apiUrl     = static::getQontakApiUrl();
+        $token      = static::getQontakToken();
+        $channelId  = static::getQontakChannelId();
+        $templateId = static::getQontakTemplateId($templateKey);
 
         if (empty($token) || empty($templateId) || empty($channelId)) {
             Log::channel('notif')->warning('[WA:qontak] Konfigurasi tidak lengkap (token/template/channel kosong).');
@@ -123,15 +166,13 @@ class WaService
             'message_template_id'     => $templateId,
             'channel_integration_id'  => $channelId,
             'language'                => ['code' => 'id'],
-            'parameters'              => [
-                'body' => [
-                    ['key' => '1', 'value' => 'name',        'value_text' => $name],
-                    ['key' => '2', 'value' => 'customer_id', 'value_text' => $cid],
-                ],
-                'buttons' => [
-                    ['index' => '0', 'type' => 'url', 'value' => $encryptedurl],
-                ],
-            ],
+            'parameters'              => static::buildQontakReminderParameters(
+                $templateKey,
+                $name,
+                $cid,
+                $encryptedurl,
+                $context
+            ),
         ];
 
         $response = Http::withHeaders([
@@ -142,7 +183,184 @@ class WaService
         $body = $response->json() ?? [];
         Log::channel('notif')->info('[WA:qontak] Response: ' . json_encode($body));
 
+        if (($body['status'] ?? '') === 'error') {
+            $messages = $body['error']['messages'] ?? [];
+            if (is_array($messages) && !empty($messages)) {
+                return 'error: ' . implode('; ', $messages);
+            }
+            return 'error';
+        }
+
         return $body['status'] ?? 'sent';
+    }
+
+    /**
+     * Bentuk parameter Qontak berdasarkan template yang dipakai.
+     */
+    protected static function buildQontakReminderParameters(
+        string $templateKey,
+        string $name,
+        string $cid,
+        string $encryptedurl,
+        array $context = []
+    ): array
+    {
+        $buttonPath = ltrim($encryptedurl, '/');
+
+        if ($templateKey === 'WA_TAMPLATE_ID_1') {
+            $invoiceNo = (string) ($context['invoice_no'] ?? '-');
+            $amountRaw = $context['amount'] ?? 0;
+            $amount = 'Rp. ' . number_format((float) $amountRaw, 0, ',', '.');
+            $billingMonth = (string) ($context['billing_month'] ?? '-');
+            $dueDate = (string) ($context['due_date'] ?? '-');
+
+            return [
+                'body' => [
+                    ['key' => '1', 'value' => 'name', 'value_text' => $name],
+                    ['key' => '2', 'value' => 'customer_id', 'value_text' => $cid],
+                    ['key' => '3', 'value' => 'invoice_no', 'value_text' => $invoiceNo],
+                    ['key' => '4', 'value' => 'amount', 'value_text' => $amount],
+                    ['key' => '5', 'value' => 'billing_month', 'value_text' => $billingMonth],
+                    ['key' => '6', 'value' => 'due_date', 'value_text' => $dueDate],
+                ],
+                'buttons' => [
+                    ['index' => '0', 'type' => 'url', 'value' => $buttonPath],
+                ],
+            ];
+        }
+
+        return [
+            'body' => [
+                ['key' => '1', 'value' => 'name', 'value_text' => $name],
+                ['key' => '2', 'value' => 'customer_id', 'value_text' => $cid],
+            ],
+            'buttons' => [
+                ['index' => '0', 'type' => 'url', 'value' => $buttonPath],
+            ],
+        ];
+    }
+
+    /**
+     * Qontak template konfirmasi pembayaran (WA_TAMPLATE_ID_3).
+     */
+    protected static function sendViaQontakPaymentConfirmation(
+        string $phone,
+        string $name,
+        string $invoiceNo,
+        string $cid,
+        string $amount,
+        string $openUrl
+    ): string
+    {
+        $hp         = static::formatPhone($phone);
+        $apiUrl     = static::getQontakApiUrl();
+        $token      = static::getQontakToken();
+        $channelId  = static::getQontakChannelId();
+        $templateId = static::getQontakTemplateId('WA_TAMPLATE_ID_3');
+
+        if (empty($token) || empty($templateId) || empty($channelId)) {
+            Log::channel('notif')->warning('[WA:qontak] Konfigurasi payment confirmation tidak lengkap (token/template/channel kosong).');
+            return 'qontak: config incomplete';
+        }
+
+        $buttonPath = ltrim($openUrl, '/');
+
+        $payload = [
+            'to_number'              => $hp,
+            'to_name'                => $name,
+            'message_template_id'    => $templateId,
+            'channel_integration_id' => $channelId,
+            'language'               => ['code' => 'id'],
+            'parameters'             => [
+                'body' => [
+                    ['key' => '1', 'value' => 'name', 'value_text' => $name],
+                    ['key' => '2', 'value' => 'inv_no', 'value_text' => $invoiceNo],
+                    ['key' => '3', 'value' => 'customer_id', 'value_text' => $cid],
+                    ['key' => '4', 'value' => 'amount', 'value_text' => number_format((float) $amount, 0, ',', '.')],
+                ],
+                'buttons' => [
+                    ['index' => '0', 'type' => 'url', 'value' => $buttonPath],
+                ],
+            ],
+        ];
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+            'Content-Type'  => 'application/json',
+        ])->post($apiUrl, $payload);
+
+        $body = $response->json() ?? [];
+        Log::channel('notif')->info('[WA:qontak:payment_confirmation] Response: ' . json_encode($body));
+
+        return $body['status'] ?? 'sent';
+    }
+
+    /**
+     * Pilih provider untuk reminder:
+     * - Qontak diprioritaskan jika template + token + channel tersedia
+     * - Jika tidak, gunakan provider tenant (default gateway)
+     */
+    protected static function resolveReminderProvider(string $templateKey): string
+    {
+        $configuredProvider = strtolower((string) tenant_config('WA_PROVIDER', tenant_config('wa_provider', 'gateway')));
+
+        if (static::hasQontakConfig($templateKey)) {
+            return 'qontak';
+        }
+
+        if ($configuredProvider === 'qontak') {
+            Log::channel('notif')->warning("[WA:qontak] Konfigurasi tidak lengkap untuk {$templateKey}, fallback ke gateway.");
+            return 'gateway';
+        }
+
+        return $configuredProvider;
+    }
+
+    protected static function hasQontakConfig(string $templateKey): bool
+    {
+        return static::getQontakToken() !== ''
+            && static::getQontakChannelId() !== ''
+            && static::getQontakApiUrl() !== ''
+            && static::getQontakTemplateId($templateKey) !== '';
+    }
+
+    protected static function getQontakApiUrl(): string
+    {
+        return trim((string) tenant_config(
+            'WA_QONTAK_API_URL',
+            tenant_config('WHATSAPP_API_URL', env('WHATSAPP_API_URL', 'https://service-chat.qontak.com/api/open/v1/broadcasts/whatsapp/direct'))
+        ));
+    }
+
+    protected static function getQontakToken(): string
+    {
+        return trim((string) tenant_config(
+            'WA_QONTAK_TOKEN',
+            tenant_config('ACCESS_TOKEN', env('ACCESS_TOKEN', ''))
+        ));
+    }
+
+    protected static function getQontakChannelId(): string
+    {
+        return trim((string) tenant_config(
+            'WA_QONTAK_CHANNEL_ID',
+            tenant_config('WA_CHANNEL_INTEGRATION_ID', env('WA_CHANNEL_INTEGRATION_ID', ''))
+        ));
+    }
+
+    protected static function getQontakTemplateId(string $templateKey): string
+    {
+        $templateId = trim((string) tenant_config($templateKey, env($templateKey, '')));
+        if ($templateId !== '') {
+            return $templateId;
+        }
+
+        $templateId = trim((string) tenant_config('WA_QONTAK_TEMPLATE_ID', env('WA_QONTAK_TEMPLATE_ID', '')));
+        if ($templateId !== '') {
+            return $templateId;
+        }
+
+        return trim((string) tenant_config('WA_TAMPLATE_ID_4', env('WA_TAMPLATE_ID_4', '')));
     }
 
     /**
@@ -279,6 +497,46 @@ class WaService
             $msg .= "Hubungi CS {$paymentWa} untuk pertanyaan lebih lanjut.\n\n";
             $msg .= "{$signature}";
         }
+
+        return $msg;
+    }
+
+    /**
+     * Pesan fallback konfirmasi pembayaran untuk non-qontak.
+     */
+    public static function buildPaymentConfirmationMessage(
+        string $name,
+        string $invoiceNo,
+        string $cid,
+        string $amount,
+        string $openUrl,
+        string $source = ''
+    ): string
+    {
+        $domain    = tenant_config('domain_name', env('DOMAIN_NAME', ''));
+        $signature = tenant_config('signature', env('SIGNATURE', config('app.signature', '')));
+        $amountRp  = number_format((float) $amount, 0, ',', '.');
+
+        $fullUrl = (str_starts_with($openUrl, 'http://') || str_starts_with($openUrl, 'https://'))
+            ? $openUrl
+            : 'https://' . $domain . $openUrl;
+
+        try {
+            $fullUrl = \App\ShortUrl::shorten($fullUrl);
+        } catch (\Throwable $e) {
+            // fallback URL asli
+        }
+
+        $msg  = "Yth. {$name}\n";
+        $msg .= "\nTerimakasih, pembayaran tagihan Customer dengan CID *{$cid}* sudah kami *TERIMA*";
+        $msg .= "\nTagihan  : *#{$invoiceNo}*";
+        $msg .= "\nJumlah   : *Rp.{$amountRp}*";
+        if ($source !== '') {
+            $msg .= "\nVia      : {$source}";
+        }
+        $msg .= "\n\nUntuk info lebih lengkap silahkan klik link:";
+        $msg .= "\n{$fullUrl}";
+        $msg .= "\n\n{$signature}";
 
         return $msg;
     }

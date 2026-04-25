@@ -17,7 +17,7 @@ use App\Jobs\EnableMikrotikJob;
 use App\Services\FcmService;
 use App\AppCustomerNotification;
 use App\Mail\EmailReceivePayment;
-use App\Helpers\WaGatewayHelper;
+use App\Services\WaService;
 
 
 class XenditCallbackController extends Controller
@@ -914,28 +914,15 @@ return("ACCEPTED");
 
             if ($customers->notification == 1) {
                 // ── WhatsApp ──────────────────────────────────────────────
-                $waProvider = tenant_config('wa_provider', 'gateway');
-
-                if ($waProvider === 'qontak') {
-                    qontak_whatsapp_helper_receive_payment_confirmation(
-                        $customers->phone,
-                        $customers->name,
-                        $invoiceNumber,
-                        $customers->customer_id,
-                        $amount,
-                        $openUrl
-                    );
-                } else {
-                    $message  = "Yth. " . $customers->name . "\n";
-                    $message .= "\nTerimakasih, Pembayaran tagihan Customer dengan CID *" . $customers->customer_id . "* sudah kami *TERIMA*";
-                    $message .= "\nTagihan  : *#" . $invoiceNumber . "*";
-                    $message .= "\nJumlah   : *Rp." . $jumlah_rupiah . "*";
-                    $message .= "\nVia      : " . $source;
-                    $message .= "\n\nUntuk info lebih lengkap silahkan klik link:";
-                    $message .= "\nhttp://" . tenant_config('domain_name', env("DOMAIN_NAME")) . $openUrl;
-                    $message .= "\n\n" . config("app.signature");
-                    WaGatewayHelper::wa_payment($customers->phone, $message);
-                }
+                WaService::sendPaymentConfirmation(
+                    $customers->phone,
+                    $customers->name,
+                    $invoiceNumber,
+                    $customers->customer_id,
+                    $amount,
+                    $openUrl,
+                    $source
+                );
 
             } elseif ($customers->notification == 2) {
                 // ── Email ─────────────────────────────────────────────────

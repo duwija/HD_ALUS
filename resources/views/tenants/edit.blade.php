@@ -372,10 +372,13 @@
                                                             Jika tidak diisi, tombol "Buat Laporan via WhatsApp" tidak akan muncul di halaman laporan tiket pelanggan.
                                                         </span>
                                                     </li>
-                                                    <li><code>ACCESS_TOKEN</code> - Qontak Access Token (jika pakai qontak)</li>
-                                                    <li><code>WHATSAPP_API_URL</code> - Qontak API URL (jika pakai qontak)</li>
-                                                    <li><code>WA_CHANNEL_INTEGRATION_ID</code> - Qontak Channel ID (jika pakai qontak)</li>
-                                                    <li><code>WA_TAMPLATE_ID_4</code> - Qontak Template ID untuk reminder (jika pakai qontak)</li>
+                                                    <li><code>ACCESS_TOKEN</code> - Qontak Access Token (Bearer token, jika pakai qontak)</li>
+                                                    <li><code>WHATSAPP_API_URL</code> - Endpoint API Qontak direct broadcast</li>
+                                                    <li><code>WA_CHANNEL_INTEGRATION_ID</code> - Qontak Channel Integration ID (UUID)</li>
+                                                    <li><code>WA_TAMPLATE_ID_1</code> - Template reminder pembayaran</li>
+                                                    <li><code>WA_TAMPLATE_ID_2</code> - Template info invoice baru</li>
+                                                    <li><code>WA_TAMPLATE_ID_3</code> - Template konfirmasi pembayaran diterima</li>
+                                                    <li><code>WA_TAMPLATE_ID_4</code> - Template job reminder invoice</li>
                                                 </ul>
                                             </div>
 

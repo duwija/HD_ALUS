@@ -66,6 +66,13 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
 | 50 | `report_email` | System | Tidak |
 | 51 | `whatsapp_noc` | Perusahaan | Tidak |
 | 52 | `marketing_email` | Mail | Tidak |
+| 53 | `ACCESS_TOKEN` | WA Qontak | Tidak |
+| 54 | `WHATSAPP_API_URL` | WA Qontak | Tidak |
+| 55 | `WA_CHANNEL_INTEGRATION_ID` | WA Qontak | Tidak |
+| 56 | `WA_TAMPLATE_ID_1` | WA Qontak | Tidak |
+| 57 | `WA_TAMPLATE_ID_2` | WA Qontak | Tidak |
+| 58 | `WA_TAMPLATE_ID_3` | WA Qontak | Tidak |
+| 59 | `WA_TAMPLATE_ID_4` | WA Qontak | Tidak |
 
 ---
 
@@ -333,6 +340,46 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
 | `QUEUE_MAX_JOBS` | `500` | Worker restart otomatis setelah memproses N job |
 
 > **Catatan:** Perubahan `QUEUE_*` sebaiknya dilakukan via tombol **Settings** di Queue Worker Monitor (`/admin/tenants/{id}`) agar supervisor conf ikut diperbarui dan worker direstart otomatis.
+
+#### 16. **WhatsApp Qontak (Broadcast API)**
+```json
+{
+  "WHATSAPP_API_URL": "https://service-chat.qontak.com/api/open/v1/broadcasts/whatsapp/direct",
+  "ACCESS_TOKEN": "bearer-token-dari-qontak",
+  "WA_CHANNEL_INTEGRATION_ID": "uuid-channel-integration",
+  "WA_TAMPLATE_ID_1": "uuid-template-1",
+  "WA_TAMPLATE_ID_2": "uuid-template-2",
+  "WA_TAMPLATE_ID_3": "uuid-template-3",
+  "WA_TAMPLATE_ID_4": "uuid-template-4"
+}
+```
+**Kegunaan:** Integrasi Qontak WhatsApp Broadcast API untuk mengirim notifikasi terstruktur (template-based) seperti reminder tagihan, konfirmasi pembayaran, dan reminder invoice via saluran WhatsApp Business resmi.
+
+| Key | Keterangan |
+|-----|------------|
+| `WHATSAPP_API_URL` | Endpoint broadcast Qontak (`/broadcasts/whatsapp/direct`) |
+| `ACCESS_TOKEN` | Bearer token autentikasi dari dashboard Qontak |
+| `WA_CHANNEL_INTEGRATION_ID` | UUID Channel Integration yang terdaftar di Qontak |
+| `WA_TAMPLATE_ID_1` | UUID template **reminder pembayaran** |
+| `WA_TAMPLATE_ID_2` | UUID template **invoice baru (done)** |
+| `WA_TAMPLATE_ID_3` | UUID template **konfirmasi penerimaan pembayaran** |
+| `WA_TAMPLATE_ID_4` | UUID template **reminder job invoice** |
+
+**Nilai per Tenant:**
+
+| Tenant | `ACCESS_TOKEN` | `WA_CHANNEL_INTEGRATION_ID` |
+|--------|---------------|------------------------------|
+| kencana.alus.co.id | `bWV-xudPxxs3tx2feGhoBVtwsP2QsgcOolz1ZUeyIC0` | `85bdddf9-e97a-426a-95cf-e4ad5b28423b` |
+| adiyasa.alus.co.id | `00T_FSsDUHmk7ommcAgMVgfoTbz1NwKWKtCcTX9Q3pE` | `83c73091-ea9a-4f1f-b8fe-ecf8df829343` |
+| maharani.alus.co.id | `00T_FSsDUHmk7ommcAgMVgfoTbz1NwKWKtCcTX9Q3pE` | `83c73091-ea9a-4f1f-b8fe-ecf8df829343` |
+
+**Template ID per Tenant:**
+
+| Tenant | `WA_TAMPLATE_ID_1` | `WA_TAMPLATE_ID_2` | `WA_TAMPLATE_ID_3` | `WA_TAMPLATE_ID_4` |
+|--------|-------------------|-------------------|-------------------|-----------------|
+| kencana.alus.co.id | `004cb942-26a2-45f1-b031-1846edc35ea1` | `c0e4fdc4-20f5-40b3-9aa8-c2dd84535150` | `b3e290a9-45c9-4c96-9056-935ea90bef96` | *(belum diset)* |
+| adiyasa.alus.co.id | `004cb942-26a2-45f1-b031-1846edc35ea1` | `c0e4fdc4-20f5-40b3-9aa8-c2dd84535150` | `b3e290a9-45c9-4c96-9056-935ea90bef96` | *(belum diset)* |
+| maharani.alus.co.id | `43fc8d0a-2846-4758-993c-989639189296` | `82b42221-95fb-4b4d-a24c-f375baf20f21` | `ed19b0db-90d1-423a-9c89-4581f8ce82c4` | `c7f159cb-1a56-43d5-86ca-1ade3a2f3c9e` |
 
 ---
 
