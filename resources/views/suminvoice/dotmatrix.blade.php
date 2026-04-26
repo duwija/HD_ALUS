@@ -233,7 +233,7 @@
   {{-- ===== INV NOTE ===== --}}
   @if ($invNote)
   <div class="inv-note center">
-    {!! strip_tags($invNote, '<br><strong><b>') !!}
+      {!! nl2br(e($invNote)) !!}
   </div>
   @endif
 

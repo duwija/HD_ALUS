@@ -24,9 +24,16 @@ class IsolirAuto extends Command
         Log::info("[AutoIsolir] Mulai — isolir_date={$today}");
 
         $tenants = \App\Tenant::on('isp_master')->where('is_active', true)->get();
-        $this->info("[AutoIsolir] Total tenant aktif: " . $tenants->count());
+        $enabledTenants = $tenants->filter(function ($tenantModel) {
+            $features = (array) ($tenantModel->features ?? []);
+            // Backward compatible: if flag does not exist yet, treat as enabled.
+            return !array_key_exists('auto_isolir', $features) || (bool) ($features['auto_isolir'] ?? false);
+        });
 
-        foreach ($tenants as $tenantModel) {
+        $this->info("[AutoIsolir] Total tenant aktif: " . $tenants->count());
+        $this->info("[AutoIsolir] Auto isolir aktif: " . $enabledTenants->count());
+
+        foreach ($enabledTenants as $tenantModel) {
             $this->processTenant($tenantModel->toTenantArray(), $today);
         }
 

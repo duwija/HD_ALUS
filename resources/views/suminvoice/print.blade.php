@@ -871,12 +871,15 @@ a button {
     </table>
 </div><!-- /.tbl-wrapper -->
 
-    <span class="pt-4">{!! $invNote !!}</span>
+    <span class="pt-4">{!! nl2br(e($invNote)) !!}</span>
+    
 
 </div>
 
 
-
+<div class="pt-4">
+    <br>
+</div>
 
 
 @if ( $suminvoice_number->payment_status == 1)

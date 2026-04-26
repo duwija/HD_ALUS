@@ -174,6 +174,15 @@
                                             </label>
                                         </div>
                                     </div>
+                                    <div class="col-md-3">
+                                        <div class="form-check">
+                                            <input type="checkbox" name="feature_auto_isolir" class="form-check-input"
+                                                   id="feature_auto_isolir" value="1" checked>
+                                            <label class="form-check-label" for="feature_auto_isolir">
+                                                Auto Isolir
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

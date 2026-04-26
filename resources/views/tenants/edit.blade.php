@@ -220,6 +220,18 @@
                                         <i class="fas fa-credit-card"></i> Payment Gateway
                                     </label>
                                 </div>
+
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           name="features[auto_isolir]"
+                                           id="auto_isolir"
+                                           value="1"
+                                           {{ (old('features.auto_isolir', $tenant->features['auto_isolir'] ?? true)) ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="auto_isolir">
+                                        <i class="fas fa-user-lock"></i> Auto Isolir
+                                    </label>
+                                </div>
                             </div>
                         </div>
 

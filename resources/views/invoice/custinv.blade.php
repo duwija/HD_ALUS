@@ -480,7 +480,7 @@
             </div>
         </div>
         @if(!empty($invNote))
-            <div class="inv-note">{!! $invNote !!}</div>
+            <div class="inv-note">{!! nl2br(e($invNote)) !!}</div>
         @endif
     </div>
 
