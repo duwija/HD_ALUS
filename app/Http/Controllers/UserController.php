@@ -63,7 +63,6 @@ public function searchforjurnal(Request $request) {
         // Gunakan tenant aktif dari session multi-tenant, fallback ke DB_DATABASE
         $tenantKey = app()->bound('tenant') ? (app('tenant')['db_database'] ?? env('DB_DATABASE', 'default')) : env('DB_DATABASE', 'default');
         $tenantDir = storage_path("logs/tenant_{$tenantKey}");
-        $rootDir   = storage_path('logs');
 
         // Tenant-specific channel logs
         $tenantFiles = [];
@@ -81,20 +80,6 @@ public function searchforjurnal(Request $request) {
         }
         usort($tenantFiles, fn($a, $b) => $b['modified'] - $a['modified']);
 
-        // Non-tenant logs (Python OLT logs, etc.) from root storage/logs/
-        $rootFiles = [];
-        foreach (glob($rootDir . '/*.log') as $path) {
-            $name = basename($path);
-            if ($name === 'laravel.log') continue;
-            $rootFiles[] = [
-                'name'     => $name,
-                'label'    => $name,
-                'size'     => filesize($path),
-                'modified' => filemtime($path),
-            ];
-        }
-        usort($rootFiles, fn($a, $b) => $b['modified'] - $a['modified']);
-
         // Tenant laravel.log
         $tenantLogPath   = $tenantDir . '/laravel.log';
         $tenantLogExists = file_exists($tenantLogPath);
@@ -104,7 +89,7 @@ public function searchforjurnal(Request $request) {
             'modified' => filemtime($tenantLogPath),
         ] : null;
 
-        $appFiles = array_merge($tenantFiles, $rootFiles);
+        $appFiles = $tenantFiles;
 
         return view('user/log', compact('appFiles', 'tenantLogInfo', 'tenantKey'));
     }
@@ -115,13 +100,15 @@ public function searchforjurnal(Request $request) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
-        $file   = $request->get('file', '');
-        $lines  = (int) $request->get('lines', 300);
-        $logDir = storage_path('logs');
+        $file      = $request->get('file', '');
+        $lines     = (int) $request->get('lines', 300);
+        $tenantKey = app()->bound('tenant') ? (app('tenant')['db_database'] ?? env('DB_DATABASE', 'default')) : env('DB_DATABASE', 'default');
+        $tenantDir = storage_path("logs/tenant_{$tenantKey}");
 
-        // Sanitize path — only allow files within storage/logs
-        $path = realpath($logDir . '/' . $file);
-        if (!$path || !str_starts_with($path, realpath($logDir))) {
+        // Hanya izinkan baca file yang berada di folder tenant aktif.
+        $basePath = realpath($tenantDir);
+        $path = realpath($tenantDir . '/' . basename($file));
+        if (!$basePath || !$path || !str_starts_with($path, $basePath)) {
             return response()->json(['error' => 'File tidak ditemukan'], 404);
         }
 

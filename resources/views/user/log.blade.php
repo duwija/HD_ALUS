@@ -150,7 +150,7 @@ pre.log-content {
             @php
                 $type = 'other';
                 foreach($typeMap as $prefix => $_) {
-                    if(str_starts_with($f['name'], $prefix)) { $type = $prefix; break; }
+                    if(str_starts_with($f['label'], $prefix)) { $type = $prefix; break; }
                 }
                 $badge = $typeMap[$type] ?? ['badge'=>'badge-jobs','letter'=>'?'];
                 $groupLabel = match($type) {
