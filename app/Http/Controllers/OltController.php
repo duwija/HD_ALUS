@@ -19,7 +19,10 @@ class OltController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware('checkPrivilege:admin,noc');
+
+        // Read-only ONT info + reboot bisa diakses accounting dari halaman customer.
+        $this->middleware('checkPrivilege:admin,noc')->except(['ont_status', 'onu_detail', 'onureboot']);
+        $this->middleware('checkPrivilege:admin,noc,accounting')->only(['ont_status', 'onu_detail', 'onureboot']);
     }
 
 

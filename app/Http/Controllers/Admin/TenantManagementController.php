@@ -123,7 +123,12 @@ class TenantManagementController extends Controller
                 'db_username' => $request->db_username,
                 'db_password' => $request->db_password,
                 'mail_from' => $request->mail_from ?? 'admin@' . $request->domain,
-                'features' => $this->resolveFeatures($request),
+                'features' => [
+                    'accounting' => $request->has('feature_accounting'),
+                    'ticketing' => $request->has('feature_ticketing'),
+                    'whatsapp' => $request->has('feature_whatsapp'),
+                    'payment_gateway' => $request->has('feature_payment'),
+                ],
                 'env_variables' => $this->processEnvVariables($request),
                 'is_active' => true,
                 'notes' => $request->notes,
@@ -258,7 +263,6 @@ class TenantManagementController extends Controller
             'feature_ticketing' => 'nullable|boolean',
             'feature_whatsapp' => 'nullable|boolean',
             'feature_payment' => 'nullable|boolean',
-            'feature_auto_isolir' => 'nullable|boolean',
             'is_active' => 'nullable|boolean',
             'license_plan_id' => 'nullable|exists:isp_master.license_plans,id',
             'license_status' => 'nullable|in:active,suspended,expired,trial',
@@ -290,7 +294,12 @@ class TenantManagementController extends Controller
                 'db_database' => $request->db_database,
                 'db_username' => $request->db_username,
                 'mail_from' => $request->mail_from,
-                'features' => $this->resolveFeatures($request, $tenant->features ?? []),
+                'features' => [
+                    'accounting' => $request->has('feature_accounting'),
+                    'ticketing' => $request->has('feature_ticketing'),
+                    'whatsapp' => $request->has('feature_whatsapp'),
+                    'payment_gateway' => $request->has('feature_payment'),
+                ],
                 'env_variables' => $this->processEnvVariables($request),
                 'is_active' => $request->has('is_active'),
                 'notes' => $request->notes,
@@ -655,24 +664,6 @@ class TenantManagementController extends Controller
                 ->with('error', 'Gagal upload assets: ' . $e->getMessage())
                 ->withInput();
         }
-    }
-
-    /**
-     * Build feature flags from request and keep backward compatibility
-     * for both checkbox naming styles used in create/edit forms.
-     */
-    private function resolveFeatures(Request $request, array $existing = []): array
-    {
-        return [
-            'accounting' => $request->has('feature_accounting') || $request->boolean('features.accounting'),
-            'ticketing' => $request->has('feature_ticketing') || $request->boolean('features.ticketing'),
-            'whatsapp' => $request->has('feature_whatsapp') || $request->boolean('features.whatsapp'),
-            'payment_gateway' => $request->has('feature_payment') || $request->boolean('features.payment_gateway'),
-            // Default true for existing tenants that do not have this key yet.
-            'auto_isolir' => $request->has('feature_auto_isolir')
-                || $request->boolean('features.auto_isolir')
-                || !array_key_exists('auto_isolir', $existing),
-        ];
     }
 
     /**

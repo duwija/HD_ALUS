@@ -17,7 +17,7 @@ use App\Jobs\EnableMikrotikJob;
 use App\Services\FcmService;
 use App\AppCustomerNotification;
 use App\Mail\EmailReceivePayment;
-use App\Services\WaService;
+use App\Helpers\WaGatewayHelper;
 
 
 class XenditCallbackController extends Controller
@@ -911,18 +911,72 @@ return("ACCEPTED");
             $encryptedurl  = Crypt::encryptString($customers->id);
             $jumlah_rupiah = number_format($amount, 0, ',', '.');
             $openUrl       = '/invoice/cst/' . $encryptedurl;
+            $tenantDomain  = tenant_config('domain_name', env('DOMAIN_NAME'));
 
             if ($customers->notification == 1) {
                 // ── WhatsApp ──────────────────────────────────────────────
-                WaService::sendPaymentConfirmation(
-                    $customers->phone,
-                    $customers->name,
-                    $invoiceNumber,
-                    $customers->customer_id,
-                    $amount,
-                    $openUrl,
-                    $source
-                );
+                $waProvider = tenant_config('wa_provider', 'gateway');
+
+                if ($waProvider === 'qontak') {
+                    $response = qontak_whatsapp_helper_receive_payment_confirmation(
+                        $customers->phone,
+                        $customers->name,
+                        $invoiceNumber,
+                        $customers->customer_id,
+                        $amount,
+                        $openUrl
+                    );
+
+                    if (is_string($response) && (str_starts_with($response, 'Error:') || $response === 'WA Disabled')) {
+                        Log::channel('payment')->warning('[PAYMENT NOTIF] failed', [
+                            'tenant' => $tenantDomain,
+                            'source' => $source,
+                            'channel' => 'whatsapp',
+                            'provider' => 'qontak',
+                            'customer_id' => $customers->customer_id,
+                            'invoice_number' => $invoiceNumber,
+                            'status' => 'failed',
+                            'detail' => $response,
+                        ]);
+                    } else {
+                        Log::channel('payment')->info('[PAYMENT NOTIF] sent', [
+                            'tenant' => $tenantDomain,
+                            'source' => $source,
+                            'channel' => 'whatsapp',
+                            'provider' => 'qontak',
+                            'customer_id' => $customers->customer_id,
+                            'invoice_number' => $invoiceNumber,
+                            'status' => 'sent',
+                            'detail' => $response,
+                        ]);
+                    }
+                } else {
+                    $message  = "Yth. " . $customers->name . "\n";
+                    $message .= "\nTerimakasih, Pembayaran tagihan Customer dengan CID *" . $customers->customer_id . "* sudah kami *TERIMA*";
+                    $message .= "\nTagihan  : *#" . $invoiceNumber . "*";
+                    $message .= "\nJumlah   : *Rp." . $jumlah_rupiah . "*";
+                    $message .= "\nVia      : " . $source;
+                    $message .= "\n\nUntuk info lebih lengkap silahkan klik link:";
+                    $message .= "\nhttp://" . tenant_config('domain_name', env("DOMAIN_NAME")) . $openUrl;
+                    $message .= "\n\n" . config("app.signature");
+                    $result = WaGatewayHelper::wa_payment($customers->phone, $message);
+
+                    Log::channel('payment')->log(
+                        ($result['status'] ?? null) === 'success' ? 'info' : 'warning',
+                        '[PAYMENT NOTIF] ' . (($result['status'] ?? null) === 'success' ? 'sent' : 'failed'),
+                        [
+                            'tenant' => $tenantDomain,
+                            'source' => $source,
+                            'channel' => 'whatsapp',
+                            'provider' => 'gateway',
+                            'customer_id' => $customers->customer_id,
+                            'invoice_number' => $invoiceNumber,
+                            'status' => $result['status'] ?? 'failed',
+                            'detail' => $result['message'] ?? null,
+                            'session' => $result['session'] ?? null,
+                        ]
+                    );
+                }
 
             } elseif ($customers->notification == 2) {
                 // ── Email ─────────────────────────────────────────────────
@@ -936,6 +990,25 @@ return("ACCEPTED");
                         'url'          => $openUrl,
                     ];
                     Mail::to($customers->email)->send(new EmailReceivePayment($data));
+                    Log::channel('payment')->info('[PAYMENT NOTIF] sent', [
+                        'tenant' => $tenantDomain,
+                        'source' => $source,
+                        'channel' => 'email',
+                        'customer_id' => $customers->customer_id,
+                        'invoice_number' => $invoiceNumber,
+                        'status' => 'sent',
+                        'detail' => $customers->email,
+                    ]);
+                } else {
+                    Log::channel('payment')->info('[PAYMENT NOTIF] skipped', [
+                        'tenant' => $tenantDomain,
+                        'source' => $source,
+                        'channel' => 'email',
+                        'customer_id' => $customers->customer_id,
+                        'invoice_number' => $invoiceNumber,
+                        'status' => 'skipped',
+                        'detail' => 'email kosong',
+                    ]);
                 }
 
             } elseif ($customers->notification == 3) {
@@ -955,11 +1028,38 @@ return("ACCEPTED");
                                 'open_url'    => $openUrl,
                             ]
                         );
+                        Log::channel('payment')->info('[PAYMENT NOTIF] sent', [
+                            'tenant' => $tenantDomain,
+                            'source' => $source,
+                            'channel' => 'fcm',
+                            'customer_id' => $customers->customer_id,
+                            'invoice_number' => $invoiceNumber,
+                            'status' => 'sent',
+                        ]);
                     } catch (\App\Exceptions\FcmTokenUnregisteredException $eFcmUnreg) {
                         $customers->fcm_token = null;
                         $customers->save();
                         Log::warning('[FCM] Token UNREGISTERED — dihapus dari DB | CID ' . $customers->customer_id);
+                        Log::channel('payment')->warning('[PAYMENT NOTIF] failed', [
+                            'tenant' => $tenantDomain,
+                            'source' => $source,
+                            'channel' => 'fcm',
+                            'customer_id' => $customers->customer_id,
+                            'invoice_number' => $invoiceNumber,
+                            'status' => 'failed',
+                            'detail' => 'fcm token unregistered',
+                        ]);
                     }
+                } else {
+                    Log::channel('payment')->info('[PAYMENT NOTIF] skipped', [
+                        'tenant' => $tenantDomain,
+                        'source' => $source,
+                        'channel' => 'fcm',
+                        'customer_id' => $customers->customer_id,
+                        'invoice_number' => $invoiceNumber,
+                        'status' => 'skipped',
+                        'detail' => 'fcm_token kosong',
+                    ]);
                 }
 
                 // Simpan ke riwayat notifikasi app
@@ -970,6 +1070,16 @@ return("ACCEPTED");
                     'payment_received',
                     $openUrl
                 );
+            } else {
+                Log::channel('payment')->info('[PAYMENT NOTIF] skipped', [
+                    'tenant' => $tenantDomain,
+                    'source' => $source,
+                    'channel' => 'none',
+                    'customer_id' => $customers->customer_id,
+                    'invoice_number' => $invoiceNumber,
+                    'status' => 'skipped',
+                    'detail' => 'notification preference none/unknown: ' . ($customers->notification ?? 'null'),
+                ]);
             }
             // notification == 0 → tidak ada notifikasi
 
