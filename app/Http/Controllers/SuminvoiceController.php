@@ -3404,6 +3404,22 @@ public function send_reminder_inv(Request $request, $id)
         }
         $duedate = $suminvoice->due_date ?: 'N/A';
         $encryptedurl = '/invoice/cst/' . Crypt::encryptString($customer->id);
+        $originalInvoiceUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . $encryptedurl;
+        $shortInvoiceUrl = $originalInvoiceUrl;
+        try {
+            $generatedShortUrl = \App\ShortUrl::shorten($originalInvoiceUrl);
+            if (!empty($generatedShortUrl)) {
+                $shortInvoiceUrl = $generatedShortUrl;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('[ShortUrl] send_reminder_inv fallback to original URL', [
+                'suminvoice_id' => $suminvoice->id,
+                'customer_id' => $customer->id,
+                'tenant' => tenant_config('domain_name', env('DOMAIN_NAME')),
+                'original_url' => $originalInvoiceUrl,
+                'error' => $e->getMessage(),
+            ]);
+        }
         $formattedDate = Carbon::parse($suminvoice->date)->translatedFormat('M Y');
 
         // if ($type == 'wa') {
@@ -3443,7 +3459,7 @@ public function send_reminder_inv(Request $request, $id)
                 $message .= "\n*Batas Pembayaran:* " . $duedate;
                 $message .= "\n\n";
                 $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-                $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "" . $encryptedurl;
+                $message .= "\n" . $shortInvoiceUrl;
                 $message .= "\n\n";
                 $message .= "".config("app.signature")."";
             }
@@ -3459,7 +3475,7 @@ public function send_reminder_inv(Request $request, $id)
                 $message .= "\n*Batas Pembayaran:* " . $duedate;
                 $message .= "\n\n";
                 $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-                $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "" . $encryptedurl;
+                $message .= "\n" . $shortInvoiceUrl;
                 $message .= "\n\n";
                 $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
                 $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
