@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Tenant;
 use Illuminate\Http\Request;
-use Symfony\Component\Process\Process;
 
 class AdminMigrateController extends Controller
 {
@@ -59,37 +58,29 @@ class AdminMigrateController extends Controller
             ], 422);
         }
 
-        $results     = [];
-        // PHP_BINARY points to php-fpm when running under a web server.
-        // Detect and fall back to the CLI binary instead.
-        $php = PHP_BINARY;
-        if (str_contains($php, 'fpm') || str_contains($php, 'cgi')) {
-            $php = trim(shell_exec('which php') ?: 'php');
-        }
-        $artisan = base_path('artisan');
+        $results = [];
 
         foreach ($tenants as $tenant) {
-            $cmd = [
-                $php,
-                $artisan,
-                'tenant:migrate-all',
-                '--tenant=' . $tenant->id,
-                '--no-interaction',
-            ];
-
-            if ($pretend) {
-                $cmd[] = '--pretend';
-            }
-
-            $process = new Process($cmd, base_path(), null, null, 300);
-
             try {
-                $process->run();
-                $output = trim($process->getOutput() . "\n" . $process->getErrorOutput());
-                $output = trim($output);
+                // Build artisan command arguments
+                $args = ['tenant:migrate-all', '--tenant' => (string) $tenant->id, '--no-interaction' => true];
+                
+                if ($pretend) {
+                    $args['--pretend'] = true;
+                }
+                
+                // Capture output buffer
+                $output = '';
+                $exitCode = \Artisan::call('tenant:migrate-all', [
+                    '--tenant' => (string) $tenant->id,
+                    '--no-interaction' => true,
+                    '--pretend' => $pretend ? 'true' : 'false',
+                ]);
+                
+                $output = \Artisan::output();
 
-                if (!$process->isSuccessful()) {
-                    throw new \RuntimeException($output ?: 'Exit code ' . $process->getExitCode());
+                if ($exitCode !== 0) {
+                    throw new \RuntimeException($output ?: 'Exit code ' . $exitCode);
                 }
 
                 $results[] = [
