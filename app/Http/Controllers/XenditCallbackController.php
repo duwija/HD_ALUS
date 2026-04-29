@@ -911,6 +911,28 @@ return("ACCEPTED");
             $encryptedurl  = Crypt::encryptString($customers->id);
             $jumlah_rupiah = number_format($amount, 0, ',', '.');
             $openUrl       = '/invoice/cst/' . $encryptedurl;
+            $originalPaymentUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . $openUrl;
+            $shortPaymentUrl = $originalPaymentUrl;
+            $shortPaymentPath = $openUrl;
+            try {
+                $generatedShortUrl = \App\ShortUrl::shorten($originalPaymentUrl);
+                if (!empty($generatedShortUrl)) {
+                    $shortPaymentUrl = $generatedShortUrl;
+                    $parsedPath = parse_url($generatedShortUrl, PHP_URL_PATH);
+                    if (!empty($parsedPath)) {
+                        $shortPaymentPath = $parsedPath;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::channel('payment')->warning('[ShortUrl] sendPaymentNotification fallback to original URL', [
+                    'customer_id' => $customers->customer_id,
+                    'invoice_number' => $invoiceNumber,
+                    'source' => $source,
+                    'tenant' => tenant_config('domain_name', env('DOMAIN_NAME')),
+                    'original_url' => $originalPaymentUrl,
+                    'error' => $e->getMessage(),
+                ]);
+            }
             $tenantDomain  = tenant_config('domain_name', env('DOMAIN_NAME'));
 
             if ($customers->notification == 1) {
@@ -924,7 +946,7 @@ return("ACCEPTED");
                         $invoiceNumber,
                         $customers->customer_id,
                         $amount,
-                        $openUrl
+                        $shortPaymentPath
                     );
 
                     if (is_string($response) && (str_starts_with($response, 'Error:') || $response === 'WA Disabled')) {
@@ -957,7 +979,7 @@ return("ACCEPTED");
                     $message .= "\nJumlah   : *Rp." . $jumlah_rupiah . "*";
                     $message .= "\nVia      : " . $source;
                     $message .= "\n\nUntuk info lebih lengkap silahkan klik link:";
-                    $message .= "\nhttp://" . tenant_config('domain_name', env("DOMAIN_NAME")) . $openUrl;
+                    $message .= "\n" . $shortPaymentUrl;
                     $message .= "\n\n" . config("app.signature");
                     $result = WaGatewayHelper::wa_payment($customers->phone, $message);
 

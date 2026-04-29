@@ -69,31 +69,19 @@ class AdminMigrateController extends Controller
         $artisan = base_path('artisan');
 
         foreach ($tenants as $tenant) {
-            if (empty($tenant->db_database) || empty($tenant->db_username)) {
-                $results[] = [
-                    'tenant'   => $tenant->domain,
-                    'database' => $tenant->db_database ?? '-',
-                    'status'   => 'skipped',
-                    'output'   => 'Konfigurasi DB tidak lengkap.',
-                ];
-                continue;
-            }
-
-            $cmd = [$php, $artisan, 'migrate', '--database=mysql', '--force', '--no-interaction'];
+            $cmd = [
+                $php,
+                $artisan,
+                'tenant:migrate-all',
+                '--tenant=' . $tenant->id,
+                '--no-interaction',
+            ];
 
             if ($pretend) {
                 $cmd[] = '--pretend';
             }
 
-            $env = array_merge($_ENV, [
-                'DB_HOST'     => $tenant->db_host     ?: '127.0.0.1',
-                'DB_PORT'     => (string) ($tenant->db_port ?: '3306'),
-                'DB_DATABASE' => $tenant->db_database,
-                'DB_USERNAME' => $tenant->db_username,
-                'DB_PASSWORD' => $tenant->db_password ?? '',
-            ]);
-
-            $process = new Process($cmd, base_path(), $env, null, 120);
+            $process = new Process($cmd, base_path(), null, null, 300);
 
             try {
                 $process->run();
