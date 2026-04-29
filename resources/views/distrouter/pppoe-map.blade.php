@@ -202,7 +202,7 @@
 })();
 
 function initPppoeMap() {
-  var defaultLL = "{{ env('COORDINATE_CENTER', '-2.5,118') }}".split(',');
+  var defaultLL = "{{ $coordinateCenter ?? env('COORDINATE_CENTER', '-8.5,115.2') }}".split(',');
 
   var map = L.map('pppoe-offline-map', {
     zoomControl: true
@@ -455,7 +455,13 @@ function initPppoeMap() {
       });
 
       if (bounds.length === 1)    map.setView(bounds[0], 15);
-      else if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      else if (bounds.length > 1) {
+        var validBounds = bounds.filter(function(b) {
+          return b[0] != null && b[1] != null && b[0] !== 0 && b[1] !== 0
+            && b[0] >= -90 && b[0] <= 90 && b[1] >= -180 && b[1] <= 180;
+        });
+        if (validBounds.length > 0) map.fitBounds(validBounds, { padding: [40, 40], maxZoom: 15 });
+      }
 
       // Redraw polylines after fitBounds animation settles
       setTimeout(drawPolylines, 500);

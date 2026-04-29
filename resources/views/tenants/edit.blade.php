@@ -459,6 +459,28 @@
                                                         <br>
                                                         <span class="text-muted">Format: <code>-8.5598, 115.1057</code></span>
                                                     </li>
+                                                    <li class="mt-1">
+                                                        <code>PPPOE_MAP_ROUTER_TIMEOUT</code> - Timeout koneksi ke router saat load PPPoE Map
+                                                        <span class="badge badge-info badge-sm">PPPoE Map</span>
+                                                        <br>
+                                                        <span class="text-muted">Satuan: detik. Default: <code>2</code>. Naikkan jika router lambat merespons.</span>
+                                                    </li>
+                                                    <li class="mt-1">
+                                                        <code>PPPOE_MAP_SKIP_FAIL_SECONDS</code> - Durasi skip router yang gagal dikoneksi
+                                                        <span class="badge badge-info badge-sm">PPPoE Map</span>
+                                                        <br>
+                                                        <span class="text-muted">Satuan: detik. Default: <code>300</code> (5 menit). Router yang gagal dilewati sementara selama durasi ini sebelum dicoba lagi.</span>
+                                                    </li>
+                                                    <li class="mt-1">
+                                                        <code>PPPOE_MAP_AUTO_DISABLE_THRESHOLD</code> - Jumlah gagal koneksi berturut-turut sebelum router di-disable otomatis
+                                                        <span class="badge badge-danger badge-sm">PPPoE Map</span>
+                                                        <br>
+                                                        <span class="text-muted">
+                                                            Default: <code>5</code>. Jika router gagal sebanyak N kali berturut-turut, kolom <code>is_active</code> di tabel <code>distrouters</code> di-set <code>0</code> dan tidak akan dicoba lagi.<br>
+                                                            Jika router berhasil dikoneksi kembali, status aktif akan direset otomatis.<br>
+                                                            Set <code>0</code> untuk menonaktifkan fitur auto-disable.
+                                                        </span>
+                                                    </li>
                                                 </ul>
                                             </div>
 

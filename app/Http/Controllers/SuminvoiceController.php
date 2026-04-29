@@ -1002,13 +1002,17 @@ public function winpay()
                 \Log::channel('payment')->info('Tripay bundle response', ['bundle_ref' => $bundleRef, 'response' => $result]);
 
                 if (!empty($result['data']['reference'])) {
-                    $tripayBundleUrl = $result['data']['payment_url'] ?? '';
-                    if ($tripayBundleUrl) {
-                        \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)
-                            ->update(['payment_url' => $tripayBundleUrl, 'updated_at' => now()]);
-                    }
-                    return redirect($tripayBundleUrl ?: $returnUrl);
+                    $reference = $result['data']['reference'];
+                    $tripayBundleUrl = $result['data']['checkout_url']
+                        ?? $result['data']['payment_url']
+                        ?? ('https://tripay.co.id/checkout/' . $reference);
+                    \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)
+                        ->update(['payment_url' => $tripayBundleUrl, 'updated_at' => now()]);
+                    return redirect($tripayBundleUrl);
                 }
+                // Hapus bundle jika Tripay gagal agar tidak memblokir pembayaran berikutnya
+                \DB::table('payment_bundle_items')->where('bundle_ref', $bundleRef)->delete();
+                \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)->delete();
                 return redirect()->back()->with('error', 'Tripay: ' . ($result['message'] ?? 'Gagal membuat transaksi.'));
             }
 

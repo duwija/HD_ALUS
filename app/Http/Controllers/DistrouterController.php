@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use \RouterOS\Client;
 use \RouterOS\Query;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 class DistrouterController extends Controller
 {
  public function __construct()
@@ -74,55 +75,82 @@ class DistrouterController extends Controller
     public function pppoeMap()
     {
         $routers = \App\Distrouter::orderBy('name')->get();
-        return view('distrouter.pppoe-map', compact('routers'));
+        $coordinateCenter = tenant_env('coordinate_center', tenant_env('COORDINATE_CENTER', '-8.5, 115.2'));
+        return view('distrouter.pppoe-map', compact('routers', 'coordinateCenter'));
     }
 
     public function pppoeMapData(Request $request)
     {
         $routerId = $request->input('router_id'); // optional filter
 
+        $routerTimeout = (int) tenant_env('PPPOE_MAP_ROUTER_TIMEOUT', 2);
+        if ($routerTimeout < 1) {
+            $routerTimeout = 1;
+        }
+        $skipFailSeconds = (int) tenant_env('PPPOE_MAP_SKIP_FAIL_SECONDS', 300);
+        if ($skipFailSeconds < 30) {
+            $skipFailSeconds = 30;
+        }
+
+        $autoDisableThreshold = (int) tenant_env('PPPOE_MAP_AUTO_DISABLE_THRESHOLD', 5);
+
         $routers = $routerId
             ? \App\Distrouter::where('id', $routerId)->get()
-            : \App\Distrouter::all();
+            : \App\Distrouter::where('is_active', 1)->get();
 
         $markers = [];
 
         foreach ($routers as $router) {
+            if (empty($router->ip)) {
+                \Log::warning("[PppoeMap] Router {$router->name}: skipped because host/ip is empty");
+                continue;
+            }
+
+            $skipKey = 'pppoe_map_skip_router_' . $router->id;
+            if (!$routerId && Cache::has($skipKey)) {
+                \Log::info("[PppoeMap] Router {$router->name}: skipped due to recent connection failure");
+                continue;
+            }
+
             try {
                 $client = new Client([
                     'host'    => $router->ip,
                     'user'    => $router->user,
                     'pass'    => $router->password,
                     'port'    => (int) $router->port,
-                    'timeout' => 5,
+                    'timeout' => $routerTimeout,
                 ]);
+
+                // Reset fail counter on successful connection
+                if ($router->fail_count > 0 || !$router->is_active) {
+                    $router->fail_count = 0;
+                    $router->is_active  = 1;
+                    $router->save();
+                }
+                Cache::forget($skipKey);
 
                 // Get active sessions first
                 $onlineNames = [];
-                try {
-                    $q = new Query('/ppp/active/print');
-                    $active = $client->query($q)->read();
-                    $onlineNames = collect($active)->pluck('name')->toArray();
-                } catch (\Exception $e) {}
+                $q = new Query('/ppp/active/print');
+                $active = $client->query($q)->read();
+                $onlineNames = collect($active)->pluck('name')->toArray();
 
                 // Get all secrets, find offline ones + capture last-logged-out
                 $offlineNames = [];
                 $lastLoggedOut = []; // name => timestamp string
-                try {
-                    $q = new Query('/ppp/secret/print');
-                    $secrets = $client->query($q)->read();
-                    $onlineIndex = array_flip($onlineNames); // O(1) lookup
-                    foreach ($secrets as $s) {
-                        $isDisabled = isset($s['disabled']) && $s['disabled'] === 'true';
-                        if (!$isDisabled && !isset($onlineIndex[$s['name']])) {
-                            $offlineNames[] = $s['name'];
-                        }
-                        // capture last-logged-out for all secrets
-                        if (!empty($s['last-logged-out']) && $s['last-logged-out'] !== 'never') {
-                            $lastLoggedOut[$s['name']] = $s['last-logged-out'];
-                        }
+                $q = new Query('/ppp/secret/print');
+                $secrets = $client->query($q)->read();
+                $onlineIndex = array_flip($onlineNames); // O(1) lookup
+                foreach ($secrets as $s) {
+                    $isDisabled = isset($s['disabled']) && $s['disabled'] === 'true';
+                    if (!$isDisabled && !isset($onlineIndex[$s['name']])) {
+                        $offlineNames[] = $s['name'];
                     }
-                } catch (\Exception $e) {}
+                    // capture last-logged-out for all secrets
+                    if (!empty($s['last-logged-out']) && $s['last-logged-out'] !== 'never') {
+                        $lastLoggedOut[$s['name']] = $s['last-logged-out'];
+                    }
+                }
 
                 if (empty($offlineNames)) continue;
 
@@ -138,7 +166,8 @@ class DistrouterController extends Controller
                     if (count($coords) < 2) continue;
                     $lat = (float) $coords[0];
                     $lng = (float) $coords[1];
-                    if ($lat === 0.0 && $lng === 0.0) continue;
+                        if ($lat === 0.0 || $lng === 0.0) continue;
+                        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) continue;
 
                     // Distpoint (ODP) coordinate
                     $odpLat = null; $odpLng = null; $odpName = null;
@@ -146,7 +175,7 @@ class DistrouterController extends Controller
                         $dc = array_map('trim', explode(',', $c->distpoint_name->coordinate));
                         if (count($dc) >= 2) {
                             $dl = (float)$dc[0]; $dn = (float)$dc[1];
-                            if (!($dl === 0.0 && $dn === 0.0)) {
+                                if (!($dl === 0.0 || $dn === 0.0) && $dl >= -90 && $dl <= 90 && $dn >= -180 && $dn <= 180) {
                                 $odpLat  = $dl;
                                 $odpLng  = $dn;
                                 $odpName = $c->distpoint_name->name;
@@ -173,6 +202,16 @@ class DistrouterController extends Controller
                 }
 
             } catch (\Exception $e) {
+                if (!$routerId) {
+                    Cache::put($skipKey, 1, now()->addSeconds($skipFailSeconds));
+                    // Increment fail counter and auto-disable after threshold
+                    $router->fail_count = ($router->fail_count ?? 0) + 1;
+                    if ($autoDisableThreshold > 0 && $router->fail_count >= $autoDisableThreshold) {
+                        $router->is_active = 0;
+                        \Log::warning("[PppoeMap] Router {$router->name}: auto-disabled after {$router->fail_count} consecutive failures");
+                    }
+                    $router->save();
+                }
                 \Log::warning("[PppoeMap] Router {$router->name}: " . $e->getMessage());
             }
         }
@@ -218,12 +257,14 @@ class DistrouterController extends Controller
                 $cc = array_map('trim', explode(',', $dp->coordinate));
                 if (count($cc) < 2) continue;
                 $clat = (float)$cc[0]; $clng = (float)$cc[1];
-                if ($clat === 0.0 && $clng === 0.0) continue;
+                if ($clat === 0.0 || $clng === 0.0) continue;
+                if ($clat < -90 || $clat > 90 || $clng < -180 || $clng > 180) continue;
 
                 $pc = array_map('trim', explode(',', $parent->coordinate));
                 if (count($pc) < 2) continue;
                 $plat = (float)$pc[0]; $plng = (float)$pc[1];
-                if ($plat === 0.0 && $plng === 0.0) continue;
+                if ($plat === 0.0 || $plng === 0.0) continue;
+                if ($plat < -90 || $plat > 90 || $plng < -180 || $plng > 180) continue;
 
                 $odpLinks[] = [
                     'child_id'    => $dp->id,

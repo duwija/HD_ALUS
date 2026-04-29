@@ -56,7 +56,7 @@
       groupedTransactionsMerchant.forEach(function(item, rowindex) {
        if (rowindex < groupedTransactionsMerchant.length) {
       item.client = groupedTransactionsMerchant[rowindex].id_merchant; // Menambahkan nama client ke item
-      var merchant = json.merchants.find(m => m.id === groupedTransactionsMerchant[rowindex].id_merchant) || { name: 'No Merchant' };
+      var merchant = (json.merchants || []).find(m => m.id === groupedTransactionsMerchant[rowindex].id_merchant) || { name: 'No Merchant' };
       var totalPaymentMerchant = Number(groupedTransactionsMerchant[rowindex].total_payment) || 0;
       groupedTransactionsPaymentMerchant += totalPaymentMerchant;
       groupedTransactionsMerchantHTML += '<tr>' +
@@ -75,9 +75,8 @@
       groupedTransactionsKasbank.forEach(function(item, rowindex) {
         if (rowindex < groupedTransactionsKasbank.length) {
         item.kasbank = groupedTransactionsKasbank[rowindex].payment_point; // Menambahkan payment_point ke item
-        var akun = (json.kasbanks && json.kasbanks.length) ? 
-        json.kasbanks.find(a => a.akun_code === groupedTransactionsKasbank[rowindex].payment_point) : 
-        { name: 'No Account' };
+        var paymentPoint = groupedTransactionsKasbank[rowindex].payment_point;
+        var akun = (json.kasbanks || []).find(a => a.akun_code === paymentPoint) || { name: (paymentPoint || 'No Account') + ' (akun belum terdaftar)' };
         var totalPaymentKasbank = Number(groupedTransactionsKasbank[rowindex].total_payment) || 0;
         groupedTransactionsPaymentMerchant
         groupedTransactionsPaymentKasbank += totalPaymentKasbank;

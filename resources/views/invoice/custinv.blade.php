@@ -371,6 +371,17 @@
             font-family: inherit; transition: border-color .15s;
         }
         .ch-btn:hover { border-color: #10b981; background: #f0fdf4; color: #065f46; }
+        .ch-btn .rec-badge {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: .3px;
+            color: #065f46;
+            background: #d1fae5;
+        }
         .ch-back {
             display: flex; align-items: center; gap: 6px;
             font-size: 12px; font-weight: 600; color: var(--primary);
@@ -803,7 +814,9 @@
                 <button type="button" class="ch-btn" onclick="submitGateway('tripay','BNIVA')"><i class="fas fa-building-columns"></i><br>BNI VA</button>
                 <button type="button" class="ch-btn" onclick="submitGateway('tripay','MANDIRIVA')"><i class="fas fa-building-columns"></i><br>Mandiri VA</button>
                 <button type="button" class="ch-btn" onclick="submitGateway('tripay','PERMATAVA')"><i class="fas fa-building-columns"></i><br>Permata VA</button>
-                <button type="button" class="ch-btn" onclick="submitGateway('tripay','QRIS')"><i class="fas fa-qrcode"></i><br>QRIS</button>
+                <button type="button" class="ch-btn" onclick="submitGateway('tripay','QRIS')"><i class="fas fa-qrcode"></i><br>QRIS<br><span class="rec-badge">Recommended</span></button>
+                <button type="button" class="ch-btn" onclick="submitGateway('tripay','ALFAMART')"><i class="fas fa-store"></i><br>Alfamart</button>
+                <button type="button" class="ch-btn" onclick="submitGateway('tripay','INDOMARET')"><i class="fas fa-store"></i><br>Indomaret</button>
             </div>
         </div>
     </div>

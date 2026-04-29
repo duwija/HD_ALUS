@@ -389,7 +389,7 @@
             </div>
             <div class="form-group col-md-6">
               <label for="amount">amount</label>
-              <input type="text" class="form-control @error('amount') is-invalid @enderror" name="amount" id="amount" inputmode="numeric" autocomplete="off" placeholder="Item amount" value="{{old('amount')}}">
+              <input type="text" class="form-control @error('amount') is-invalid @enderror" name="amount" id="amount" inputmode="decimal" autocomplete="off" placeholder="Item amount" value="{{old('amount')}}">
               @error('amount')
               <div class="error invalid-feedback">{{ $message }}</div>
               @enderror
@@ -420,11 +420,17 @@
 
 <script type="text/javascript">
   function parseRibuan(val) {
-    return parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0;
+    var raw = String(val || '').trim();
+    var negative = raw.startsWith('-');
+    raw = raw.replace(/[^0-9,]/g, '');
+    var parsed = parseFloat(raw.replace(/\./g, '').replace(',', '.')) || 0;
+    return negative ? -parsed : parsed;
   }
   function formatRibuan(num) {
     if (!num || num === 0) return '';
-    return Math.round(num).toLocaleString('id-ID');
+    var negative = Number(num) < 0;
+    var abs = Math.abs(Math.round(Number(num)));
+    return (negative ? '-' : '') + abs.toLocaleString('id-ID');
   }
 
   // Format amount input on typing
@@ -432,12 +438,14 @@
     var amountEl = document.getElementById('amount');
     if (amountEl) {
       amountEl.addEventListener('input', function() {
-        var raw = this.value.replace(/[^0-9,]/g, '');
+        var value = this.value;
+        var negative = value.trim().startsWith('-');
+        var raw = value.replace(/[^0-9,]/g, '');
         if (!raw.endsWith(',')) {
           var num = parseRibuan(raw);
-          this.value = raw === '' ? '' : (num > 0 ? num.toLocaleString('id-ID') : '0');
+          this.value = raw === '' ? (negative ? '-' : '') : formatRibuan(negative ? -Math.abs(num) : Math.abs(num));
         } else {
-          this.value = raw;
+          this.value = (negative ? '-' : '') + raw;
         }
       });
       // Strip separator before modal form submit
