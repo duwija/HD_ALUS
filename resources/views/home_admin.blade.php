@@ -45,10 +45,30 @@
   body.dark-mode .adm-card-title { color: #aaa; }
   .adm-card-body { padding: 12px 14px; }
 
+  .adm-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .adm-table-scroll-10 {
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .adm-table-sticky thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-surface, #fff);
+  }
+
   .adm-tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
   .adm-tbl th { padding: 5px 8px; border-bottom: 1px solid #eee; font-weight: 700; font-size: 10px; letter-spacing: .3px; color: #888; text-transform: uppercase; text-align: left; }
   .adm-tbl td { padding: 6px 8px; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }
   .adm-tbl tr:last-child td { border-bottom: none; }
+  .adm-tbl-nowrap th, .adm-tbl-nowrap td { white-space: nowrap; }
+  .adm-router-tbl { min-width: 560px; }
+  .adm-olt-tbl { min-width: 760px; }
   body.dark-mode .adm-tbl th { border-color: var(--border,#2d2d3a); color: #777; }
   body.dark-mode .adm-tbl td { border-color: #2a2a38; color: #ccc; }
 
@@ -340,7 +360,7 @@
         @endif
 
         {{-- Tickets by Category --}}
-        @if(isset($tagLabels) && count($tagLabels))
+        @if(isset($ticket_report) && $ticket_report->count())
         <div class="col-12 col-md-8">
           <div class="adm-card">
             <div class="adm-card-hd">
@@ -407,7 +427,93 @@
 
       </div>{{-- /row 2 --}}
 
-      {{-- ROW 3 — Network --}}
+      {{-- ROW 3 — Lead In Progress --}}
+      @if(isset($adminInprogressLeads) && $adminInprogressLeads->isNotEmpty())
+      <div class="row">
+        <div class="col-12">
+          <div class="adm-card">
+            <div class="adm-card-hd">
+              <span class="adm-card-title" style="color:#f59f00"><i class="fas fa-spinner"></i> Lead In Progress</span>
+              <a href="{{ url('marketing/lead-summary') }}" style="font-size:10px;color:#aaa">{{ $adminInprogressLeads->count() }} lead &rarr;</a>
+            </div>
+            <div class="adm-card-body" style="padding:0">
+              <div class="adm-table-scroll adm-table-scroll-10">
+                <table class="adm-tbl adm-tbl-nowrap adm-table-sticky" style="min-width:860px">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Nama Lead</th>
+                      <th>Sales</th>
+                      <th>Step Sekarang</th>
+                      <th style="min-width:140px">Progress Workflow</th>
+                      <th>Update Terakhir</th>
+                      <th>Tgl Daftar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @foreach($adminInprogressLeads as $i => $lead)
+                    @php
+                      $wfPct      = (int)($lead->workflow_pct ?? 0);
+                      $stageName  = $lead->workflow_current ?? '-';
+                      $wfNow      = (int)($lead->workflow_passed ?? 0);
+                      $wfTot      = (int)($lead->workflow_total ?? 0);
+                      $lastUpdate = $lead->leadUpdates ? $lead->leadUpdates->first() : null;
+                      $daysOld    = \Carbon\Carbon::parse($lead->created_at)->diffInDays(now());
+                    @endphp
+                    <tr>
+                      <td style="color:#aaa;width:22px">{{ $i+1 }}</td>
+                      <td>
+                        <a href="{{ url('customer/'.$lead->id) }}" style="font-weight:700;color:#1e88e5">{{ $lead->name }}</a>
+                        @if($lead->phone)
+                          <br><small style="color:#888"><i class="fas fa-phone fa-xs mr-1"></i>{{ $lead->phone }}</small>
+                        @endif
+                        @if($lead->address)
+                          <br><small style="color:#888"><i class="fas fa-map-marker-alt fa-xs mr-1"></i>{{ \Illuminate\Support\Str::limit($lead->address, 60) }}</small>
+                        @endif
+                      </td>
+                      <td>
+                        @if($lead->sale_name)
+                          <span class="badge badge-info">{{ $lead->sale_name->name }}</span>
+                        @else
+                          <span style="color:#999">Unassigned</span>
+                        @endif
+                      </td>
+                      <td>
+                        <span class="badge badge-{{ $wfPct >= 100 ? 'success' : 'primary' }}">{{ $stageName }}</span>
+                        <br><small style="color:#888">{{ $wfNow }}/{{ $wfTot }}</small>
+                      </td>
+                      <td>
+                        <div class="d-flex align-items-center" style="gap:6px">
+                          <div class="progress flex-fill" style="height:8px;border-radius:4px">
+                            <div class="progress-bar {{ $wfPct >= 80 ? 'bg-success' : ($wfPct >= 40 ? 'bg-primary' : 'bg-warning') }}" style="width:{{ max($wfPct, 3) }}%"></div>
+                          </div>
+                          <small style="min-width:30px;text-align:right">{{ $wfPct }}%</small>
+                        </div>
+                      </td>
+                      <td>
+                        @if($lastUpdate)
+                          <small>{{ \Carbon\Carbon::parse($lastUpdate->created_at)->format('d M Y') }}</small>
+                          <br><small style="color:#888">{{ \Illuminate\Support\Str::limit($lastUpdate->new_value ?? $lastUpdate->notes ?? '-', 38) }}</small>
+                        @else
+                          <small style="color:#999">Belum ada</small>
+                        @endif
+                      </td>
+                      <td>
+                        <small>{{ \Carbon\Carbon::parse($lead->created_at)->format('d M Y') }}</small>
+                        <br><small style="color:#888">{{ $daysOld }} hr lalu</small>
+                      </td>
+                    </tr>
+                    @endforeach
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      @endif
+
+      {{-- ROW 4 — Network --}}
       @if($distrouterList->isNotEmpty() || $oltList->isNotEmpty())
       <div class="row">
 
@@ -419,7 +525,8 @@
               <a href="{{ url('distrouter') }}" style="font-size:10px;color:#aaa">{{ $distrouterList->count() }} device &rarr;</a>
             </div>
             <div class="adm-card-body" style="padding:0">
-              <table class="adm-tbl">
+              <div class="adm-table-scroll adm-table-scroll-10">
+              <table class="adm-tbl adm-tbl-nowrap adm-router-tbl adm-table-sticky">
                 <thead>
                   <tr>
                     <th>#</th>
@@ -452,6 +559,7 @@
                   @endforeach
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>
@@ -470,7 +578,8 @@
               </div>
             </div>
             <div class="adm-card-body" style="padding:0">
-              <table class="adm-tbl">
+              <div class="adm-table-scroll adm-table-scroll-10">
+              <table class="adm-tbl adm-tbl-nowrap adm-olt-tbl adm-table-sticky">
                 <thead>
                   <tr>
                     <th>#</th>
@@ -485,7 +594,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  @foreach($oltList->take(8) as $i => $olt)
+                  @foreach($oltList as $i => $olt)
                   <tr id="olt-row-{{ $olt->id }}">
                     <td style="color:#aaa;width:22px">{{ $i+1 }}</td>
                     <td><a href="{{ url('olt/'.$olt->id) }}" style="color:inherit;font-weight:600">{{ $olt->name }}</a></td>
@@ -504,6 +613,7 @@
                   @endforeach
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>
@@ -607,7 +717,7 @@ function fetchOlt(id, cb) {
 @if($oltList->isNotEmpty())
 $(function() {
   // Auto-fetch on load
-  @foreach($oltList->take(8) as $olt)
+  @foreach($oltList as $olt)
     fetchOlt({{ $olt->id }});
   @endforeach
 
@@ -622,9 +732,9 @@ $(function() {
   // Refresh all
   $('#refreshAllOlts').on('click', function() {
     var $ic = $(this).find('i').addClass('fa-spin');
-    var done = 0, total = {{ $oltList->take(8)->count() }};
+    var done = 0, total = {{ $oltList->count() }};
     if (!total) { $ic.removeClass('fa-spin'); return; }
-    @foreach($oltList->take(8) as $olt)
+    @foreach($oltList as $olt)
       fetchOlt({{ $olt->id }}, function() { if (++done >= total) $ic.removeClass('fa-spin'); });
     @endforeach
   });
@@ -718,13 +828,13 @@ $(function() {
   // 3. Tickets by Category bar
   var tickCatCtx = document.getElementById('admTicketCatChart');
   if (tickCatCtx) {
-    @if(isset($tagLabels) && count($tagLabels))
+    @if(isset($ticket_report) && $ticket_report->count())
     new Chart(tickCatCtx.getContext('2d'), {
       type: 'bar',
       data: {
-        labels: {!! json_encode($tagLabels) !!},
+        labels: {!! json_encode($ticket_report->pluck('name')->values()) !!},
         datasets: [{
-          data: {!! json_encode($tagData) !!},
+          data: {!! json_encode($ticket_report->pluck('count')->values()) !!},
           backgroundColor: 'rgba(54,162,235,.7)',
           borderColor: 'rgba(54,162,235,1)',
           borderWidth: 1, borderRadius: 5, borderSkipped: false

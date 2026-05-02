@@ -135,7 +135,7 @@ class Customer extends Authenticatable
 
     public function tags()
     {
-        return $this->belongsToMany(\App\Tag::class, 'customer_tags', 'customer_id', 'tag_id');
+        return $this->belongsToMany(\App\CustomerTag::class, 'customer_tag_map', 'customer_id', 'customer_tag_id');
     }
 
 }

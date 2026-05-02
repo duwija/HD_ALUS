@@ -10,13 +10,16 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Support\Facades\File;
 use DataTables;
+use App\Helpers\WaGatewayHelper;
 
 Use GuzzleHttp\Clients;
 
 use Xendit\Xendit;
 use Exception; 
 use Illuminate\Support\Carbon;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 class InvoiceController extends Controller
 {
  public function __construct()
@@ -48,12 +51,13 @@ class InvoiceController extends Controller
             ->get();
             $status = \App\Statuscustomer::pluck('name', 'id');
             $merchant = \App\Merchant::pluck('name', 'id');
+            $plans = \App\Plan::orderBy('name')->pluck('name', 'id');
             $groupedTransactions = \App\Suminvoice::whereBetween('payment_date', [$sixMonthsAgo, $today])
             ->groupBy('updated_by')
             ->get();
 
 
-            return view ('suminvoice/invoice_list',['suminvoice' =>$suminvoice, 'status'=>$status,'groupedTransactions' =>$groupedTransactions, 'merchant'=>$merchant]);
+            return view ('suminvoice/invoice_list',['suminvoice' =>$suminvoice, 'status'=>$status,'groupedTransactions' =>$groupedTransactions, 'merchant'=>$merchant, 'plans'=>$plans]);
 
 
 
@@ -338,6 +342,7 @@ class InvoiceController extends Controller
         $updatedBy      = $request->updatedBy;
         $parameter      = $request->parameter;
         $id_merchant    = $request->id_merchant;
+        $id_plan        = $request->id_plan;
     $monthly_fee    = $request->invoicetype; // 1 = monthly, else general
 
 
@@ -353,6 +358,7 @@ class InvoiceController extends Controller
     )
     ->with([
         'customer.merchant_name',
+        'customer.plan_name',
         'user'
     ]);
 
@@ -383,6 +389,10 @@ class InvoiceController extends Controller
 
     if($id_merchant){
         $baseQuery->where('customers.id_merchant', $id_merchant);
+    }
+
+    if($id_plan){
+        $baseQuery->where('customers.id_plan', $id_plan);
     }
 
 
@@ -452,6 +462,8 @@ class InvoiceController extends Controller
     })
 
     ->addColumn('name', fn($s)=> $s->customer->name ?? '-')
+
+    ->addColumn('plan', fn($s)=> optional(optional($s->customer)->plan_name)->name ?? '-')
 
     ->addColumn('merchant', fn($s)=> optional($s->customer->merchant_name)->name ?? '-')
 
@@ -714,6 +726,10 @@ public function show($id)
     ->get();
 
     $encryptedurl = Crypt::encryptString($id);
+    $paymentUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . '/invoice/cst/' . $encryptedurl;
+    $qrcodePayment = base64_encode(
+        QrCode::format('png')->size(220)->margin(1)->generate($paymentUrl)
+    );
 
     $customer = \App\Customer::where('customers.id', $id)
 
@@ -725,7 +741,88 @@ public function show($id)
     //$customer = \App\customer::findOrFail($id);
           // dd ($invoice);
 
-    return view ('invoice/show',['suminvoice' =>$suminvoice, 'customer'=>$customer,  'encryptedurl'=>$encryptedurl]);
+    return view ('invoice/show',[
+        'suminvoice' => $suminvoice,
+        'customer' => $customer,
+        'encryptedurl' => $encryptedurl,
+        'paymentUrl' => $paymentUrl,
+        'qrcodePayment' => $qrcodePayment,
+    ]);
+}
+
+public function sendPaymentLinkWa(Request $request, $id)
+{
+    $tmpFile = null;
+    try {
+        $customer = \App\Customer::withTrashed()->find($id);
+        if (!$customer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer tidak ditemukan.'
+            ], 404);
+        }
+
+        if (empty($customer->phone)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nomor WhatsApp customer belum tersedia.'
+            ], 422);
+        }
+
+        $encrypted = Crypt::encryptString($customer->id);
+        $paymentUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . '/invoice/cst/' . $encrypted;
+
+        $caption = "Link pembayaran\n"
+            . "Customer ID: {$customer->customer_id}\n"
+            . "Nama: {$customer->name}\n"
+            . "Silahkan scan QRcode ini untuk melihat daftar tagihan anda";
+
+        $qrBinary = QrCode::format('png')->size(800)->margin(1)->generate($paymentUrl);
+        $tmpDir = storage_path('app/tmp');
+        if (!File::exists($tmpDir)) {
+            File::makeDirectory($tmpDir, 0755, true);
+        }
+
+        $tmpFile = $tmpDir . '/wa_qr_' . $customer->id . '_' . time() . '.png';
+        file_put_contents($tmpFile, $qrBinary);
+
+        // Paksa kirim lewat WA gateway (media), bukan wa.me atau provider template
+        $response = WaGatewayHelper::wa_payment((string) $customer->phone, null, $tmpFile, $caption);
+
+        $ok = is_array($response)
+            ? (($response['status'] ?? '') === 'success')
+            : (stripos((string) $response, 'error') === false);
+
+        if (!$ok) {
+            return response()->json([
+                'success' => false,
+                'message' => is_array($response)
+                    ? ($response['message'] ?? 'Gagal mengirim gambar WA gateway.')
+                    : (string) $response,
+                'provider_response' => $response,
+            ], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Gambar QR berhasil dikirim via WA gateway.',
+            'provider_response' => $response,
+        ]);
+    } catch (\Throwable $e) {
+        \Log::error('sendPaymentLinkWa error: ' . $e->getMessage(), [
+            'customer_id' => $id,
+            'trace' => $e->getTraceAsString(),
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal mengirim WA gateway: ' . $e->getMessage(),
+        ], 500);
+    } finally {
+        if ($tmpFile && file_exists($tmpFile)) {
+            @unlink($tmpFile);
+        }
+    }
 }
 
 

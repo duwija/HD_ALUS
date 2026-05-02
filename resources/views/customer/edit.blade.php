@@ -15,7 +15,7 @@
   }
 
   function validateCoordinate(el) {
-    const pattern = /^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$/;
+    const pattern = /^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/;
     const errEl   = document.getElementById('coordinate-error');
     const val     = el.value.trim();
 
@@ -26,7 +26,7 @@
     }
 
     // Auto-hapus spasi di antara lat & lng
-    if (/^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/.test(val) && val !== val.replace(/\s/g, '')) {
+    if (pattern.test(val) && val !== val.replace(/\s/g, '')) {
       el.value = val.replace(/\s/g, '');
     }
 
@@ -283,9 +283,10 @@
       name="coordinate" id="coordinate"
       placeholder="Contoh: -6.200000,106.816666"
       value="{{$customer->coordinate}}"
-      pattern="-?\d{1,3}\.\d+,-?\d{1,3}\.\d+"
+      pattern="-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+"
       title="Format: lat,lng — contoh: -6.200000,106.816666 (titik sebagai desimal, koma sebagai pemisah lat & lng)"
-      oninput="validateCoordinate(this)">
+      oninput="validateCoordinate(this)"
+      onchange="validateCoordinate(this)">
     <div class="input-group-append">
       <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#modal-maps"><i class="fas fa-map-marker-alt"></i> Get From Maps</button>
     </div>
@@ -342,6 +343,27 @@
     @endforeach
   </select>
   <small class="text-muted">Ketik untuk mencari, klik untuk memilih. Pilihan akan tampil sebagai tag.</small>
+</div>
+
+<div class="form-group col-md-3">
+  <label class="font-weight-bold">
+    <i class="fas fa-tags mr-1 text-info"></i>Customer Tags
+    <small class="text-muted font-weight-normal">(add / delete tag customer)</small>
+  </label>
+  <select name="tags[]" id="customer-tags-select" class="form-control select2" multiple style="width:100%" data-placeholder="Pilih tag customer...">
+    @foreach($allCustomerTags as $tagId => $tagName)
+      <option value="{{ $tagId }}" {{ in_array($tagId, $selectedCustomerTags) ? 'selected' : '' }}>{{ $tagName }}</option>
+    @endforeach
+  </select>
+  <div class="input-group input-group-sm mt-2">
+    <input type="text" id="new_customer_tag" class="form-control" placeholder="Tambah tag customer baru...">
+    <div class="input-group-append">
+      <button type="button" class="btn btn-success" id="btn-add-customer-tag">
+        <i class="fas fa-plus"></i> Tambah Tag
+      </button>
+    </div>
+  </div>
+  <small class="text-muted">Tag di sini khusus customer, terpisah dari tag tiket.</small>
 </div>
 <div class="form-group col-md-1">
   <label for="site location"> Ppn (%)</label>
@@ -678,6 +700,40 @@
 
     $('#addons').on('change', updateAddonTotal);
     updateAddonTotal();
+
+    // Customer tag: add new dedicated customer tag (AJAX)
+    $('#btn-add-customer-tag').on('click', function () {
+      var tagName = $('#new_customer_tag').val().trim();
+      if (!tagName) return;
+
+      $.ajax({
+        url: '{{ route('customer.tags.store') }}',
+        method: 'POST',
+        data: { new_tag: tagName, _token: '{{ csrf_token() }}' },
+        success: function(res) {
+          var select = $('#customer-tags-select');
+          var exists = select.find('option[value="' + res.id + '"]').length > 0;
+          if (!exists) {
+            var option = new Option(res.name, res.id, true, true);
+            select.append(option).trigger('change');
+          } else {
+            var current = select.val() || [];
+            if (current.indexOf(String(res.id)) === -1) {
+              current.push(String(res.id));
+              select.val(current).trigger('change');
+            }
+          }
+          $('#new_customer_tag').val('');
+        },
+        error: function(xhr) {
+          var msg = 'Unknown error';
+          if (xhr && xhr.responseJSON && xhr.responseJSON.message) {
+            msg = xhr.responseJSON.message;
+          }
+          alert('Gagal menambahkan tag customer: ' + msg);
+        }
+      });
+    });
 
     // === ONU ID Auto-Format ===
     var oltVendors = @json($oltVendors ?? []);

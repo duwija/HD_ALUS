@@ -266,13 +266,30 @@ body.dark-mode .v2-prog-bar { background: #2e3348; }
                   </div>
                   <div class="v2-tkt-meta">
                     <i class="fas fa-user mr-1"></i>{{ $t->customer->name ?? $t->called_by ?? '-' }}
-                    @if($t->date)
-                      &nbsp;·&nbsp;<i class="fas fa-calendar-alt mr-1"></i>{{ \Carbon\Carbon::parse($t->date)->format('d/m/Y') }}
-                    @endif
-                    @if($t->time)
-                      &nbsp;·&nbsp;<i class="fas fa-clock mr-1"></i>{{ substr($t->time,0,5) }}
-                    @endif
                   </div>
+                  @if(!empty(optional($t->customer)->address))
+                    <div class="v2-tkt-meta">
+                      <i class="fas fa-map-marker-alt mr-1"></i>{{ $t->customer->address }}
+                    </div>
+                  @endif
+                  @if(!empty($t->member))
+                    <div class="v2-tkt-meta">
+                      <i class="fas fa-users mr-1"></i>{{ $t->member }}
+                    </div>
+                  @endif
+                  @if($t->date || $t->time)
+                    <div class="v2-tkt-meta">
+                      @if($t->date)
+                        <i class="fas fa-calendar-alt mr-1"></i>{{ \Carbon\Carbon::parse($t->date)->format('d/m/Y') }}
+                      @endif
+                      @if($t->time)
+                        @if($t->date)
+                          &nbsp;·&nbsp;
+                        @endif
+                        <i class="fas fa-clock mr-1"></i>{{ substr($t->time,0,5) }}
+                      @endif
+                    </div>
+                  @endif
                 </div>
                 <span class="v2-badge ml-2 flex-shrink-0"
                       style="background:{{ $bg }};color:{{ $bc }}">
@@ -346,10 +363,18 @@ body.dark-mode .v2-prog-bar { background: #2e3348; }
                 @elseif($t->called_by)
                   <span><i class="fas fa-user mr-1"></i>{{ $t->called_by }}</span>
                 @endif
-                @if($t->phone)
-                  <span><i class="fas fa-phone mr-1"></i>{{ $t->phone }}</span>
+                @if(!empty(optional($t->customer)->address))
+                  <span><i class="fas fa-map-marker-alt mr-1"></i>{{ $t->customer->address }}</span>
+                @endif
+                @if(!empty($t->member))
+                  <span><i class="fas fa-users mr-1"></i>{{ $t->member }}</span>
                 @endif
               </div>
+              @if($t->phone)
+                <div style="font-size:11px;color:#aaa;margin-top:4px">
+                  <i class="fas fa-phone mr-1"></i>{{ $t->phone }}
+                </div>
+              @endif
               {{-- Workflow --}}
               @if($t->steps && $t->steps->count() > 0)
               @php

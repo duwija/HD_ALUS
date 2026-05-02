@@ -72,6 +72,22 @@ public function steps()
 {
     return $this->hasMany(TicketStep::class)->orderBy('position');
 }
+
+public function pauses()
+{
+    return $this->hasMany(\App\TicketPause::class)->orderBy('paused_at');
+}
+
+public function activePause()
+{
+    return $this->hasOne(\App\TicketPause::class)->whereNull('resumed_at')->latest('paused_at');
+}
+
+public function isPaused(): bool
+{
+    return $this->pauses()->whereNull('resumed_at')->exists();
+}
+
 public function currentStep()
 {
     return $this->belongsTo(\App\TicketStep::class, 'current_step_id');

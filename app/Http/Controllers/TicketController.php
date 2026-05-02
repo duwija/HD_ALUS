@@ -329,10 +329,11 @@ public function table_myticket_list(Request $request){
 
     ->editColumn('id_customer',function($ticket)
     {
-
-
-
-        return ' <a href="/customer/'.$ticket->id_customer.'" title="ticket" class="badge p-1 badge-success text-center  "> '.$ticket->customer->name. '</a>';
+        $customerName = optional($ticket->customer)->name ?? '-';
+        return ' <a href="/customer/'.$ticket->id_customer.'" title="ticket" class="badge p-1 badge-success text-center  "> '.$customerName. '</a>';
+    })
+    ->addColumn('address', function ($ticket) {
+        return e(optional($ticket->customer)->address ?? '-');
     })
     ->editColumn('id_categori',function($ticket)
     {
@@ -1627,9 +1628,11 @@ public function uncloseticket()
                 'sale' => $sale,
                 'tags' => $tags,
                 'alltags' => $alltags,
-                'currentStep'   => $currentStep, // 👈 kirim ke view
-            'workflowSteps' => $workflowSteps, // kirim ke view
-        ]);
+                'currentStep'   => $currentStep,
+                'workflowSteps' => $workflowSteps,
+                'ticketPauses'  => $ticket->pauses()->orderBy('paused_at')->get(),
+                'isPaused'      => $ticket->isPaused(),
+            ]);
         }
     }
 
@@ -2259,6 +2262,64 @@ public function moveStep(Request $request, $ticketId)
     ]);
 }
 
+public function pauseTicket(Request $request, $ticketId)
+{
+    $request->validate(['reason' => 'required|string|max:500']);
+
+    $ticket = \App\Ticket::findOrFail($ticketId);
+
+    // Hanya bisa pause jika belum di-pause
+    if ($ticket->isPaused()) {
+        return response()->json(['success' => false, 'message' => 'Tiket sudah dalam kondisi berhenti.'], 400);
+    }
+
+    $pause = \App\TicketPause::create([
+        'ticket_id' => $ticket->id,
+        'reason'    => $request->input('reason'),
+        'paused_by' => \Auth::user()->name,
+        'paused_at' => now(),
+    ]);
+
+    // Log ke ticketdetail
+    \App\Ticketdetail::create([
+        'id_ticket'   => $ticket->id,
+        'description' => "<span class='text-warning'><i class='fas fa-pause-circle'></i> Pekerjaan dihentikan sementara.</span><br><strong>Alasan:</strong> " . e($request->input('reason')),
+        'updated_by'  => \Auth::user()->name,
+        'coordinate'  => $request->input('coordinate'),
+        'device_type' => $request->input('device_type'),
+    ]);
+
+    return response()->json(['success' => true, 'pause_id' => $pause->id]);
+}
+
+public function resumeTicket(Request $request, $ticketId)
+{
+    $ticket = \App\Ticket::findOrFail($ticketId);
+
+    $pause = $ticket->pauses()->whereNull('resumed_at')->latest('paused_at')->first();
+
+    if (!$pause) {
+        return response()->json(['success' => false, 'message' => 'Tidak ada pause yang aktif.'], 400);
+    }
+
+    $pause->update([
+        'resumed_at' => now(),
+        'resumed_by' => \Auth::user()->name,
+    ]);
+
+    $duration = $pause->paused_at->diffInMinutes(now());
+
+    // Log ke ticketdetail
+    \App\Ticketdetail::create([
+        'id_ticket'   => $ticket->id,
+        'description' => "<span class='text-success'><i class='fas fa-play-circle'></i> Pekerjaan dilanjutkan.</span><br><small class='text-muted'>Berhenti selama {$duration} menit. Alasan sebelumnya: " . e($pause->reason) . "</small>",
+        'updated_by'  => \Auth::user()->name,
+        'coordinate'  => $request->input('coordinate'),
+        'device_type' => $request->input('device_type'),
+    ]);
+
+    return response()->json(['success' => true, 'duration_minutes' => $duration]);
+}
 
 public function updateassign(Request $request, $id)
 {

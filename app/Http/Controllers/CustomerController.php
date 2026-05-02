@@ -455,7 +455,7 @@ public function subscribeform($id)
             ->get();
         $totalDeletedCustomers = $dailyDeletedCustomers->sum('deleted_count');
 
-        $tags = \App\Tag::pluck('name', 'id');
+        $tags = \App\CustomerTag::pluck('name', 'id');
 
         return view('customer/index', [
             'totalNewCustomers' => $totalNewCustomers,
@@ -533,7 +533,7 @@ public function subscribeform($id)
         $tagIds = (array) $request->id_tag;
         foreach ($tagIds as $tagId) {
             $query->whereHas('tags', function ($q) use ($tagId) {
-                $q->where('tags.id', $tagId);
+                $q->whereKey($tagId);
             });
         }
     })
@@ -578,7 +578,7 @@ public function subscribeform($id)
         $tagIds = (array) $request->id_tag;
         foreach ($tagIds as $tagId) {
             $customerQuery->whereHas('tags', function ($q) use ($tagId) {
-                $q->where('tags.id', $tagId);
+                $q->whereKey($tagId);
             });
         }
     }
@@ -817,7 +817,7 @@ public function trash()
     $status = \App\Statuscustomer::pluck('name', 'id');
     $merchant = \App\Merchant::pluck('name', 'id');
     $plan = \App\Plan::pluck('name', 'id');
-    $tags = \App\Tag::pluck('name', 'id');
+    $tags = \App\CustomerTag::pluck('name', 'id');
     
     // Chart data - deleted customers per day (last 30 days)
     $startDate = Carbon::now()->subDays(30)->startOfDay();
@@ -1488,7 +1488,7 @@ public function table_invoice(Request $request)
 
     // Tags untuk customer
     $customerTags = $customer->tags->pluck('name', 'id')->toArray();
-    $alltags = \App\Tag::pluck('name', 'id');
+    $alltags = \App\CustomerTag::pluck('name', 'id');
 
     return view('customer.show', [
         'customer' => $customer,
@@ -1507,9 +1507,30 @@ public function table_invoice(Request $request)
     public function updateTags(Request $request, $id)
     {
         $customer = \App\Customer::findOrFail($id);
-        $tags = $request->input('tags', []);
+        $tags = (array) $request->input('tags', []);
+        if (!empty($tags)) {
+            $exists = \App\CustomerTag::whereIn('id', $tags)->pluck('id')->toArray();
+            $tags = array_values(array_intersect($tags, $exists));
+        }
         $customer->tags()->sync($tags);
         return redirect()->back()->with('success', 'Tags customer berhasil diperbarui.');
+    }
+
+    public function storeCustomerTag(Request $request)
+    {
+        $request->validate(['new_tag' => 'required|string|max:255']);
+
+        $name = trim($request->input('new_tag'));
+
+        $tag = \App\CustomerTag::firstOrCreate(
+            ['name' => $name],
+            ['name' => $name]
+        );
+
+        return response()->json([
+            'id' => $tag->id,
+            'name' => $tag->name,
+        ]);
     }
 
     /**
@@ -1530,6 +1551,8 @@ public function table_invoice(Request $request)
         $merchant = \App\Merchant::pluck('name', 'id');
         $olt = \App\Olt::pluck('name', 'id');
         $oltVendors = \App\Olt::select('id','vendor','type','name')->get()->keyBy('id');
+        $allCustomerTags = \App\CustomerTag::pluck('name', 'id');
+        $selectedCustomerTags = \App\Customer::findOrFail($id)->tags->pluck('id')->toArray();
 
         // $topologycustomer = \App\topologycustomer::findOrFail($id);
        //  $customer_coordinate = \App\Customer::findOrFail($id);
@@ -1559,7 +1582,7 @@ public function table_invoice(Request $request)
         $map = app('map')->create_map();
 
         
-        return view ('customer/edit',['customer' => \App\Customer::findOrFail($id),'map' => $map, 'status' => $status, 'distpoint' => $distpoint,'sale' =>$sale, 'distrouter' => $distrouter, 'plan' => $plan, 'olt' =>$olt, 'merchant'=>$merchant, 'addons' => \App\Addon::orderBy('name')->get(), 'customerAddons' => \App\Customer::findOrFail($id)->addons->pluck('id')->toArray(), 'oltVendors' => $oltVendors ] );
+        return view ('customer/edit',['customer' => \App\Customer::findOrFail($id),'map' => $map, 'status' => $status, 'distpoint' => $distpoint,'sale' =>$sale, 'distrouter' => $distrouter, 'plan' => $plan, 'olt' =>$olt, 'merchant'=>$merchant, 'addons' => \App\Addon::orderBy('name')->get(), 'customerAddons' => \App\Customer::findOrFail($id)->addons->pluck('id')->toArray(), 'oltVendors' => $oltVendors, 'allCustomerTags' => $allCustomerTags, 'selectedCustomerTags' => $selectedCustomerTags ] );
 
     }
 
@@ -2467,6 +2490,8 @@ public function update(Request $request, $id)
         'email' => 'nullable|email',
         'merchant' => 'nullable',
         'ip' => 'nullable|ipv4',
+        'tags' => 'nullable|array',
+        'tags.*' => 'integer|exists:customer_tag_definitions,id',
     ], [
         'phone.digits_between' => 'Nomor telepon hanya boleh berisi angka (6-15 digit), tanpa tanda + atau spasi.',
         'phone.required'       => 'Nomor telepon wajib diisi.',
@@ -2539,6 +2564,11 @@ public function update(Request $request, $id)
         'id_plan', 'id_distpoint', 'id_distrouter', 'id_status', 'coordinate', 'id_olt', 'id_onu',
         'note', 'updated_by', 'updated_at', 'notification', 'ip'
     ]);
+
+    // Strip spasi dari koordinat (misal: "-8.4, 115.3" → "-8.4,115.3")
+    if (!empty($newData['coordinate'])) {
+        $newData['coordinate'] = preg_replace('/\s+/', '', $newData['coordinate']);
+    }
 
     // $changes = [];
     // foreach ($newData as $key => $value) {
@@ -2655,8 +2685,23 @@ public function update(Request $request, $id)
         ];
     }
 
-    // Sync add-ons
+    // Track customer tag changes (managed from edit customer)
+    $oldTagIds = $customer->tags->pluck('id')->toArray();
+    $newTagIds = $request->input('tags', []);
+    sort($oldTagIds);
+    sort($newTagIds);
+    if ($oldTagIds != $newTagIds) {
+        $oldTagNames = \App\CustomerTag::whereIn('id', $oldTagIds)->pluck('name')->toArray();
+        $newTagNames = \App\CustomerTag::whereIn('id', $newTagIds)->pluck('name')->toArray();
+        $changes['Customer Tags'] = [
+            'old' => count($oldTagNames) ? implode(', ', $oldTagNames) : 'Tidak ada',
+            'new' => count($newTagNames) ? implode(', ', $newTagNames) : 'Tidak ada',
+        ];
+    }
+
+    // Sync add-ons and customer tags
     $customer->addons()->sync($request->input('addons', []));
+    $customer->tags()->sync($newTagIds);
 
     $customerName = $customer->name ?? "Unknown";
     $updatedBy = Auth::user() ? Auth::user()->name : 'System';

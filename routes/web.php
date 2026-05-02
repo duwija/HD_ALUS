@@ -368,6 +368,9 @@ Route::post('/ticket/{id}/workflow/move', [App\Http\Controllers\TicketController
 Route::post('/ticket/{id}/workflow/start', [TicketController::class, 'startWorkflow']);
 
 Route::post('/ticket/{ticket}/workflow/delete', [TicketController::class, 'workflowDelete']);
+Route::post('/ticket/{id}/workflow/pause',  [TicketController::class, 'pauseTicket'])->name('ticket.workflow.pause');
+Route::post('/ticket/{id}/workflow/resume', [TicketController::class, 'resumeTicket'])->name('ticket.workflow.resume');
+
 
 
 Route::get('/schedule', [TicketController::class, 'tvwall'])->name('ticket.tvwall');
@@ -451,6 +454,7 @@ Route::delete('/tag/{id}',      'TagController@destroy')->name('tag.destroy');
 Route::post('/tag/{id}/restore','TagController@restore')->name('tag.restore');
 Route::delete('/tag/{id}/force','TagController@forceDestroy')->name('tag.force-destroy');
 Route::post('/customer/{id}/tags', 'CustomerController@updateTags')->name('customer.tags.update');
+Route::post('/customer-tags/store', 'CustomerController@storeCustomerTag')->name('customer.tags.store');
 
 
 
@@ -496,6 +500,7 @@ Route::post('/invoice/table_invoice_list','InvoiceController@table_invoice_list'
 Route::post('/customer/table_invoice','CustomerController@table_invoice');
 Route::get('/invoice','InvoiceController@index');
 Route::get('/invoice/{id}','InvoiceController@show');
+Route::post('/invoice/{id}/send-wa-gateway','InvoiceController@sendPaymentLinkWa');
 Route::get('/invoice/{id}/edit','InvoiceController@edit');
 Route::get('/invoice/{id}/create','InvoiceController@create');
 Route::post('/invoice','InvoiceController@store');

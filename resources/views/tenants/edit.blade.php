@@ -492,6 +492,18 @@
                                                     <li><code>COMPANY_ADDRESS2</code> - Alamat baris 2 <span class="badge badge-info badge-sm">multiline</span></li>
                                                     <li><code>SIGNATURE</code> - Signature untuk invoice <span class="badge badge-info badge-sm">multiline</span></li>
                                                     <li><code>INV_NOTE</code> - Catatan invoice footer <span class="badge badge-info badge-sm">multiline</span></li>
+                                                    <li class="mt-1">
+                                                        <code>SUBSCRIPTION_TERMS_TITLE</code> - Judul section syarat di PDF formulir pendaftaran
+                                                    </li>
+                                                    <li>
+                                                        <code>SUBSCRIPTION_TERMS</code> - Daftar syarat berlangganan (1 baris = 1 poin)
+                                                        <span class="badge badge-success badge-sm">Aktif</span>
+                                                        <br>
+                                                        <span class="text-muted">Gunakan Enter/newline untuk membuat poin baru. Support juga format <code>\n</code>.</span>
+                                                    </li>
+                                                    <li>
+                                                        <code>SUBSCRIPTION_TERMS_AGREEMENT</code> - Kalimat persetujuan setelah daftar syarat
+                                                    </li>
                                                 </ul>
                                             </div>
 

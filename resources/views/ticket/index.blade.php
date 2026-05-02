@@ -252,7 +252,7 @@
 
         {{-- ===== TABLE ===== --}}
         <div class="table-responsive">
-          <table id="table-ticket-list" class="table table-bordered table-striped table-sm">
+          <table id="table-ticket-list" class="table table-bordered table-striped table-sm text-nowrap w-100">
             <thead class="thead-dark">
               <tr>
                 <th>#</th>

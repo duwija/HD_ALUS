@@ -287,7 +287,7 @@
   </div>
   <div class="card-body">
     <div class="table-responsive">
-      <table id="example1" class="table table-bordered table-striped text-xs">
+      <table id="example1" class="table table-bordered table-striped text-xs text-nowrap">
 
         <thead >
           <tr>
@@ -429,7 +429,6 @@
 @section('footer-scripts')
 
 <style>
-
 
   /* Node yang sedang terpilih */
   .google-visualization-orgchart-node .selected-node {

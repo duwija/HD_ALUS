@@ -7,6 +7,33 @@
 @inject('user', 'App\User')
 
 @section('content')
+<style>
+@media (max-width:575.98px) {
+  /* Prevent full-page horizontal overflow */
+  .content > .container-fluid { overflow-x:hidden; }
+  /* Hide breadcrumb on small screens to save space */
+  .content-header .breadcrumb { display:none !important; }
+  /* Ticket title smaller on xs */
+  .content-header h1 { font-size:1.25rem; }
+  /* Action bar buttons smaller on xs */
+  .tkt-action-bar .btn { font-size:.8rem; padding:.25rem .5rem; }
+  /* Info table labels: left-align on xs instead of right-align */
+  .tkt-info-lbl { text-align:left !important; }
+  /* Allow long badges to wrap their text */
+  .tkt-badge-wrap { white-space:normal !important; word-break:break-word !important; }
+  /* Update log header: wrap when both sides are long */
+  .tkt-update-hdr { flex-wrap:wrap !important; row-gap:4px; }
+  /* Shrink coordinate badge font on xs */
+  .tkt-coord-badge { font-size:.7rem; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle; }
+}
+/* Constrain images inside update/description card bodies (all screen sizes) */
+.tkt-desc-body img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+  border-radius: 4px;
+}
+</style>
 <section class="content-header">
   <div class="container-fluid">
     <div class="row mb-2">
@@ -42,7 +69,7 @@
   @endif
 
   {{-- ═══ Action Bar ═══ --}}
-  <div class="mb-3 d-flex flex-wrap" style="gap:6px">
+  <div class="mb-3 d-flex flex-wrap tkt-action-bar" style="gap:6px">
     <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#modal-ticketedit">
       <i class="fas fa-edit mr-1"></i> Edit Tiket
     </button>
@@ -102,27 +129,27 @@
           <table class="table table-sm table-borderless mb-0">
             <tbody>
               <tr>
-                <td class="text-muted text-right" style="width:38%;white-space:nowrap">Pelanggan</td>
+                <td class="text-muted text-right tkt-info-lbl" style="width:38%;white-space:nowrap">Pelanggan</td>
                 <td>
-                  <a class="badge badge-primary px-3 py-1" href="/customer/{{ $ticket->customer->id }}">
+                  <a class="badge badge-primary px-3 py-1 tkt-badge-wrap" href="/customer/{{ $ticket->customer->id }}">
                     <i class="fas fa-external-link-alt mr-1"></i>{{ $ticket->customer->customer_id }} | {{ $ticket->customer->name }}
                   </a>
                 </td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Jadwal</td>
+                <td class="text-muted text-right tkt-info-lbl">Jadwal</td>
                 <td class="font-weight-bold">{{ $ticket->date }} {{ $ticket->time }}</td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Billing Start</td>
+                <td class="text-muted text-right tkt-info-lbl">Billing Start</td>
                 <td>{{ $ticket->customer->billing_start }}</td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Dilaporkan</td>
+                <td class="text-muted text-right tkt-info-lbl">Dilaporkan</td>
                 <td>{{ $ticket->called_by }}</td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Telepon</td>
+                <td class="text-muted text-right tkt-info-lbl">Telepon</td>
                 <td>
                   @if($ticket->phone)
                   <a href="https://wa.me/{{ '62'.substr(trim($ticket->phone), 1) }}" target="_blank" class="badge badge-success px-2 py-1">
@@ -132,9 +159,9 @@
                 </td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Alamat</td>
+                <td class="text-muted text-right tkt-info-lbl">Alamat</td>
                 <td>
-                  <a href="https://www.google.com/maps/place/{{ $ticket->customer->coordinate }}" target="_blank" class="text-info">
+                  <a href="https://www.google.com/maps/place/{{ $ticket->customer->coordinate }}" target="_blank" class="text-info" style="word-break:break-word">
                     <i class="fas fa-map-marker-alt mr-1"></i>{{ $ticket->customer->address }}
                   </a>
                 </td>
@@ -148,11 +175,11 @@
           <table class="table table-sm table-borderless mb-0">
             <tbody>
               <tr>
-                <td class="text-muted text-right" style="width:38%;white-space:nowrap">Kategori</td>
+                <td class="text-muted text-right tkt-info-lbl" style="width:38%;white-space:nowrap">Kategori</td>
                 <td class="font-weight-bold">{{ $ticket->categorie->name }}</td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Tags</td>
+                <td class="text-muted text-right tkt-info-lbl">Tags</td>
                 <td>
                   @foreach ($tags as $id => $name)
                   <span class="badge badge-info mr-1">{{ $name }}</span>
@@ -160,7 +187,7 @@
                 </td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Assign to</td>
+                <td class="text-muted text-right tkt-info-lbl">Assign to</td>
                 <td>
                   <strong>{{ $ticket->user->name }}</strong>
                   @if($ticket->member)
@@ -169,7 +196,7 @@
                 </td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Sales</td>
+                <td class="text-muted text-right tkt-info-lbl">Sales</td>
                 <td>
                   @php $salesObj = $sale->sale($ticket->customer->id_sale); @endphp
                   {{ $salesObj->name ?? '—' }}
@@ -181,7 +208,7 @@
                 </td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Dist Point</td>
+                <td class="text-muted text-right tkt-info-lbl">Dist Point</td>
                 <td>
                   @php
                   $dp = $ticket->customer?->id_distpoint ? $distpoint->distpoint($ticket->customer->id_distpoint) : null;
@@ -194,7 +221,7 @@
                 </td>
               </tr>
               <tr>
-                <td class="text-muted text-right">Dibuat</td>
+                <td class="text-muted text-right tkt-info-lbl">Dibuat</td>
                 <td><small class="text-muted">{{ $ticket->created_at }} &mdash; {{ $ticket->create_by }}</small></td>
               </tr>
             </tbody>
@@ -206,6 +233,31 @@
   </div>
 
   {{-- ═══ Workflow ═══ --}}
+  @php
+    $wfStepsForMttr = isset($workflowSteps) ? $workflowSteps : collect();
+    $mttrStartAt = $wfStepsForMttr->count() > 0
+      ? ($wfStepsForMttr->first()->created_at ?? $ticket->created_at)
+      : $ticket->created_at;
+    $finishStepForMttr = $wfStepsForMttr->firstWhere('name', 'Finish');
+    $isTicketFinishedForMttr = ($finishStepForMttr && $ticket->current_step_id == $finishStepForMttr->id)
+                             || in_array($ticket->status ?? '', ['Close', 'Solve']);
+    $mttrEndAt = null;
+    if ($isTicketFinishedForMttr) {
+      if ($finishStepForMttr && $finishStepForMttr->updated_at && $finishStepForMttr->updated_at != $finishStepForMttr->created_at) {
+        $mttrEndAt = $finishStepForMttr->updated_at;
+      } elseif (!empty($ticket->solved_at)) {
+        $mttrEndAt = \Carbon\Carbon::parse($ticket->solved_at);
+      } else {
+        $mttrEndAt = $ticket->updated_at;
+      }
+    }
+    $mttrPauseSegments = collect($ticketPauses ?? [])->map(function($p){
+      return [
+        'start' => $p->paused_at ? $p->paused_at->toIso8601String() : null,
+        'end'   => $p->resumed_at ? $p->resumed_at->toIso8601String() : null,
+      ];
+    })->values();
+  @endphp
   <div class="card mb-3" style="border:1px solid #dee2e6">
     <div class="card-header d-flex align-items-center justify-content-between" style="background:#f4f6f8;border-bottom:1px solid #dee2e6">
       <span class="font-weight-bold"><i class="fas fa-stream mr-2 text-info"></i>Workflow Progress</span>
@@ -238,6 +290,25 @@
           @else
             <span class="badge badge-secondary">Belum dimulai</span>
           @endif
+        </div>
+
+        <div class="alert alert-light border py-2 px-3 mb-3">
+          <div class="d-flex flex-wrap align-items-center justify-content-between" style="gap:10px;">
+            <div>
+              <small class="text-muted d-block">MTTR Sedang Berjalan</small>
+              <div id="mttr-live-value" class="font-weight-bold" style="font-size:1.1rem;line-height:1.2">0j 0m</div>
+            </div>
+            <div class="d-flex align-items-center" style="gap:8px;">
+              <label for="mttr-mode" class="mb-0 text-muted" style="font-size:.8rem;">Mode Hitung</label>
+              <select id="mttr-mode" class="form-control form-control-sm" style="min-width:240px;">
+                <option value="effective" selected>Efektif (tanpa waktu stop)</option>
+                <option value="total">Total (termasuk waktu stop)</option>
+              </select>
+            </div>
+          </div>
+          <small id="mttr-live-note" class="text-muted d-block mt-1">
+            Mulai: {{ \Carbon\Carbon::parse($mttrStartAt)->format('d/m/Y H:i') }}
+          </small>
         </div>
 
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
@@ -292,6 +363,69 @@
         <p class="text-muted mb-0 text-center"><i class="fas fa-check-circle text-success mr-1"></i>Tiket sudah selesai.</p>
         @endif
       @endif
+
+      {{-- ── Pause / Resume buttons ──────────────────────────────── --}}
+      @if(isset($workflowSteps) && $workflowSteps->count() > 0 && !in_array($ticket->status ?? '', ['Solve','Close']))
+      <div class="mt-3 pt-3 border-top d-flex align-items-center flex-wrap" style="gap:8px">
+        @if($isPaused ?? false)
+          {{-- Tampilkan alasan pause aktif --}}
+          @php $activePause = ($ticketPauses ?? collect())->firstWhere('resumed_at', null); @endphp
+          <span class="badge badge-warning px-3 py-2" style="font-size:.82rem">
+            <i class="fas fa-pause-circle mr-1"></i>
+            Sedang Berhenti: <em>{{ $activePause->reason ?? '' }}</em>
+            <small class="ml-1 text-dark">({{ $activePause ? $activePause->paused_at->diffForHumans() : '' }})</small>
+          </span>
+          <button type="button" class="btn btn-sm btn-success gps-required-btn" id="btn-resume-ticket" disabled>
+            <i class="fas fa-play mr-1"></i> Lanjut Kembali
+          </button>
+        @else
+          <button type="button" class="btn btn-sm btn-warning" data-toggle="modal" data-target="#modal-pause-ticket">
+            <i class="fas fa-pause mr-1"></i> Stop / Berhenti Sementara
+          </button>
+        @endif
+        @if(isset($ticketPauses) && $ticketPauses->count() > 0)
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="collapse" data-target="#pause-history">
+          <i class="fas fa-history mr-1"></i> Riwayat Berhenti ({{ $ticketPauses->count() }})
+        </button>
+        @endif
+      </div>
+      {{-- Pause history collapsible --}}
+      @if(isset($ticketPauses) && $ticketPauses->count() > 0)
+      <div id="pause-history" class="collapse mt-2">
+        <table class="table table-sm table-bordered mb-0 mt-1">
+          <thead class="thead-light"><tr>
+            <th>#</th><th>Alasan</th><th>Dihentikan oleh</th><th>Waktu Berhenti</th><th>Dilanjutkan</th><th>Durasi</th>
+          </tr></thead>
+          <tbody>
+            @foreach($ticketPauses as $i => $p)
+            <tr>
+              <td>{{ $i+1 }}</td>
+              <td>{{ $p->reason }}</td>
+              <td>{{ $p->paused_by }}</td>
+              <td><small>{{ $p->paused_at->format('d/m/Y H:i') }}</small></td>
+              <td>
+                @if($p->resumed_at)
+                  <small>{{ $p->resumed_at->format('d/m/Y H:i') }}</small><br>
+                  <small class="text-muted">oleh {{ $p->resumed_by }}</small>
+                @else
+                  <span class="badge badge-warning">Belum dilanjutkan</span>
+                @endif
+              </td>
+              <td>
+                @if($p->resumed_at)
+                  {{ $p->paused_at->diffInMinutes($p->resumed_at) }} mnt
+                @else
+                  <span class="text-muted">—</span>
+                @endif
+              </td>
+            </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+      @endif
+      @endif
+
     </div>
   </div>
 
@@ -361,7 +495,7 @@
       <span class="font-weight-bold"><i class="fas fa-file-alt mr-2 text-warning"></i>Deskripsi Tiket</span>
       <small class="text-muted"><i class="far fa-clock mr-1"></i>{{ $ticket->created_at }}</small>
     </div>
-    <div class="card-body" style="background:#fff">
+    <div class="card-body tkt-desc-body" style="background:#fff">
       {!! $ticket->description !!}
     </div>
   </div>
@@ -369,14 +503,14 @@
   {{-- ═══ Update Log ═══ --}}
   @foreach($ticket->ticketdetail as $detail)
   <div class="card mb-2" style="border:1px solid #dee2e6">
-    <div class="card-header d-flex justify-content-between align-items-center" style="background:#f4f6f8;border-bottom:1px solid #dee2e6">
+    <div class="card-header d-flex justify-content-between align-items-center tkt-update-hdr" style="background:#f4f6f8;border-bottom:1px solid #dee2e6">
       <span class="font-weight-bold"><i class="fas fa-user-edit mr-2 text-success"></i>Update — {{ $detail->updated_by }}</span>
       <div class="text-right">
         @if($detail->coordinate)
         @php $isMobile = ($detail->device_type ?? 'D') === 'M'; @endphp
         <span class="mr-2" style="display:inline-flex;align-items:center;gap:3px">
           <a href="https://www.google.com/maps/place/{{ $detail->coordinate }}" target="_blank"
-             class="badge badge-success" title="Lihat lokasi saat update">
+             class="badge badge-success tkt-coord-badge" title="{{ $detail->coordinate }}">
             <i class="fas fa-map-marker-alt mr-1"></i>{{ $detail->coordinate }}
           </a>
           @if($detail->device_type)
@@ -390,7 +524,7 @@
         <small class="text-muted"><i class="far fa-clock mr-1"></i>{{ $detail->created_at }}</small>
       </div>
     </div>
-    <div class="card-body" style="background:#fff">
+    <div class="card-body tkt-desc-body" style="background:#fff">
       {!! $detail->description !!}
     </div>
   </div>
@@ -648,6 +782,32 @@
   </div>
 </div>
 
+{{-- Pause Ticket Modal --}}
+<div class="modal fade" id="modal-pause-ticket" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-pause-circle mr-2 text-warning"></i>Stop / Berhenti Sementara</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group mb-0">
+          <label class="font-weight-bold">Alasan Berhenti <span class="text-danger">*</span></label>
+          <textarea id="pause-reason" class="form-control mt-1" rows="3" maxlength="500"
+            placeholder="Mis: Menunggu material, pelanggan tidak ada di rumah, dll..."></textarea>
+          <small class="text-muted">Masukkan alasan kenapa pekerjaan dihentikan sementara.</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-warning" id="btn-confirm-pause">
+          <i class="fas fa-pause mr-1"></i> Hentikan Sementara
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {{-- ════════════════════ SCRIPTS ════════════════════ --}}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
@@ -753,6 +913,61 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
+
+  // ── Pause / Berhenti Sementara ────────────────────────────────────────
+  var btnConfirmPause = document.getElementById('btn-confirm-pause');
+  if (btnConfirmPause) {
+    btnConfirmPause.addEventListener('click', function () {
+      var reason = document.getElementById('pause-reason').value.trim();
+      if (!reason) {
+        Swal.fire('Perhatian', 'Alasan berhenti harus diisi.', 'warning');
+        return;
+      }
+      Swal.fire({ title: 'Hentikan pekerjaan?', text: 'Kamu bisa melanjutkan kembali nanti.', icon: 'question',
+        showCancelButton: true, confirmButtonText: 'Ya, hentikan', cancelButtonText: 'Batal' })
+      .then(function (r) {
+        if (!r.isConfirmed) return;
+        Swal.fire({ title: 'Menyimpan...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        fetch('/ticket/' + ticketId + '/workflow/pause', {
+          method: 'POST',
+          headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason, coordinate: window._gpsCoordinate || null, device_type: window._gpsDeviceType || null })
+        }).then(r => r.json()).then(function (d) {
+          if (d.success) {
+            Swal.fire('Dihentikan!', 'Pekerjaan dihentikan sementara.', 'success').then(() => location.reload());
+          } else {
+            Swal.fire('Error!', d.message || 'Gagal menyimpan.', 'error');
+          }
+        }).catch(() => Swal.fire('Error!', 'Terjadi kesalahan.', 'error'));
+      });
+    });
+  }
+
+  // ── Resume / Lanjut Kembali ────────────────────────────────────────────
+  var btnResume = document.getElementById('btn-resume-ticket');
+  if (btnResume) {
+    btnResume.addEventListener('click', function () {
+      Swal.fire({ title: 'Lanjutkan pekerjaan?', icon: 'question',
+        showCancelButton: true, confirmButtonText: 'Ya, lanjut', cancelButtonText: 'Batal' })
+      .then(function (r) {
+        if (!r.isConfirmed) return;
+        Swal.fire({ title: 'Menyimpan...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        fetch('/ticket/' + ticketId + '/workflow/resume', {
+          method: 'POST',
+          headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ coordinate: window._gpsCoordinate || null, device_type: window._gpsDeviceType || null })
+        }).then(r => r.json()).then(function (d) {
+          if (d.success) {
+            Swal.fire('Dilanjutkan!', 'Pekerjaan dilanjutkan. Berhenti selama ' + d.duration_minutes + ' menit.', 'success')
+              .then(() => location.reload());
+          } else {
+            Swal.fire('Error!', d.message || 'Gagal.', 'error');
+          }
+        }).catch(() => Swal.fire('Error!', 'Terjadi kesalahan.', 'error'));
+      });
+    });
+  }
+
 });
 
 // ── GPS Coordinate capture ──────────────────────────────────────────────
@@ -773,6 +988,9 @@ function _enableGpsButtons() {
       btn.disabled = false;
     }
   });
+  // Aktifkan tombol Resume jika ada
+  var btnResume = document.getElementById('btn-resume-ticket');
+  if (btnResume) btnResume.disabled = false;
   // Isi device_type ke hidden input form Update
   var elDt = document.getElementById('update-device-type');
   if (elDt) elDt.value = window._gpsDeviceType || '';
@@ -821,31 +1039,74 @@ $('#modal-ticketupdate').on('show.bs.modal', function () {
   if (dt && window._gpsDeviceType) dt.value = window._gpsDeviceType;
 });
 
-// Auto-reload every 3 minutes with countdown badge
+// MTTR running (show ticket)
 (function(){
-  var total = 180, remaining = total;
-  var badge = document.createElement('span');
-  badge.id = 'auto-reload-badge';
-  badge.style.cssText = 'position:fixed;bottom:18px;right:18px;z-index:9999;'
-    + 'background:rgba(30,30,30,.82);color:#e5e7eb;font-size:11px;font-weight:600;'
-    + 'padding:5px 11px;border-radius:20px;border:1px solid rgba(255,255,255,.1);'
-    + 'backdrop-filter:blur(6px);cursor:pointer;user-select:none;transition:opacity .3s';
-  badge.title = 'Klik untuk reload sekarang';
-  badge.addEventListener('click', function(){ location.reload(); });
-  document.body.appendChild(badge);
+  var elValue = document.getElementById('mttr-live-value');
+  var elMode = document.getElementById('mttr-mode');
+  var elNote = document.getElementById('mttr-live-note');
+  if (!elValue || !elMode || !elNote) return;
 
-  function updateBadge(){
-    var m = Math.floor(remaining/60), s = remaining%60;
-    badge.innerHTML = '<i class="fas fa-sync-alt" style="margin-right:4px;opacity:.7"></i>'
-      + 'Reload ' + m + ':' + (s<10?'0':'')+s;
+  var mttrStartAt = new Date(@json(\Carbon\Carbon::parse($mttrStartAt)->toIso8601String()));
+  var mttrFixedEndRaw = @json($mttrEndAt ? \Carbon\Carbon::parse($mttrEndAt)->toIso8601String() : null);
+  var mttrFixedEndAt = mttrFixedEndRaw ? new Date(mttrFixedEndRaw) : null;
+  var pauseSegments = @json($mttrPauseSegments);
+
+  function toSeconds(ms) {
+    return Math.max(0, Math.floor(ms / 1000));
   }
 
-  updateBadge();
-  var timer = setInterval(function(){
-    remaining--;
-    updateBadge();
-    if(remaining <= 0){ clearInterval(timer); location.reload(); }
-  }, 1000);
+  function formatDuration(totalSeconds) {
+    var days = Math.floor(totalSeconds / 86400);
+    var hours = Math.floor((totalSeconds % 86400) / 3600);
+    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (days > 0) return days + ' hari ' + hours + 'j ' + minutes + 'm';
+    return hours + 'j ' + minutes + 'm';
+  }
+
+  function getPausedSeconds(fromAt, toAt) {
+    var fromMs = fromAt.getTime();
+    var toMs = toAt.getTime();
+    var sum = 0;
+
+    for (var i = 0; i < pauseSegments.length; i++) {
+      var seg = pauseSegments[i] || {};
+      if (!seg.start) continue;
+      var segStart = new Date(seg.start).getTime();
+      var segEnd = seg.end ? new Date(seg.end).getTime() : toMs;
+      if (segEnd <= fromMs || segStart >= toMs) continue;
+      var overlapStart = Math.max(segStart, fromMs);
+      var overlapEnd = Math.min(segEnd, toMs);
+      if (overlapEnd > overlapStart) {
+        sum += toSeconds(overlapEnd - overlapStart);
+      }
+    }
+
+    return sum;
+  }
+
+  function renderMttr() {
+    var now = new Date();
+    var endAt = mttrFixedEndAt || now;
+    var totalSeconds = toSeconds(endAt.getTime() - mttrStartAt.getTime());
+    var pausedSeconds = getPausedSeconds(mttrStartAt, endAt);
+    var effectiveSeconds = Math.max(0, totalSeconds - pausedSeconds);
+
+    var mode = elMode.value;
+    var shownSeconds = mode === 'total' ? totalSeconds : effectiveSeconds;
+    elValue.textContent = formatDuration(shownSeconds);
+
+    if (mode === 'total') {
+      elNote.textContent = 'Total sejak ' + mttrStartAt.toLocaleString('id-ID') + ' (waktu stop tetap dihitung)';
+    } else {
+      elNote.textContent = 'Efektif sejak ' + mttrStartAt.toLocaleString('id-ID') + ' (waktu stop tidak dihitung)';
+    }
+  }
+
+  elMode.addEventListener('change', renderMttr);
+  renderMttr();
+  if (!mttrFixedEndAt) {
+    setInterval(renderMttr, 1000);
+  }
 })();
 </script>
 

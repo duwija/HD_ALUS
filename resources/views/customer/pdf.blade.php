@@ -1,3 +1,44 @@
+@php
+  $rescode = tenant_rescode();
+  $tenantInvoiceLogo = $rescode ? public_path("tenants/{$rescode}/img/logoinv.png") : null;
+  $invoiceLogoPath = ($tenantInvoiceLogo && file_exists($tenantInvoiceLogo))
+    ? $tenantInvoiceLogo
+    : public_path('dashboard/dist/img/logoinv.png');
+
+  $defaultSubscriptionTerms = [
+    'Berlangganan minimal 1 tahun (12 bulan), jika dilanggar dikenakan sanksi Rp 500.000',
+    'Perangkat Wifi dan kabel dipinjamkan, wajib dikembalikan saat berhenti berlangganan',
+    'Downgrade paket hanya setelah 6 bulan berlangganan',
+    'Jatuh tempo pembayaran tanggal 1 dan batas pembayaran antara tanggal 1-20 setiap bulan',
+    'Tagihan akan dikirim via WhatsApp/email',
+    'Layanan akan dinonaktifkan otomatis jika tidak membayar hingga tanggal 20',
+    'Hubungi CS untuk gangguan, teknis, administrasi dan informasi promo',
+    'Untuk pemindahan lokasi (relokasi), harap direncanakan terlebih dahulu dan diinformasikan ke CS karena terdapat syarat dan ketentuan',
+  ];
+
+  $termsTitle = tenant_env(
+    'SUBSCRIPTION_TERMS_TITLE',
+    'Syarat & Ketentuan Berlangganan Layanan Internet ' . config('app.name')
+  );
+
+  $termsRaw = (string) tenant_env('SUBSCRIPTION_TERMS', implode(PHP_EOL, $defaultSubscriptionTerms));
+  $termsRaw = str_replace(["\\r\\n", "\\n", "\\r"], PHP_EOL, $termsRaw);
+  $subscriptionTerms = array_values(array_filter(array_map(function ($line) {
+    $line = trim((string) $line);
+    // Hindari dobel penomoran jika admin mengisi dengan prefix "-" atau "1."
+    $line = preg_replace('/^(?:[-*]|\d+[.)])\s*/', '', $line);
+    return trim($line);
+  }, preg_split('/\r\n|\r|\n/', $termsRaw))));
+  if (empty($subscriptionTerms)) {
+    $subscriptionTerms = $defaultSubscriptionTerms;
+  }
+
+  $termsAgreement = tenant_env(
+    'SUBSCRIPTION_TERMS_AGREEMENT',
+    'Dengan menandatangani formulir ini, saya menyatakan bahwa seluruh informasi yang saya berikan adalah benar dan saya menyetujui syarat dan ketentuan berlangganan layanan internet ' . config('app.name') . '.'
+  );
+@endphp
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -104,6 +145,22 @@
     .terms ol {
       padding-left: 20px;
     }
+    .terms-list {
+      margin: 0 0 8px 0;
+      padding-left: 18px;
+      line-height: 1.55;
+      color: #333;
+    }
+    .terms-list li {
+      margin-bottom: 3px;
+      text-align: justify;
+    }
+    .agreement-text {
+      margin: 10px 0 0 0;
+      line-height: 1.6;
+      text-align: justify;
+      color: #333;
+    }
 
     /* Tanda tangan dan catatan */
     .signature {
@@ -122,6 +179,9 @@
       font-weight: bold;
       display: block;
       margin-bottom: 40px;
+    }
+    .signature-section {
+      margin-top: 14px;
     }
 
     /* QR Code section */
@@ -143,7 +203,7 @@
   <table class="header-table">
     <tr>
       <td class="header-logo">
-        <img src="{{ public_path('dashboard/dist/img/logoinv.png') }}" alt="Logo {{ tenant_config('company_name', config('app.name')) }}" style="max-width: 140px;">
+        <img src="{{ $invoiceLogoPath }}" alt="Logo {{ tenant_config('company_name', config('app.name')) }}" style="max-width: 140px;">
       </td>
       <td>
         <div class="header-title">Formulir Berlangganan Internet {{  config('app.name') }}</div>
@@ -222,39 +282,26 @@
   </table>
 
   <p><strong>Catatan Tambahan:</strong> {{ $data['keterangan_tambahan'] ?? '-' }}</p>
+  <h4>{{ $termsTitle }}</h4>
 
-
-  <h4>Syarat & Ketentuan Berlangganan Layanan Internet {{ config('app.name') }}</h4>
-  
-  <ol>
-    <li>Berlangganan minimal 1 tahun (12 bulan), jika dilanggar dikenakan sanksi Rp 500.000</li>
-    <li>Perangkat Wifi dan kabel dipinjamkan, wajib dikembalikan saat berhenti berlangganan</li>
-    <li>Downgrade paket hanya setelah 6 bulan berlangganan</li>
-    <li>Jatuh tempo pembayaran tanggal 1 dan batas pembayaran antara tanggal 1–20 setiap bulan</li>
-    <li>Tagihan akan dikirim via WhatsApp/email</li>
-    <li>Layanan akan dinonaktifkan otomatis jika tidak membayar hingga tanggal 20</li>
-    <li>Hubungi CS untuk gangguan, teknis, administrasi dan informasi promo</li>
-    <li>Untuk pemindahan lokasi (relokasi), harap direncanakan terlebih dahulu dan diinformasikan ke CS karena terdapat syarat dan ketentuan</li>
+  <ol class="terms-list">
+    @foreach ($subscriptionTerms as $term)
+      <li>{{ $term }}</li>
+    @endforeach
   </ol>
 
-  Dengan menandatangani formulir ini, saya menyatakan bahwa seluruh informasi yang saya berikan adalah benar
-  dan saya menyetujui syarat dan ketentuan berlangganan layanan internet {{ config('app.name') }}.
+  <p class="agreement-text">{{ $termsAgreement }}</p>
   
 
   
-
-  
-
-  <div class="signature">
+  <div class="signature signature-section">
 
 
 
    <table style="width: 100%; margin-bottom: 30px;">
     <tr>
       <td style="width: 30%; vertical-align: top; padding-right: 10px; text-align: center;">
-        <label style="display: block; font-weight: bold; margin-bottom: 60px;">{{ tenant_config('city', 'Tabanan') }}, <?php
-echo date('d-m-Y'); // Output: 15-05-2025
-?> <br> {{ config('app.name') }}</label>
+        <label style="display: block; font-weight: bold; margin-bottom: 60px;">{{ tenant_config('city', 'Tabanan') }}, {{ now()->format('d-m-Y') }} <br> {{ config('app.name') }}</label>
 <p><strong>{{ $data['ttd_nama'] ?? '-' }}</strong></p>
 </td>
 <td style="width: 30%; vertical-align: top; padding-right: 10px; text-align: center;">

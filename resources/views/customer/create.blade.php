@@ -191,9 +191,10 @@
           name="coordinate" id="coordinate"
           placeholder="Contoh: -6.200000,106.816666"
           value="{{old('coordinate')}}"
-          pattern="-?\d{1,3}\.\d+,-?\d{1,3}\.\d+"
+          pattern="-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+"
           title="Format: lat,lng — contoh: -6.200000,106.816666 (titik sebagai desimal, koma sebagai pemisah lat & lng)"
-          oninput="validateCoordinate(this)">
+          oninput="validateCoordinate(this)"
+          onchange="validateCoordinate(this)">
         <div class="input-group-append">
          <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#modal-maps"><i class="fas fa-map-marker-alt"></i> Get From Maps</button>
        </div>
@@ -525,7 +526,7 @@
   }
 
   function validateCoordinate(el) {
-    const pattern = /^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$/;
+    const pattern = /^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/;
     const errEl   = document.getElementById('coordinate-error');
     const val     = el.value.trim();
 
@@ -536,7 +537,7 @@
     }
 
     // Deteksi kesalahan umum: spasi di antara lat & lng
-    if (/^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/.test(val) && val !== val.replace(/\s/g, '')) {
+    if (pattern.test(val) && val !== val.replace(/\s/g, '')) {
       el.value = val.replace(/\s/g, '');
     }
 

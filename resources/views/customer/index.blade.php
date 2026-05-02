@@ -96,7 +96,7 @@
             <h3 class="card-title">Plan Group</h3>
           </div>
           <div class="card-body p-2 table-responsive">
-            <table id="table-plan-group" class="table table-bordered table-striped mb-0">
+            <table id="table-plan-group" class="table table-bordered table-striped mb-0 text-nowrap w-100">
               <thead>
                 <tr>
                   <th>#</th>
@@ -141,11 +141,11 @@
     </div>
 
 
-    <div class="table-responsive">
+     <div class="table-responsive">
       <form role="form" method="post" action="/customer/update/status">
        @method('patch')
        @csrf
-       <table id="table-customer" class="table table-bordered table-striped ">
+       <table id="table-customer" class="table table-bordered table-striped text-nowrap w-100">
 
         <thead >
           <tr>

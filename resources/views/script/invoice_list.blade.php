@@ -63,6 +63,7 @@
         "parameter": $(document.querySelector('[name="parameter"]')).val(),
         "paymentStatus": $(document.querySelector('[name="paymentStatus"]')).val(),
         "id_merchant": $(document.querySelector('[name="id_merchant"]')).val(),
+        "id_plan": $(document.querySelector('[name="id_plan"]')).val(),
         "updatedBy": $(document.querySelector('[name="updatedBy"]')).val(), 
         "invoicetype": $(document.querySelector('[name="invoicetype"]')).val(),           
       } );
@@ -113,28 +114,27 @@
 
     },
     {
-      "targets": 6, // your case first column
+      "targets": 7, // address
       "className": "text-left",
 
     },
-    
     {
-      "targets": 7, // your case first columnzZxZ
+      "targets": 8, // period
       "className": "text-center font-weight-bold",
 
     },
     {
-      "targets": 9, // your case first columnzZxZ
+      "targets": 10, // tax
       "className": "text-center font-weight-bold",
 
     },
     {
-      "targets": 10, // your case first columnzZxZ
+      "targets": 11, // total_amount
       "className": "text-right font-weight-bold",
 
     },
     {
-      "targets": 11, // your case first columnzZxZ
+      "targets": 12, // status
       "className": "text-center font-weight-bold",
 
     },
@@ -145,6 +145,7 @@
     {data: 'number', name: 'number'},
     {data: 'cid', name: 'cid'},
     {data: 'name', name: 'name'},
+    {data: 'plan', name: 'plan'},
     {data: 'merchant', name: 'merchant'},
     {data: 'address', name: 'address'},
     {data: 'period', name: 'period'},

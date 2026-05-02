@@ -5,7 +5,10 @@
 <section class="content-header">
   <div class="card card-primary card-outline">
     <div class="card-header">
-      <h3 class="card-title font-weight-bold">Formulir Pendaftaran Internet ALUSNet</h3>
+      <div class="d-flex align-items-center" style="gap: 12px;">
+        <img src="{{ tenant_img('logoinv.png', 'dashboard/dist/img/logoinv.png') }}" alt="Logo {{ tenant_config('company_name', config('app.name')) }}" style="max-height: 42px; width: auto;">
+        <h3 class="card-title font-weight-bold mb-0">Formulir Pendaftaran Internet {{ tenant_config('company_name', config('app.name')) }}</h3>
+      </div>
     </div>
 
     <form method="POST" action="/pendaftaran">

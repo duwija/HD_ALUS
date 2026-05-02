@@ -88,33 +88,33 @@
         </span>
       </div>
       <div class="card-body py-2">
-        <div class="d-flex flex-wrap align-items-end" style="gap:.5rem">
+        <div class="row align-items-end">
 
-          <div>
-            <label class="small text-muted d-block mb-0">Transaction Start</label>
+          <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-2">
+            <label class="small text-muted d-block mb-1">Transaction Start</label>
             <div class="input-group input-group-sm date" id="dp-txStart" data-target-input="nearest">
               <input type="text" name="dateStart" class="form-control datetimepicker-input"
-                data-target="#dp-txStart" value="{{ date('Y-m-d') }}" style="width:120px">
+                data-target="#dp-txStart" value="{{ date('Y-m-d') }}">
               <div class="input-group-append" data-target="#dp-txStart" data-toggle="datetimepicker">
                 <div class="input-group-text"><i class="fa fa-calendar fa-sm"></i></div>
               </div>
             </div>
           </div>
 
-          <div>
-            <label class="small text-muted d-block mb-0">Transaction End</label>
+          <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-2">
+            <label class="small text-muted d-block mb-1">Transaction End</label>
             <div class="input-group input-group-sm date" id="dp-txEnd" data-target-input="nearest">
               <input type="text" name="dateEnd" class="form-control datetimepicker-input"
-                data-target="#dp-txEnd" value="{{ date('Y-m-d') }}" style="width:120px">
+                data-target="#dp-txEnd" value="{{ date('Y-m-d') }}">
               <div class="input-group-append" data-target="#dp-txEnd" data-toggle="datetimepicker">
                 <div class="input-group-text"><i class="fa fa-calendar fa-sm"></i></div>
               </div>
             </div>
           </div>
 
-          <div>
-            <label class="small text-muted d-block mb-0">Merchant</label>
-            <select name="id_merchant" id="id_merchant" class="form-control form-control-sm select2" style="width:140px">
+          <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-2">
+            <label class="small text-muted d-block mb-1">Merchant</label>
+            <select name="id_merchant" id="id_merchant" class="form-control form-control-sm select2 w-100">
               <option value="">All Merchant</option>
               @foreach ($merchant as $id => $name)
               <option value="{{ $id }}">{{ $name }}</option>
@@ -122,9 +122,9 @@
             </select>
           </div>
 
-          <div>
-            <label class="small text-muted d-block mb-0">Receive By</label>
-            <select name="updatedBy" id="updatedBy" class="form-control form-control-sm select2" style="width:150px">
+          <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-2">
+            <label class="small text-muted d-block mb-1">Receive By</label>
+            <select name="updatedBy" id="updatedBy" class="form-control form-control-sm select2 w-100">
               <option value="">All</option>
               @foreach($user as $transaction)
                 @if(is_numeric($transaction->updated_by))
@@ -136,9 +136,19 @@
             </select>
           </div>
 
-          <div>
-            <label class="small text-muted d-block mb-0">Kas Bank</label>
-            <select name="kasbank" id="kasbank" class="form-control form-control-sm select2" style="width:150px">
+          <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-2">
+            <label class="small text-muted d-block mb-1">Plan</label>
+            <select name="id_plan" id="id_plan" class="form-control form-control-sm select2 w-100">
+              <option value="">All Plan</option>
+              @foreach($plans as $id => $planName)
+              <option value="{{ $id }}">{{ $planName }}</option>
+              @endforeach
+            </select>
+          </div>
+
+          <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-2">
+            <label class="small text-muted d-block mb-1">Kas Bank</label>
+            <select name="kasbank" id="kasbank" class="form-control form-control-sm select2 w-100">
               <option value="">All</option>
               @foreach ($kasbank as $akun)
               <option value="{{ $akun->akun_code }}">{{ $akun->name }}</option>
@@ -146,16 +156,15 @@
             </select>
           </div>
 
-          <div style="flex:1;min-width:180px">
-            <label class="small text-muted d-block mb-0">Search</label>
+          <div class="col-xl-4 col-lg-5 col-md-8 col-sm-12 mb-2">
+            <label class="small text-muted d-block mb-1">Search</label>
             <input type="text" name="parameter" id="parameter"
               class="form-control form-control-sm"
               placeholder="Invoice No | CID | Name">
           </div>
 
-          <div>
-            <label class="d-block mb-0" style="visibility:hidden">x</label>
-            <button type="button" class="btn btn-primary btn-sm" id="transaction_filter">
+          <div class="col-xl-2 col-lg-2 col-md-4 col-sm-12 mb-2">
+            <button type="button" class="btn btn-primary btn-sm btn-block" id="transaction_filter">
               <i class="fas fa-search mr-1"></i>Filter
             </button>
           </div>
@@ -290,7 +299,7 @@
 
     {{-- ─── Main DataTable ───────────────────────────────────────────────────── --}}
     <div class="table-responsive">
-      <table id="table-transaction-list" class="table table-bordered table-striped table-sm text-xs">
+      <table id="table-transaction-list" class="table table-bordered table-striped table-sm text-xs text-nowrap">
         <thead class="thead-light">
           <tr>
             <th>#</th>
@@ -298,6 +307,7 @@
             <th>Invoice No</th>
             <th class="text-center">CID</th>
             <th>Name</th>
+            <th>Plan</th>
             <th>Merchant</th>
             <th>Address</th>
             <th>Note</th>

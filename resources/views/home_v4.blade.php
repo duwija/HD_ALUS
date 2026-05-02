@@ -152,6 +152,9 @@ body.dark-mode .tkt-row { background: var(--bg-surface-2) !important; }
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
+  border: 1px solid rgba(255,255,255,.28);
+  text-shadow: 0 1px 1px rgba(0,0,0,.25);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
 }
 .prob-bar-wrap { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 4px; }
 .prob-bar-fill { height: 6px; border-radius: 3px; transition: width .4s; }
@@ -437,76 +440,142 @@ body.dark-mode .tkt-row { background: var(--bg-surface-2) !important; }
   {{-- Active Leads List + Recent Activity --}}
   <div class="row mb-3">
 
-    {{-- All Active Leads --}}
-    <div class="col-md-7 mb-2">
-      <div class="card tk-card shadow-sm h-100">
+    {{-- All Active Leads (table format) --}}
+    <div class="col-md-6 mb-2">
+      <div class="card tk-card shadow-sm">
         <div class="card-header bg-transparent border-bottom py-2 px-3 d-flex justify-content-between align-items-center">
           <span class="tk-sec mb-0">
-            <i class="fas fa-list-alt mr-1 text-success"></i>Daftar Lead Aktif
+            <i class="fas fa-spinner mr-1 text-warning"></i>Lead In Progress
+            <span class="badge ml-1" style="background:#00897b;color:#fff;font-size:11px">{{ $allActiveLeads->count() }}</span>
           </span>
-          <span class="badge" style="background:#00897b;color:#fff;font-size:11px">{{ $allActiveLeads->count() }}</span>
-        </div>
-        <div class="card-body p-2" style="max-height:380px;overflow-y:auto">
-          @forelse($allActiveLeads as $lead)
-          @php
-            $stageColor = $lead->workflowStage->color ?? '#1e88e5';
-            $stageName  = $lead->workflowStage->name ?? '—';
-            $prob       = (int)($lead->conversion_probability ?? 0);
-            $probColor  = $prob >= 70 ? '#43a047' : ($prob >= 40 ? '#fb8c00' : '#e53935');
-            $closeDate  = $lead->expected_close_date ? \Carbon\Carbon::parse($lead->expected_close_date) : null;
-            $isOverdue  = $closeDate && $closeDate->isPast();
-          @endphp
-          <div class="lead-row" style="border-left-color:{{ $stageColor }}">
-            <div class="d-flex align-items-start justify-content-between">
-              <div class="flex-fill" style="min-width:0">
-                <div class="d-flex align-items-center" style="gap:6px;margin-bottom:3px">
-                  <span class="lead-stage-badge" style="background:{{ $stageColor }}">{{ $stageName }}</span>
-                  <a href="{{ url('customer/'.$lead->id) }}" style="font-size:12px;font-weight:700;color:var(--text-primary,#222);text-decoration:none" class="text-truncate">
-                    {{ $lead->name }}
-                  </a>
-                </div>
-                <div style="font-size:11px;color:#888;display:flex;flex-wrap:wrap;gap:8px">
-                  @if($lead->lead_source)
-                    <span><i class="fas fa-tag mr-1"></i>{{ $lead->lead_source }}</span>
-                  @endif
-                  @if($closeDate)
-                    <span class="{{ $isOverdue ? 'text-danger font-weight-bold' : '' }}">
-                      <i class="fas fa-calendar-alt mr-1"></i>Target: {{ $closeDate->format('d/m/Y') }}
-                      @if($isOverdue) <span class="badge badge-danger" style="font-size:9px">Overdue</span> @endif
-                    </span>
-                  @endif
-                </div>
-                @if($prob > 0)
-                <div class="prob-bar-wrap mt-1">
-                  <div class="prob-bar-fill" style="width:{{ $prob }}%;background:{{ $probColor }}"></div>
-                </div>
-                @endif
-              </div>
-              @if($prob > 0)
-              <span style="font-size:14px;font-weight:900;color:{{ $probColor }};margin-left:10px;flex-shrink:0">{{ $prob }}%</span>
-              @endif
-            </div>
-          </div>
-          @empty
-          <div class="empty-state">
-            <i class="fas fa-seedling d-block text-success"></i>
-            <p class="mb-0" style="font-size:13px">Belum ada lead aktif</p>
-            <a href="{{ url('lead-workflow') }}" class="btn btn-sm btn-outline-success mt-2" style="font-size:11px">
-              <i class="fas fa-plus mr-1"></i> Tambah Lead Baru
+          <div class="d-flex align-items-center" style="gap:6px">
+            <input type="text" id="v4SearchLead" class="form-control form-control-sm" placeholder="Cari nama / sales..." style="width:170px;font-size:11px">
+            <a href="{{ url('marketing/lead-summary') }}" class="btn btn-sm btn-outline-success" style="font-size:11px">
+              <i class="fas fa-external-link-alt mr-1"></i>Detail
             </a>
           </div>
-          @endforelse
         </div>
-        <div class="card-footer bg-transparent border-top p-2">
-          <a href="{{ url('lead-workflow') }}" class="btn btn-sm btn-outline-success btn-block" style="font-size:11px">
-            <i class="fas fa-external-link-alt mr-1"></i> Buka Pipeline Board
-          </a>
+        <div style="max-height:420px;overflow-y:auto">
+          @if($allActiveLeads->isEmpty())
+            <div class="empty-state py-4">
+              <i class="fas fa-seedling d-block text-success"></i>
+              <p class="mb-0" style="font-size:13px">Belum ada lead aktif</p>
+            </div>
+          @else
+          <table class="table table-sm table-hover mb-0" id="v4LeadTable" style="font-size:.8rem">
+            <thead class="thead-light" style="position:sticky;top:0;z-index:1">
+              <tr>
+                <th>#</th>
+                <th>Nama Lead</th>
+                <th>Sales</th>
+                <th>Lead Source</th>
+                <th class="text-center">Step Sekarang</th>
+                <th style="min-width:140px">Progress Workflow</th>
+                <th>Update Terakhir</th>
+                <th>Tgl Daftar</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+            @foreach($allActiveLeads as $i => $lead)
+            @php
+              $stageIds   = $leadStages->pluck('id');
+              $stageIdx   = $stageIds->search($lead->workflow_stage_id);
+              $wfNow      = $stageIdx === false ? 1 : ($stageIdx + 1);
+              $wfTot      = max($leadStages->count(), 1);
+              $wfPct      = $wfTot > 1 ? round((($wfNow - 1) / ($wfTot - 1)) * 100) : 0;
+              $stageName  = optional($lead->workflowStage ?? $leadStages->firstWhere('id', $lead->workflow_stage_id))->name ?? 'New Lead';
+              $lastUpdate     = $lead->leadUpdates ? $lead->leadUpdates->sortByDesc('created_at')->first() : null;
+              $lastUpdateAt   = $lastUpdate ? \Carbon\Carbon::parse($lastUpdate->created_at) : null;
+              $customerUpAt   = \Carbon\Carbon::parse($lead->updated_at);
+              $lastActivityAt = $lastUpdateAt && $lastUpdateAt->gt($customerUpAt) ? $lastUpdateAt : $customerUpAt;
+              $isStale        = $lastActivityAt->diffInDays(now()) > 14;
+              $daysOld        = \Carbon\Carbon::parse($lead->created_at)->diffInDays(now());
+            @endphp
+            <tr class="{{ $isStale ? 'table-danger' : '' }}"
+                data-name="{{ strtolower($lead->name) }}"
+                data-sales="{{ strtolower($lead->sale_name?->name ?? '') }}">
+              <td>{{ $i+1 }}</td>
+              <td>
+                <a href="{{ url('customer/'.$lead->id) }}" class="font-weight-bold text-primary">{{ $lead->name }}</a>
+                @if($lead->phone)
+                  <br><small class="text-muted"><i class="fas fa-phone fa-xs mr-1"></i>{{ $lead->phone }}</small>
+                @endif
+                @if($lead->address)
+                  <br><small class="text-muted"><i class="fas fa-map-marker-alt fa-xs mr-1"></i>{{ \Illuminate\Support\Str::limit($lead->address, 60) }}</small>
+                @endif
+              </td>
+              <td>
+                @if($lead->sale_name)
+                  <span class="badge badge-info">{{ $lead->sale_name->name }}</span>
+                  @if($lead->sale_name->phone ?? null)
+                    <br><small class="text-muted"><i class="fas fa-phone fa-xs mr-1"></i>{{ $lead->sale_name->phone }}</small>
+                  @endif
+                @else
+                  <span class="text-muted small">Unassigned</span>
+                @endif
+              </td>
+              <td>
+                @if($lead->lead_source)
+                  <span class="badge badge-secondary">{{ $lead->lead_source }}</span>
+                @else
+                  <span class="text-muted small">-</span>
+                @endif
+              </td>
+              <td class="text-center">
+                <span class="badge badge-{{ $wfPct >= 100 ? 'success' : 'primary' }}"
+                      style="white-space:normal;max-width:110px;display:inline-block">
+                  {{ $stageName }}
+                </span>
+                <br><small class="text-muted">{{ $wfNow }}/{{ $wfTot }}</small>
+              </td>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="progress flex-fill mr-1" style="height:8px">
+                    <div class="progress-bar {{ $wfPct>=80 ? 'bg-success' : ($wfPct>=40 ? 'bg-primary' : 'bg-warning') }}"
+                         style="width:{{ max($wfPct,3) }}%"></div>
+                  </div>
+                  <small style="min-width:30px;text-align:right">{{ $wfPct }}%</small>
+                </div>
+              </td>
+              <td>
+                @if($lastUpdate)
+                  <span class="badge badge-light border">
+                    {{ \Carbon\Carbon::parse($lastUpdate->created_at)->format('d M Y') }}
+                  </span>
+                  <br>
+                  <small class="text-muted" style="font-size:0.68rem;max-width:160px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                    {{ $lastUpdate->new_value ?? $lastUpdate->notes ?? '-' }}
+                  </small>
+                @else
+                  <span class="text-muted small">Belum ada</span>
+                @endif
+                @if($isStale)
+                  <br><span class="badge badge-danger py-0" title="Tidak ada follow-up >14 hari">
+                    <i class="fas fa-exclamation-triangle"></i> Follow-up!
+                  </span>
+                @endif
+              </td>
+              <td>
+                <small>{{ \Carbon\Carbon::parse($lead->created_at)->format('d M Y') }}</small>
+                <br><small class="text-muted">{{ $daysOld }} hr lalu</small>
+              </td>
+              <td>
+                <a href="{{ url('customer/'.$lead->id) }}" class="btn btn-xs btn-outline-primary" title="Detail">
+                  <i class="fas fa-eye"></i>
+                </a>
+              </td>
+            </tr>
+            @endforeach
+            </tbody>
+          </table>
+          @endif
         </div>
       </div>
     </div>
 
     {{-- Right column: My Leads + Recent Activity --}}
-    <div class="col-md-5 mb-2 d-flex flex-column" style="gap:12px">
+    <div class="col-md-6 mb-2 d-flex flex-column" style="gap:12px">
 
       {{-- My Leads --}}
       @if($leadsMyActive->isNotEmpty())
@@ -520,18 +589,42 @@ body.dark-mode .tkt-row { background: var(--bg-surface-2) !important; }
         <div class="card-body p-2" style="max-height:220px;overflow-y:auto">
           @foreach($leadsMyActive as $lead)
           @php
-            $stageColor = $lead->workflowStage->color ?? '#1e88e5';
-            $stageName  = $lead->workflowStage->name ?? '—';
+            $resolvedStage = $lead->workflowStage ?: $leadStages->firstWhere('id', $lead->workflow_stage_id);
+            $rawStageColor = trim((string)($resolvedStage->color ?? ''));
+            if (!preg_match('/^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/', $rawStageColor)) {
+              $rawStageColor = '#1e88e5';
+            }
+            $stageColor = strpos($rawStageColor, '#') === 0 ? $rawStageColor : ('#'.$rawStageColor);
+            $stageName  = $resolvedStage->name ?? 'New Lead';
+            $hex = ltrim($stageColor, '#');
+            if (strlen($hex) === 3) {
+              $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
+            }
+            $r = strlen($hex) >= 6 ? hexdec(substr($hex, 0, 2)) : 30;
+            $g = strlen($hex) >= 6 ? hexdec(substr($hex, 2, 2)) : 136;
+            $b = strlen($hex) >= 6 ? hexdec(substr($hex, 4, 2)) : 229;
+            if (($r + $g + $b) >= 740) {
+              $r = 30; $g = 136; $b = 229;
+              $stageColor = '#1e88e5';
+            }
+            $lum = (0.299 * $r) + (0.587 * $g) + (0.114 * $b);
+            $stageTextColor = $lum > 165 ? '#1f2937' : '#ffffff';
+            $stageBorderColor = $lum > 165 ? 'rgba(17,24,39,.24)' : 'rgba(255,255,255,.34)';
             $prob       = (int)($lead->conversion_probability ?? 0);
             $probColor  = $prob >= 70 ? '#43a047' : ($prob >= 40 ? '#fb8c00' : '#e53935');
             $closeDate  = $lead->expected_close_date ? \Carbon\Carbon::parse($lead->expected_close_date) : null;
             $isOverdue  = $closeDate && $closeDate->isPast();
+            $stageIds   = $leadStages->pluck('id');
+            $stageIdx   = $stageIds->search($lead->workflow_stage_id);
+            $wfStepNow  = $stageIdx === false ? 1 : ($stageIdx + 1);
+            $wfStepTot  = max($leadStages->count(), 1);
+            $wfPct      = $wfStepTot > 1 ? round((($wfStepNow - 1) / ($wfStepTot - 1)) * 100) : 0;
           @endphp
           <div class="lead-row" style="border-left-color:{{ $stageColor }}">
             <div class="d-flex align-items-center justify-content-between">
               <div style="min-width:0;flex:1">
                 <div class="d-flex align-items-center" style="gap:5px;margin-bottom:2px">
-                  <span class="lead-stage-badge" style="background:{{ $stageColor }};font-size:9px;padding:1px 6px">{{ $stageName }}</span>
+                  <span class="lead-stage-badge" style="background:{{ $stageColor }};color:{{ $stageTextColor }};border-color:{{ $stageBorderColor }};font-size:9px;padding:1px 6px">{{ $stageName }}</span>
                   <a href="{{ url('customer/'.$lead->id) }}" style="font-size:12px;font-weight:700;color:var(--text-primary,#222);text-decoration:none" class="text-truncate">
                     {{ $lead->name }}
                   </a>
@@ -542,6 +635,21 @@ body.dark-mode .tkt-row { background: var(--bg-surface-2) !important; }
                     @if($isOverdue) <span class="text-danger font-weight-bold">• Overdue</span> @endif
                   </div>
                 @endif
+                <div style="font-size:10px;color:#888;display:flex;flex-wrap:wrap;gap:8px;margin-top:2px">
+                  @if($lead->phone)
+                    <span><i class="fas fa-phone mr-1"></i>{{ $lead->phone }}</span>
+                  @endif
+                  @if($lead->address)
+                    <span><i class="fas fa-map-marker-alt mr-1"></i>{{ \Illuminate\Support\Str::limit($lead->address, 65) }}</span>
+                  @endif
+                </div>
+                <div style="font-size:10px;color:#7a7a7a;margin-top:3px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+                  <span><i class="fas fa-project-diagram mr-1"></i>{{ $stageName }} · WF {{ $wfStepNow }}/{{ $wfStepTot }}</span>
+                  <span style="font-weight:700;color:{{ $stageColor }}">{{ $wfPct }}%</span>
+                </div>
+                <div class="prob-bar-wrap" style="margin-top:3px;height:5px;background:{{ $stageColor }}20">
+                  <div class="prob-bar-fill" style="width:{{ $wfPct }}%;background:{{ $stageColor }};height:5px"></div>
+                </div>
                 @if($prob > 0)
                 <div class="prob-bar-wrap">
                   <div class="prob-bar-fill" style="width:{{ $prob }}%;background:{{ $probColor }}"></div>
@@ -714,6 +822,9 @@ body.dark-mode .tkt-row { background: var(--bg-surface-2) !important; }
                   <span><i class="fas fa-user mr-1"></i>
                     <a href="{{ url('customer/'.$t->customer->id) }}" style="color:#555;text-decoration:none">{{ $t->customer->name }}</a>
                   </span>
+                  @if($t->customer->address)
+                  <span style="width:100%;flex-basis:100%"><i class="fas fa-map-marker-alt mr-1"></i>{{ $t->customer->address }}</span>
+                  @endif
                 @elseif($t->called_by)
                   <span><i class="fas fa-user mr-1"></i>{{ $t->called_by }}</span>
                 @endif
@@ -722,6 +833,12 @@ body.dark-mode .tkt-row { background: var(--bg-surface-2) !important; }
                 @endif
                 @if($t->create_by)
                   <span><i class="fas fa-pencil-alt mr-1"></i>{{ $t->create_by }}</span>
+                @endif
+                @if($t->assignToUser)
+                  <span><i class="fas fa-user-check mr-1"></i>{{ $t->assignToUser->name }}</span>
+                @endif
+                @if($t->member)
+                  <span><i class="fas fa-users mr-1"></i>{{ $t->member }}</span>
                 @endif
               </div>
               @if($t->steps && $t->steps->count() > 0)
@@ -857,5 +974,15 @@ body.dark-mode .tkt-row { background: var(--bg-surface-2) !important; }
   });
 
   $(function(){ $('[data-toggle="tooltip"]').tooltip({ delay: { show:300, hide:150 } }); });
+
+  // Search filter for lead in progress table
+  $('#v4SearchLead').on('keyup', function(){
+    const q = $(this).val().toLowerCase().trim();
+    $('#v4LeadTable tbody tr').each(function(){
+      const name  = $(this).data('name')  || '';
+      const sales = $(this).data('sales') || '';
+      $(this).toggle(name.includes(q) || sales.includes(q));
+    });
+  });
 </script>
 @endsection

@@ -152,7 +152,7 @@ class SuminvoiceController extends Controller
    {
         //$this->middleware('auth');
     $this->middleware('auth', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]); 
-    $this->middleware('checkPrivilege:admin,accounting,payment,noc', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]);
+    $this->middleware('checkPrivilege:admin,accounting,payment,noc,marketing', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]);
 }
 
     /**
@@ -1702,7 +1702,9 @@ public function transaction()
  ->whereNotIn('akun_code', $parentAkuns)
  ->get();
 
- return view ('suminvoice/transaction',['dailyTransactions' => $dailyTransactions,'suminvoice' =>$suminvoice, 'user'=>$groupedTransactionsUser, 'totalPaymentToday'=>$totalPaymentToday, 'totalTransactionThisWeek'=>$totalTransactionThisWeek, 'totalTransactionThisMonth'=>$totalTransactionThisMonth, 'totalReceivable'=>$totalReceivable, 'groupedTransactions' => $groupedTransactions,'merchant'=>$merchant, 'kasbank'=>$kasbank]);
+ $plans = \App\Plan::orderBy('name')->pluck('name', 'id');
+
+ return view ('suminvoice/transaction',['dailyTransactions' => $dailyTransactions,'suminvoice' =>$suminvoice, 'user'=>$groupedTransactionsUser, 'totalPaymentToday'=>$totalPaymentToday, 'totalTransactionThisWeek'=>$totalTransactionThisWeek, 'totalTransactionThisMonth'=>$totalTransactionThisMonth, 'totalReceivable'=>$totalReceivable, 'groupedTransactions' => $groupedTransactions,'merchant'=>$merchant, 'kasbank'=>$kasbank, 'plans'=>$plans]);
 }
 //======================================================================================
 
@@ -2010,6 +2012,7 @@ public function table_transaction_list(Request $request)
     $updatedBy   = $request->updatedBy;
     $id_merchant = $request->id_merchant;
     $kasbank     = $request->kasbank;
+    $id_plan     = $request->id_plan;
 
     /** ================= BASE QUERY ================= **/
     $baseQuery = \App\Suminvoice::query()
@@ -2024,6 +2027,7 @@ public function table_transaction_list(Request $request)
     )
     ->with([
         'customer.merchant_name',
+        'customer.plan_name',
         'user',
         'kasbank'
     ]);
@@ -2038,6 +2042,10 @@ public function table_transaction_list(Request $request)
 
     if ($kasbank) {
         $baseQuery->where('suminvoices.payment_point', $kasbank);
+    }
+
+    if ($id_plan) {
+        $baseQuery->where('customers.id_plan', $id_plan);
     }
 
     if ($parameter) {
@@ -2139,6 +2147,8 @@ public function table_transaction_list(Request $request)
     })
 
     ->addColumn('name', fn($s)=> $s->customer->name ?? '-')
+
+    ->addColumn('plan', fn($s)=> optional($s->customer->plan_name)->name ?? '-')
 
     ->addColumn('merchant', fn($s)=> optional($s->customer->merchant_name)->name ?? '-')
 

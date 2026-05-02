@@ -56,7 +56,7 @@
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.0/leaflet-search.min.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/themes/default/style.min.css">
-  <link rel="stylesheet" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.min.css">
+  {{-- Use Bootstrap 4 DataTables theme only (avoid conflict with default DataTables CSS) --}}
 
   <!-- jQuery + DataTables + Bootstrap di head (lokal) agar inline scripts bisa pakai $ dan DataTable -->
   <script src="{{url('dashboard/plugins/jquery/jquery.min.js')}}"></script>
@@ -628,6 +628,55 @@
       background: var(--brand) !important;
       color: #fff !important;
       border-radius: 6px;
+    }
+
+    /* DataTables pagination normalization (light mode) */
+    .dataTables_wrapper .dataTables_paginate .page-link {
+      background: #fff !important;
+      color: #007bff !important;
+      border: 1px solid #dee2e6 !important;
+      box-shadow: none !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .page-link:hover {
+      background: #e9ecef !important;
+      color: #0056b3 !important;
+      border-color: #dee2e6 !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link,
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+      background: #007bff !important;
+      color: #fff !important;
+      border-color: #007bff !important;
+      box-shadow: none !important;
+      border-radius: 4px;
+    }
+    .dataTables_wrapper .dataTables_paginate input {
+      background: #fff !important;
+      color: #495057 !important;
+      border: 1px solid #ced4da !important;
+      border-radius: 4px;
+      box-shadow: none !important;
+    }
+
+    /* DataTables pagination normalization (dark mode) */
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .page-link {
+      background: var(--input-bg) !important;
+      color: var(--text-primary) !important;
+      border-color: var(--input-border) !important;
+      box-shadow: none !important;
+    }
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .page-item.active .page-link,
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+      background: var(--brand) !important;
+      color: #fff !important;
+      border-color: var(--brand) !important;
+      box-shadow: none !important;
+    }
+    body.dark-mode .dataTables_wrapper .dataTables_paginate input {
+      background: var(--input-bg) !important;
+      color: var(--text-primary) !important;
+      border-color: var(--input-border) !important;
+      box-shadow: none !important;
     }
 
     /* Scrollbar modern */
@@ -1373,7 +1422,7 @@
 
 
 
-      "responsive": true,
+      "responsive": false,
       "autoWidth": false,
       dom: 'Bfrtip',
       buttons: [

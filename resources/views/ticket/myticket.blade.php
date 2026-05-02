@@ -167,12 +167,13 @@
 
         {{-- ===== DATATABLE ===== --}}
         <div class="table-responsive">
-          <table id="table-myticket-list" class="table table-bordered table-striped table-sm">
+          <table id="table-myticket-list" class="table table-bordered table-striped table-sm text-nowrap">
             <thead class="thead-dark">
               <tr>
                 <th>#</th>
                 <th>Ticket ID</th>
                 <th>Customer</th>
+                <th>Alamat</th>
                 <th>Status</th>
                 <th>Category</th>
                 <th>Title</th>

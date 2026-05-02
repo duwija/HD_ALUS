@@ -23,7 +23,8 @@ $(document).ready(function () {
   });
 
   var table = $('#table-ticket-list').DataTable({
-    "responsive": true,
+    "responsive": false,
+    "scrollX": true,
     "autoWidth": false,
     "searching": false,
     "language": {

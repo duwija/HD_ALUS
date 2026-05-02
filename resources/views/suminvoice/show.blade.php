@@ -418,7 +418,7 @@
             </form>
             @endif -->
 
-            @if (Auth::user()->privilege == 'admin' || Auth::user()->privilege == 'accounting')
+            @if (in_array(Auth::user()->privilege, ['admin', 'accounting', 'marketing']))
             <button type="button" class="btn btn-success float-left mr-2" onclick="showNotificationOptions('{{ $suminvoice_number->id }}')">
               <i class="fab fa-whatsapp"></i> Send Remainder
             </button>

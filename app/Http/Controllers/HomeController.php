@@ -659,7 +659,7 @@ if (in_array($userPrivilege, $dashboardRoles)) {
         ->get();
 
     // Timeline hari ini — tiket saya
-    $myTicketsTodayList = \App\Ticket::with(['customer', 'steps'])
+    $myTicketsTodayList = \App\Ticket::with(['customer', 'steps', 'assignToUser'])
         ->where('assign_to', $myUserId)
         ->whereDate('date', Carbon::today())
         ->orderBy('time', 'asc')
@@ -722,17 +722,38 @@ if (in_array($userPrivilege, $dashboardRoles)) {
         ->keyBy('id_distrouter');
 
     // 📊 Lead / Marketing Data (untuk home-v4)
-    $leadStages = \App\LeadWorkflow::orderBy('order')->get();
+    $leadStages        = \App\LeadWorkflow::orderBy('order')->get();
+    $lastLeadStageId   = $leadStages->isNotEmpty() ? $leadStages->last()->id : null;
     $leadsByStage = [];
     foreach ($leadStages as $stage) {
-        $leadsByStage[$stage->id] = \App\Customer::where('workflow_stage_id', $stage->id)->count();
+        $leadsByStage[$stage->id] = \App\Customer::where('workflow_stage_id', $stage->id)
+            ->whereNull('converted_at')->whereNull('lost_at')->count();
     }
-    $leadsTotal     = \App\Customer::whereNotNull('workflow_stage_id')->count();
+
+    // Closure: lead "selesai berhasil" = converted_at IS NOT NULL ATAU di stage terakhir
+    $isFinishedLead = function ($q) use ($lastLeadStageId) {
+        $q->where(function ($q2) use ($lastLeadStageId) {
+            $q2->whereNotNull('converted_at');
+            if ($lastLeadStageId) {
+                $q2->orWhere('workflow_stage_id', $lastLeadStageId);
+            }
+        });
+    };
+
+    $leadsTotal     = \App\Customer::whereNotNull('workflow_stage_id')
+                        ->whereNull('converted_at')->whereNull('lost_at')->count();
     $leadsMyCount   = \App\Customer::whereNotNull('workflow_stage_id')
                         ->where('id_sale', $myUserId)->count();
-    $leadsConverted = \App\Customer::whereNotNull('converted_at')
-                        ->whereMonth('converted_at', date('m'))
-                        ->whereYear('converted_at', date('Y'))->count();
+    $leadsConverted = \App\Customer::where(function ($q) use ($lastLeadStageId) {
+                            $q->whereNotNull('converted_at');
+                            if ($lastLeadStageId) {
+                                $q->orWhere('workflow_stage_id', $lastLeadStageId);
+                            }
+                        })
+                        ->where(function ($q) {
+                            $q->whereMonth(\DB::raw('COALESCE(converted_at, updated_at)'), date('m'))
+                              ->whereYear(\DB::raw('COALESCE(converted_at, updated_at)'), date('Y'));
+                        })->count();
     $leadsLost      = \App\Customer::whereNotNull('lost_at')
                         ->whereMonth('lost_at', date('m'))
                         ->whereYear('lost_at', date('Y'))->count();
@@ -741,14 +762,42 @@ if (in_array($userPrivilege, $dashboardRoles)) {
                         ->whereNotNull('workflow_stage_id')
                         ->whereNull('converted_at')
                         ->whereNull('lost_at')
+                        ->when($lastLeadStageId, fn($q) => $q->where('workflow_stage_id', '!=', $lastLeadStageId))
                         ->orderByRaw('expected_close_date IS NULL, expected_close_date ASC')
                         ->limit(15)->get();
-    $allActiveLeads = \App\Customer::with(['workflowStage'])
+    $allActiveLeads = \App\Customer::with(['workflowStage', 'sale_name', 'leadUpdates'])
                         ->whereNotNull('workflow_stage_id')
                         ->whereNull('converted_at')
                         ->whereNull('lost_at')
+                        ->when($lastLeadStageId, fn($q) => $q->where('workflow_stage_id', '!=', $lastLeadStageId))
                         ->orderByRaw('expected_close_date IS NULL, expected_close_date ASC')
-                        ->limit(20)->get();
+                        ->limit(30)->get();
+    $adminInprogressLeads = \App\Customer::where('id_status', 1)
+                        ->whereNull('lost_at')
+                        ->with([
+                            'sale_name',
+                            'customerSteps',
+                            'leadUpdates' => fn($q) => $q->orderBy('created_at', 'desc'),
+                        ])
+                        ->orderBy('customers.created_at', 'desc')
+                        ->limit(30)->get();
+    $adminInprogressLeads->each(function($lead) {
+        $steps  = $lead->customerSteps;
+        $total  = $steps->count();
+        $curId  = $lead->current_step_id;
+        $curIdx = $steps->search(fn($s) => $s->id == $curId);
+        $passed = ($curIdx !== false) ? $curIdx : 0;
+        $pct    = $total > 0 ? round($passed / $total * 100) : 0;
+        if ($curIdx !== false && $curIdx === $total - 1) {
+            $pct = 100;
+        }
+        $lead->workflow_pct     = $pct;
+        $lead->workflow_current = ($curIdx !== false)
+            ? $steps[$curIdx]->name
+            : ($steps->first() ? $steps->first()->name : '-');
+        $lead->workflow_total   = $total;
+        $lead->workflow_passed  = $passed;
+    });
     $recentLeadActivity = \App\LeadUpdate::with('customer')
                         ->orderBy('created_at', 'desc')->limit(10)->get();
 
@@ -811,7 +860,7 @@ if (in_array($userPrivilege, $dashboardRoles)) {
         'oltList', 'distrouterList', 'distrouterStats',
         // lead / marketing data (home-v4)
         'leadStages', 'leadsByStage', 'leadsTotal', 'leadsMyCount',
-        'leadsConverted', 'leadsLost', 'leadsMyActive', 'allActiveLeads',
+        'leadsConverted', 'leadsLost', 'leadsMyActive', 'allActiveLeads', 'adminInprogressLeads',
         'recentLeadActivity',
         // customer growth chart
         'custMonthLabels', 'custNewMonthly', 'custBlockMonthly', 'custInactiveMonthly',

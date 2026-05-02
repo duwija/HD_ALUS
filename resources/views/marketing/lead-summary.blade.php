@@ -223,11 +223,19 @@
               <td>{{ $i+1 }}</td>
               <td>
                 <a href="/customer/{{ $lead->id }}" class="font-weight-bold text-primary">{{ $lead->name }}</a>
-                <br><small class="text-muted">{{ $lead->phone }}</small>
+                @if($lead->phone)
+                  <br><small class="text-muted"><i class="fas fa-phone fa-xs mr-1"></i>{{ $lead->phone }}</small>
+                @endif
+                @if($lead->address)
+                  <br><small class="text-muted"><i class="fas fa-map-marker-alt fa-xs mr-1"></i>{{ \Illuminate\Support\Str::limit($lead->address, 60) }}</small>
+                @endif
               </td>
               <td>
                 @if($lead->sale_name)
                   <span class="badge badge-info">{{ $lead->sale_name->name }}</span>
+                  @if($lead->sale_name->phone ?? null)
+                    <br><small class="text-muted"><i class="fas fa-phone fa-xs mr-1"></i>{{ $lead->sale_name->phone }}</small>
+                  @endif
                 @else
                   <span class="text-muted small">Unassigned</span>
                 @endif

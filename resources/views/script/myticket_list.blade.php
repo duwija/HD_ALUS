@@ -13,7 +13,8 @@
   });
 
   var table = $('#table-myticket-list').DataTable({
-    "responsive": true,
+    "responsive": false,
+    "scrollX": true,
     "autoWidth": false,
     "searching": false,
     "language": {
@@ -64,13 +65,15 @@
     'columnDefs': [
       { "targets": 1, "className": "text-center" },
       { "targets": 2, "className": "text-left" },
-      { "targets": 3, "className": "text-center" },
+      { "targets": 3, "className": "text-left" },
       { "targets": 4, "className": "text-left" },
+      { "targets": 5, "className": "text-left" },
     ],
     columns: [
       { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
       { data: 'id', name: 'id' },
       { data: 'id_customer', name: 'id_customer' },
+      { data: 'address', name: 'address' },
       { data: 'status', name: 'status' },
       { data: 'id_categori', name: 'id_categori' },
       { data: 'tittle', name: 'tittle' },

@@ -207,20 +207,33 @@ if (!function_exists('tenant_env')) {
      */
     function tenant_env($key, $default = null)
     {
-        // Try from tenant's custom env_variables (JSON) first
+        // toTenantArray() merges env_variables directly into the root of the tenant
+        // array, so SUBSCRIPTION_TERMS is at $tenant['SUBSCRIPTION_TERMS'] (or the
+        // exact case it was saved with). We do a case-insensitive scan of the whole
+        // tenant array to handle any capitalization variant.
         $tenant = app()->bound('tenant') ? app('tenant') : null;
-        
-        if ($tenant && isset($tenant['env_variables'][$key])) {
-            return $tenant['env_variables'][$key];
+
+        if ($tenant && is_array($tenant)) {
+            // Exact-case match first (fastest path)
+            if (array_key_exists($key, $tenant)) {
+                return $tenant[$key];
+            }
+
+            // Case-insensitive fallback
+            $needle = strtoupper((string) $key);
+            foreach ($tenant as $tenantKey => $tenantValue) {
+                if (strtoupper((string) $tenantKey) === $needle) {
+                    return $tenantValue;
+                }
+            }
         }
-        
-        // Try from tenant config
+
+        // Try from tenant config (set by TenantMiddleware via Config::set)
         $value = config('tenant.' . strtolower($key));
-        
         if ($value !== null) {
             return $value;
         }
-        
+
         // Fallback to global .env file
         return env(strtoupper($key), $default);
     }

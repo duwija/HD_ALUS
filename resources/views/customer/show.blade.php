@@ -133,10 +133,9 @@
                   @empty
                     <span class="text-muted">-</span>
                   @endforelse
-                  <button type="button" class="btn btn-xs btn-outline-secondary ml-2 py-0 px-2"
-                    data-toggle="modal" data-target="#modal-customer-tags" title="Edit Tags">
+                  <a href="/customer/{{ $customer->id }}/edit" class="btn btn-xs btn-outline-secondary ml-2 py-0 px-2" title="Edit Tags di halaman Edit Customer">
                     <i class="fas fa-pencil-alt"></i>
-                  </button>
+                  </a>
                 </td>
               </tr>
             </tr>
@@ -943,54 +942,6 @@
   </div>
 </div>
 
-<!-- Modal Edit Tags Customer -->
-<div class="modal fade" id="modal-customer-tags">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-info">
-        <h5 class="modal-title text-white"><i class="fas fa-tags mr-2"></i>Edit Tags Customer</h5>
-        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
-      </div>
-      <form action="{{ route('customer.tags.update', $customer->id) }}" method="POST">
-        @csrf
-        <div class="modal-body">
-          <div class="form-group mb-2">
-            <label class="font-weight-bold">Tags</label>
-            @php $selectedCustomerTags = array_keys($customerTags); @endphp
-            <select name="tags[]" id="customer-tags-select" class="form-control select2" multiple data-placeholder="Pilih atau tambah tag...">
-              @foreach($alltags as $tagId => $tagName)
-                <option value="{{ $tagId }}" {{ in_array($tagId, $selectedCustomerTags) ? 'selected' : '' }}>{{ $tagName }}</option>
-              @endforeach
-            </select>
-          </div>
-          <div class="form-group mb-0">
-            <label class="font-weight-bold">Tambah Tag Baru</label>
-            <div class="input-group input-group-sm">
-              <input type="text" id="new_customer_tag" class="form-control" placeholder="Nama tag baru...">
-              <div class="input-group-append">
-                <button type="button" class="btn btn-success" id="btn-add-customer-tag">
-                  <i class="fas fa-plus"></i> Tambah
-                </button>
-              </div>
-            </div>
-            <small class="text-muted">Tag baru akan otomatis tersedia untuk semua ticket dan customer.</small>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <a href="/tag" target="_blank" class="btn btn-outline-secondary mr-auto">
-            <i class="fas fa-cog mr-1"></i>Kelola Tag
-          </a>
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
-          <button type="submit" class="btn btn-info">
-            <i class="fas fa-save mr-1"></i>Simpan Tags
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-
 <div class="modal fade" id="modal-customerfile">
   <div class="modal-dialog modal-lg">
     <div class="modal-content ">
@@ -1161,27 +1112,7 @@ function confirmSubmit(event, message) {
   });
 }
 
-// ── Customer Tag: Add new tag via AJAX ──────────────────────────
-$('#btn-add-customer-tag').on('click', function() {
-  var tagName = $('#new_customer_tag').val().trim();
-  if (!tagName) return;
 
-  $.ajax({
-    url: '/tag/store',
-    method: 'POST',
-    data: { new_tag: tagName, _token: '{{ csrf_token() }}' },
-    success: function(res) {
-      var select = $('#customer-tags-select');
-      // Tambahkan ke select2 dan langsung pilih
-      var option = new Option(res.name, res.id, true, true);
-      select.append(option).trigger('change');
-      $('#new_customer_tag').val('');
-    },
-    error: function(xhr) {
-      alert('Gagal menambahkan tag: ' + (xhr.responseJSON?.message ?? 'Unknown error'));
-    }
-  });
-});
 
 $(document).ready(function() {
 

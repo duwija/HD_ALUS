@@ -112,6 +112,8 @@ class TenantManagementController extends Controller
             }
 
             // Create tenant
+            $featuresInput = (array) $request->input('features', []);
+
             $tenant = Tenant::create([
                 'domain' => $request->domain,
                 'app_name' => $request->app_name,
@@ -124,10 +126,11 @@ class TenantManagementController extends Controller
                 'db_password' => $request->db_password,
                 'mail_from' => $request->mail_from ?? 'admin@' . $request->domain,
                 'features' => [
-                    'accounting' => $request->has('feature_accounting'),
-                    'ticketing' => $request->has('feature_ticketing'),
-                    'whatsapp' => $request->has('feature_whatsapp'),
-                    'payment_gateway' => $request->has('feature_payment'),
+                    'accounting' => (bool) ($featuresInput['accounting'] ?? $request->boolean('feature_accounting')),
+                    'ticketing' => (bool) ($featuresInput['ticketing'] ?? $request->boolean('feature_ticketing')),
+                    'whatsapp' => (bool) ($featuresInput['whatsapp'] ?? $request->boolean('feature_whatsapp')),
+                    'payment_gateway' => (bool) ($featuresInput['payment_gateway'] ?? $request->boolean('feature_payment')),
+                    'auto_isolir' => (bool) ($featuresInput['auto_isolir'] ?? $request->boolean('feature_auto_isolir', true)),
                 ],
                 'env_variables' => $this->processEnvVariables($request),
                 'is_active' => true,
@@ -247,6 +250,7 @@ class TenantManagementController extends Controller
     public function update(Request $request, $id)
     {
         $tenant = Tenant::findOrFail($id);
+        $featuresInput = (array) $request->input('features', []);
 
         $validator = Validator::make($request->all(), [
             'domain' => 'required|unique:isp_master.tenants,domain,' . $id,
@@ -295,10 +299,11 @@ class TenantManagementController extends Controller
                 'db_username' => $request->db_username,
                 'mail_from' => $request->mail_from,
                 'features' => [
-                    'accounting' => $request->has('feature_accounting'),
-                    'ticketing' => $request->has('feature_ticketing'),
-                    'whatsapp' => $request->has('feature_whatsapp'),
-                    'payment_gateway' => $request->has('feature_payment'),
+                    'accounting' => (bool) ($featuresInput['accounting'] ?? $request->boolean('feature_accounting')),
+                    'ticketing' => (bool) ($featuresInput['ticketing'] ?? $request->boolean('feature_ticketing')),
+                    'whatsapp' => (bool) ($featuresInput['whatsapp'] ?? $request->boolean('feature_whatsapp')),
+                    'payment_gateway' => (bool) ($featuresInput['payment_gateway'] ?? $request->boolean('feature_payment')),
+                    'auto_isolir' => (bool) ($featuresInput['auto_isolir'] ?? $request->boolean('feature_auto_isolir')),
                 ],
                 'env_variables' => $this->processEnvVariables($request),
                 'is_active' => $request->has('is_active'),

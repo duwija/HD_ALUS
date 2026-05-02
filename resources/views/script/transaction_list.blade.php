@@ -11,7 +11,8 @@
 
 
   var table = $('#table-transaction-list').DataTable({
-    "responsive": true,
+    "responsive": false,
+    "scrollX": true,
     "autoWidth": false,
     "searching": false,
     "language": {
@@ -35,7 +36,8 @@
         "parameter": $(document.querySelector('[name="parameter"]')).val(),
         "updatedBy": $(document.querySelector('[name="updatedBy"]')).val(),   
         "id_merchant": $(document.querySelector('[name="id_merchant"]')).val(), 
-        "kasbank": $(document.querySelector('[name="kasbank"]')).val(),               
+        "kasbank": $(document.querySelector('[name="kasbank"]')).val(),
+        "id_plan": $(document.querySelector('[name="id_plan"]')).val(),               
       } );
      },
      "dataSrc": function(json) {
@@ -154,32 +156,32 @@
 
 },
 {
-  "targets": 6, // your case first column
+  "targets": 7, // address
   "className": "text-left",
 
 },
 {
-  "targets": 7, // your case first columnzZxZ
+  "targets": 8, // note
   "className": "text-left",
 
 },
 {
-  "targets": 8, // your case first columnzZxZ
+  "targets": 10, // total amount
   "className": "text-right font-weight-bold",
 
 },
 {
-  "targets": 9, // your case first columnzZxZ
+  "targets": 11, // payment fee
   "className": "text-right font-weight-bold",
 
 },
 {
-  "targets": 10, // your case first columnzZxZ
+  "targets": 12, // status
   "className": "text-center",
 
 },
 {
-  "targets": 12, // your case first column
+  "targets": 13, // kasbank
   "className": "text-center",
 
 },
@@ -190,6 +192,7 @@
     {data: 'number', name: 'number'},
     {data: 'cid', name: 'cid'},
     {data: 'name', name: 'name'},
+    {data: 'plan', name: 'plan'},
     {data: 'merchant', name: 'merchant'},
     {data: 'address', name: 'address'},
     {data: 'note', name: 'note'},

@@ -73,6 +73,9 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
 | 57 | `WA_TAMPLATE_ID_2` | WA Qontak | Tidak |
 | 58 | `WA_TAMPLATE_ID_3` | WA Qontak | Tidak |
 | 59 | `WA_TAMPLATE_ID_4` | WA Qontak | Tidak |
+| 60 | `subscription_terms_title` | Perusahaan | Tidak |
+| 61 | `subscription_terms` | Perusahaan | Tidak |
+| 62 | `subscription_terms_agreement` | Perusahaan | Tidak |
 
 ---
 
@@ -245,6 +248,9 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
   "company_address1": "Jl. Raya Denpasar No. 1",
   "company_address2": "Bali, Indonesia 80361",
   "inv_note": "Terima kasih atas pembayaran Anda tepat waktu.",
+  "subscription_terms_title": "Syarat & Ketentuan Berlangganan Layanan Internet PT Kencana Network",
+  "subscription_terms": "Berlangganan minimal 1 tahun (12 bulan), jika dilanggar dikenakan sanksi Rp 500.000\nPerangkat Wifi dan kabel dipinjamkan, wajib dikembalikan saat berhenti berlangganan\nDowngrade paket hanya setelah 6 bulan berlangganan",
+  "subscription_terms_agreement": "Dengan menandatangani formulir ini, saya menyatakan bahwa seluruh informasi yang saya berikan adalah benar dan saya menyetujui syarat dan ketentuan berlangganan layanan internet PT Kencana Network.",
   "domain_name": "kencana.co.id",
   "signature": "Tim Kencana Network"
 }
@@ -258,6 +264,9 @@ Setiap tenant bisa memiliki konfigurasi ENV yang berbeda-beda, disimpan di kolom
 | `company_address1` | Alamat baris 1 |
 | `company_address2` | Alamat baris 2 (kota, kodepos) |
 | `inv_note` | Catatan tambahan di bagian bawah invoice |
+| `subscription_terms_title` | Judul section syarat & ketentuan pada PDF formulir pendaftaran |
+| `subscription_terms` | Daftar syarat berlangganan. Pisahkan per poin dengan newline (Enter) atau `\n` |
+| `subscription_terms_agreement` | Kalimat persetujuan pelanggan di bawah daftar syarat |
 | `domain_name` | Domain utama perusahaan (untuk link di email) |
 | `signature` | Tanda tangan / nama pengirim di email |
 

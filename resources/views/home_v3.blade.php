@@ -351,7 +351,7 @@ body.dark-mode .grp-stat { background: var(--bg-surface-2) !important; }
 
   {{-- ══ GROUP TICKET STATUS CARDS ═══════════════════════════════════ --}}
   <div class="row mb-3">
-    <div class="col-7">
+    <div class="col-12 col-md-7">
       <div class="card shadow-sm" style="border:1px solid #e9ecef;border-radius:10px">
         <div class="card-header py-2 px-3 border-bottom d-flex align-items-center justify-content-between" style="background:#f8f9fa;border-radius:10px 10px 0 0">
           <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#666">
@@ -404,7 +404,7 @@ body.dark-mode .grp-stat { background: var(--bg-surface-2) !important; }
           $isMe = $t->assign_to == Auth::user()->id;
           if ($loop->first) echo '<div class="row" style="margin:0 -3px">';
         @endphp
-        <div class="col-6" style="padding:0 3px 6px">
+        <div class="col-12 col-md-6" style="padding:0 3px 6px">
           <div class="tkt-row mb-0" style="border-left-color:{{ $bc }};background:{{ $bg }};height:100%">
             <div class="d-flex align-items-start justify-content-between">
               <div class="flex-fill" style="min-width:0">
@@ -447,96 +447,125 @@ body.dark-mode .grp-stat { background: var(--bg-surface-2) !important; }
 
     {{-- Distribution Routers --}}
     <div class="col-md-6 mb-2">
-      <div class="net-section-head">
-        <i class="fas fa-sitemap mr-1 text-primary"></i>Distribution Routers
-        <button id="refreshAllRouters" class="btn btn-sm btn-outline-secondary float-right" style="font-size:10px;padding:1px 8px;border-radius:6px">
-          <i class="fas fa-sync-alt mr-1"></i>Refresh All
-        </button>
-      </div>
-      @if($distrouterList->isEmpty())
-        <div class="empty-state py-3 small"><i class="fas fa-server mb-1 d-block"></i>Tidak ada Distrouter</div>
-      @else
-      <div class="row" id="routerCards">
-        @foreach($distrouterList as $dr)
-        <div class="col-sm-4 mb-2">
-          <div class="net-card-wrap">
-            <div class="net-card-header" style="background:linear-gradient(135deg,#1e88e5,#0d47a1)">
-              <a href="{{ url('distrouter/'.$dr->id) }}" class="net-name" title="{{ $dr->name }}">
-                <i class="fas fa-server mr-1" style="font-size:11px"></i>{{ $dr->name }}
-              </a>
-              <button class="net-refresh-btn refresh-dr" data-id="{{ $dr->id }}" title="Refresh">
-                <i class="fas fa-sync-alt"></i>
-              </button>
-            </div>
-            <div class="net-card-body">
-              <div id="dr-badges-{{ $dr->id }}" class="net-badges">
-                <span class="net-badge nb-total"><i class="fas fa-circle" style="font-size:6px"></i>Loading...</span>
-              </div>
-              <div class="net-ip-row">
-                <i class="fas fa-globe mr-1"></i>
-                @if($dr->web)
-                  <a href="{{ $dr->web }}" target="_blank">{{ $dr->ip }}</a>
-                @else
-                  {{ $dr->ip }}
-                @endif
-              </div>
-            </div>
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between" style="background:#f4f6f9;border-bottom:1px solid #e4e7ee">
+          <span style="font-weight:700;font-size:.82rem;color:#3949ab">
+            <i class="fas fa-project-diagram mr-1"></i>Distribution Routers
+            <a href="{{ url('distrouter') }}" style="font-size:.72rem;font-weight:400;color:#9aa;margin-left:6px">{{ $distrouterList->count() }} device &rarr;</a>
+          </span>
+          <button id="refreshAllRouters" class="btn btn-sm btn-outline-secondary" style="font-size:10px;padding:1px 8px;border-radius:6px">
+            <i class="fas fa-sync-alt mr-1"></i>Refresh All
+          </button>
+        </div>
+        @if($distrouterList->isEmpty())
+          <div class="card-body text-center text-muted small py-3"><i class="fas fa-server mb-1 d-block"></i>Tidak ada Distrouter</div>
+        @else
+        <div class="card-body p-0">
+          <div style="max-height:330px;overflow-y:auto">
+            <table class="table table-sm table-hover mb-0" style="font-size:.8rem">
+              <thead class="thead-light" style="position:sticky;top:0;z-index:1">
+                <tr>
+                  <th style="width:22px">#</th>
+                  <th>Nama</th>
+                  <th>IP</th>
+                  <th class="text-center" style="color:#43a047">Online</th>
+                  <th class="text-center" style="color:#9e9e9e">Offline</th>
+                  <th class="text-center" style="color:#e53935">Disable</th>
+                  <th style="width:24px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @foreach($distrouterList as $i => $dr)
+                <tr id="dr-row-{{ $dr->id }}">
+                  <td style="color:#aaa">{{ $i+1 }}</td>
+                  <td>
+                    <a href="{{ url('distrouter/'.$dr->id) }}" style="font-weight:600;color:inherit">{{ $dr->name }}</a>
+                  </td>
+                  <td>
+                    @if($dr->web)
+                      <a href="{{ $dr->web }}" target="_blank"><code style="font-size:10px;background:#f5f5f5;padding:1px 4px;border-radius:3px">{{ $dr->ip ?? '-' }}</code></a>
+                    @else
+                      <code style="font-size:10px;background:#f5f5f5;padding:1px 4px;border-radius:3px">{{ $dr->ip ?? '-' }}</code>
+                    @endif
+                  </td>
+                  <td class="text-center dr-col-online-{{ $dr->id }}" style="font-weight:700;color:#43a047"><i class="fas fa-spinner fa-spin" style="font-size:9px"></i></td>
+                  <td class="text-center dr-col-offline-{{ $dr->id }}" style="font-weight:700;color:#9e9e9e">-</td>
+                  <td class="text-center dr-col-disabled-{{ $dr->id }}" style="font-weight:700;color:#e53935">-</td>
+                  <td>
+                    <button class="btn btn-link btn-sm p-0 refresh-dr" data-id="{{ $dr->id }}" title="Refresh" style="color:#aaa;font-size:11px">
+                      <i class="fas fa-sync-alt"></i>
+                    </button>
+                  </td>
+                </tr>
+                @endforeach
+              </tbody>
+            </table>
           </div>
         </div>
-        @endforeach
+        @endif
       </div>
-      @endif
     </div>
 
     {{-- OLT --}}
     <div class="col-md-6 mb-2">
-      <div class="net-section-head">
-        <i class="fas fa-network-wired mr-1 text-info"></i>OLT Devices
-        <button id="refreshAllOlts" class="btn btn-sm btn-outline-secondary float-right" style="font-size:10px;padding:1px 8px;border-radius:6px">
-          <i class="fas fa-sync-alt mr-1"></i>Refresh All
-        </button>
-      </div>
-      @if($oltList->isEmpty())
-        <div class="empty-state py-3 small"><i class="fas fa-server mb-1 d-block"></i>Tidak ada OLT</div>
-      @else
-      <div class="row" id="oltCards">
-        @foreach($oltList as $olt)
-        <div class="col-sm-4 mb-2">
-          @php
-            $oltVendorColors = [
-              'zte'       => ['linear-gradient(135deg,#00acc1,#006064)', '#00acc1'],
-              'huawei'    => ['linear-gradient(135deg,#e53935,#7b1fa2)', '#e53935'],
-              'cdata'     => ['linear-gradient(135deg,#43a047,#1b5e20)', '#43a047'],
-              'hsgq'      => ['linear-gradient(135deg,#fb8c00,#e65100)', '#fb8c00'],
-              'fiberhome' => ['linear-gradient(135deg,#8e24aa,#4a148c)', '#8e24aa'],
-            ];
-            $vc = $oltVendorColors[$olt->vendor ?? ''] ?? ['linear-gradient(135deg,#546e7a,#263238)', '#546e7a'];
-          @endphp
-          <div class="net-card-wrap">
-            <div class="net-card-header" style="background:{{ $vc[0] }}">
-              <a href="{{ url('olt/'.$olt->id) }}" class="net-name" title="{{ $olt->name }}">
-                <i class="fas fa-hdd mr-1" style="font-size:11px"></i>{{ $olt->name }}
-              </a>
-              <button class="net-refresh-btn refresh-olt" data-id="{{ $olt->id }}" title="Refresh">
-                <i class="fas fa-sync-alt"></i>
-              </button>
-            </div>
-            <div class="net-card-body">
-              <div id="olt-badges-{{ $olt->id }}" class="net-badges">
-                <span class="net-badge nb-total"><i class="fas fa-circle" style="font-size:6px"></i>Loading...</span>
-              </div>
-              <div class="net-ip-row">
-                <i class="fas fa-map-marker-alt mr-1"></i>{{ $olt->ip }}
-                @if($olt->vendor)
-                  <span class="badge badge-secondary ml-1" style="font-size:9px">{{ strtoupper($olt->vendor) }}</span>
-                @endif
-              </div>
-            </div>
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between" style="background:#f4f6f9;border-bottom:1px solid #e4e7ee">
+          <span style="font-weight:700;font-size:.82rem;color:#0097a7">
+            <i class="fas fa-server mr-1"></i>OLT Devices
+            <a href="{{ url('olt') }}" style="font-size:.72rem;font-weight:400;color:#9aa;margin-left:6px">{{ $oltList->count() }} unit &rarr;</a>
+          </span>
+          <button id="refreshAllOlts" class="btn btn-sm btn-outline-secondary" style="font-size:10px;padding:1px 8px;border-radius:6px">
+            <i class="fas fa-sync-alt mr-1"></i>Refresh All
+          </button>
+        </div>
+        @if($oltList->isEmpty())
+          <div class="card-body text-center text-muted small py-3"><i class="fas fa-server mb-1 d-block"></i>Tidak ada OLT</div>
+        @else
+        <div class="card-body p-0">
+          <div style="max-height:330px;overflow-y:auto">
+            <table class="table table-sm table-hover mb-0" style="font-size:.8rem">
+              <thead class="thead-light" style="position:sticky;top:0;z-index:1">
+                <tr>
+                  <th style="width:22px">#</th>
+                  <th>Nama</th>
+                  <th>IP</th>
+                  <th class="text-center" style="color:#1565c0">Total</th>
+                  <th class="text-center" style="color:#2e7d32">Online</th>
+                  <th class="text-center" style="color:#e65100">LOS</th>
+                  <th class="text-center" style="color:#880e4f">Dying</th>
+                  <th class="text-center" style="color:#c62828">Offline</th>
+                  <th style="width:24px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @foreach($oltList as $i => $olt)
+                <tr id="olt-row-{{ $olt->id }}">
+                  <td style="color:#aaa">{{ $i+1 }}</td>
+                  <td>
+                    <a href="{{ url('olt/'.$olt->id) }}" style="font-weight:600;color:inherit">{{ $olt->name }}</a>
+                    @if($olt->vendor)
+                      <span class="badge badge-secondary ml-1" style="font-size:9px">{{ strtoupper($olt->vendor) }}</span>
+                    @endif
+                  </td>
+                  <td><code style="font-size:10px;background:#f5f5f5;padding:1px 4px;border-radius:3px">{{ $olt->ip ?? '-' }}</code></td>
+                  <td class="text-center olt-col-total" style="font-weight:700;color:#1565c0"><i class="fas fa-spinner fa-spin" style="font-size:9px"></i></td>
+                  <td class="text-center olt-col-online" style="font-weight:700;color:#2e7d32">-</td>
+                  <td class="text-center olt-col-los" style="font-weight:700;color:#e65100">-</td>
+                  <td class="text-center olt-col-dyingasp" style="font-weight:700;color:#880e4f">-</td>
+                  <td class="text-center olt-col-offline" style="font-weight:700;color:#c62828">-</td>
+                  <td>
+                    <button class="btn btn-link btn-sm p-0 refresh-olt" data-id="{{ $olt->id }}" title="Refresh" style="color:#aaa;font-size:11px">
+                      <i class="fas fa-sync-alt"></i>
+                    </button>
+                  </td>
+                </tr>
+                @endforeach
+              </tbody>
+            </table>
           </div>
         </div>
-        @endforeach
+        @endif
       </div>
-      @endif
     </div>
 
   </div>
@@ -588,6 +617,9 @@ body.dark-mode .grp-stat { background: var(--bg-surface-2) !important; }
                   <span><i class="fas fa-user mr-1"></i>
                     <a href="{{ url('customer/'.$t->customer->id) }}" style="color:#555;text-decoration:none">{{ $t->customer->name }}</a>
                   </span>
+                  @if($t->customer->address)
+                  <span style="width:100%;flex-basis:100%"><i class="fas fa-map-marker-alt mr-1"></i>{{ $t->customer->address }}</span>
+                  @endif
                 @elseif($t->called_by)
                   <span><i class="fas fa-user mr-1"></i>{{ $t->called_by }}</span>
                 @endif
@@ -596,6 +628,12 @@ body.dark-mode .grp-stat { background: var(--bg-surface-2) !important; }
                 @endif
                 @if($t->create_by)
                   <span><i class="fas fa-pencil-alt mr-1"></i>{{ $t->create_by }}</span>
+                @endif
+                @if($t->assignToUser)
+                  <span><i class="fas fa-user-check mr-1"></i>{{ $t->assignToUser->name }}</span>
+                @endif
+                @if($t->member)
+                  <span><i class="fas fa-users mr-1"></i>{{ $t->member }}</span>
                 @endif
               </div>
               {{-- Workflow progress --}}
@@ -707,60 +745,55 @@ body.dark-mode .grp-stat { background: var(--bg-surface-2) !important; }
 
   // ── Network live stats ─────────────────────────────────────
   function renderDrBadges(id, data) {
-    var t = data.pppUserCount     || 0;
     var a = data.pppActiveCount   || 0;
     var o = data.pppOfflineCount  || 0;
     var d = data.pppDisabledCount || 0;
-    var html = '';
-    html += '<span class="net-badge nb-total"><i class="fas fa-circle" style="font-size:6px"></i>Total: '+t+'</span>';
-    html += '<span class="net-badge nb-active"><i class="fas fa-circle" style="font-size:6px"></i>Active: '+a+'</span>';
-    html += '<span class="net-badge nb-offline"><i class="fas fa-circle" style="font-size:6px"></i>Offline: '+o+'</span>';
-    html += '<span class="net-badge nb-disabled"><i class="fas fa-circle" style="font-size:6px"></i>Disabled: '+d+'</span>';
-    $('#dr-badges-'+id).html(html);
+    $('#dr-row-'+id+' .dr-col-online-'+id).text(a);
+    $('#dr-row-'+id+' .dr-col-offline-'+id).text(o);
+    $('#dr-row-'+id+' .dr-col-disabled-'+id).text(d);
   }
 
   function fetchDr(id, cb) {
-    $('#dr-badges-'+id).html('<span class="net-badge nb-total"><i class="fas fa-spinner fa-spin mr-1" style="font-size:9px"></i>Loading...</span>');
+    $('#dr-row-'+id+' .dr-col-online-'+id).html('<i class="fas fa-spinner fa-spin" style="font-size:9px"></i>');
     $.ajax({ url: '/distrouter/getrouterinfo/'+id, method: 'GET', dataType: 'json' })
       .done(function(r) {
         if (r && (r.success || r.pppUserCount !== undefined)) {
           renderDrBadges(id, r);
         } else {
-          $('#dr-badges-'+id).html('<span class="net-badge nb-err"><i class="fas fa-exclamation-triangle mr-1"></i>'+(r.error||'Error')+'</span>');
+          $('#dr-row-'+id+' .dr-col-online-'+id).html('<span style="color:#e53935;font-size:9px"><i class="fas fa-exclamation-triangle"></i></span>');
+          $('#dr-row-'+id+' .dr-col-offline-'+id).text('-');
+          $('#dr-row-'+id+' .dr-col-disabled-'+id).text('-');
         }
         if (cb) cb();
       })
       .fail(function() {
-        $('#dr-badges-'+id).html('<span class="net-badge nb-err"><i class="fas fa-times-circle mr-1"></i>Gagal</span>');
+        $('#dr-row-'+id+' .dr-col-online-'+id).html('<span style="color:#e53935;font-size:9px"><i class="fas fa-times-circle"></i></span>');
         if (cb) cb();
       });
   }
 
   function renderOltBadges(id, info) {
-    var html = '';
-    html += '<span class="net-badge nb-total"><i class="fas fa-circle" style="font-size:6px"></i>Total: '+(info.onuCount||0)+'</span>';
-    html += '<span class="net-badge nb-online"><i class="fas fa-circle" style="font-size:6px"></i>Online: '+(info.working||info.online||0)+'</span>';
-    if ((info.los||0) > 0)       html += '<span class="net-badge nb-los"><i class="fas fa-circle" style="font-size:6px"></i>LOS: '+info.los+'</span>';
-    else                          html += '<span class="net-badge nb-los" style="opacity:.5">LOS: 0</span>';
-    if ((info.dyinggasp||0) > 0) html += '<span class="net-badge nb-dyingasp"><i class="fas fa-circle" style="font-size:6px"></i>Dyingasp: '+info.dyinggasp+'</span>';
-    else                          html += '<span class="net-badge nb-dyingasp" style="opacity:.5">Dyingasp: 0</span>';
-    html += '<span class="net-badge nb-offline"><i class="fas fa-circle" style="font-size:6px"></i>Offline: '+(info.offline||0)+'</span>';
-    $('#olt-badges-'+id).html(html);
+    var row = $('#olt-row-'+id);
+    row.find('.olt-col-total').text(info.onuCount || 0);
+    row.find('.olt-col-online').text(info.working || info.online || 0);
+    row.find('.olt-col-los').text(info.los || 0);
+    row.find('.olt-col-dyingasp').text(info.dyinggasp || 0);
+    row.find('.olt-col-offline').text(info.offline || 0);
   }
 
   function fetchOlt(id, cb) {
-    $('#olt-badges-'+id).html('<span class="net-badge nb-total"><i class="fas fa-spinner fa-spin mr-1" style="font-size:9px"></i>Loading...</span>');
+    $('#olt-row-'+id+' .olt-col-total').html('<i class="fas fa-spinner fa-spin" style="font-size:9px"></i>');
     $.ajax({ url: '/olt/getoltinfo/'+id, method: 'GET', dataType: 'json' })
       .done(function(r) {
         if (r && r.success && r.oltInfo) {
           renderOltBadges(id, r.oltInfo);
         } else {
-          $('#olt-badges-'+id).html('<span class="net-badge nb-err"><i class="fas fa-exclamation-triangle mr-1"></i>'+(r.error||'Tidak Terhubung')+'</span>');
+          $('#olt-row-'+id+' .olt-col-total').html('<span style="color:#e53935;font-size:9px"><i class="fas fa-exclamation-triangle"></i></span>');
         }
         if (cb) cb();
       })
       .fail(function() {
-        $('#olt-badges-'+id).html('<span class="net-badge nb-err"><i class="fas fa-times-circle mr-1"></i>Gagal</span>');
+        $('#olt-row-'+id+' .olt-col-total').html('<span style="color:#e53935;font-size:9px"><i class="fas fa-times-circle"></i></span>');
         if (cb) cb();
       });
   }
@@ -776,13 +809,13 @@ body.dark-mode .grp-stat { background: var(--bg-surface-2) !important; }
   // Refresh individual
   $(document).on('click', '.refresh-dr', function() {
     var id = $(this).data('id');
-    $(this).find('i').addClass('fa-spin');
-    fetchDr(id, () => $('#dr-badges-'+id).closest('.net-card-wrap').find('.refresh-dr i').removeClass('fa-spin'));
+    var $ic = $(this).find('i').addClass('fa-spin');
+    fetchDr(id, function() { $ic.removeClass('fa-spin'); });
   });
   $(document).on('click', '.refresh-olt', function() {
     var id = $(this).data('id');
-    $(this).find('i').addClass('fa-spin');
-    fetchOlt(id, () => $('#olt-badges-'+id).closest('.net-card-wrap').find('.refresh-olt i').removeClass('fa-spin'));
+    var $ic = $(this).find('i').addClass('fa-spin');
+    fetchOlt(id, function() { $ic.removeClass('fa-spin'); });
   });
 
   // Refresh all

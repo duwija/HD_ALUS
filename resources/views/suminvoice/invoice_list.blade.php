@@ -60,6 +60,16 @@
           </div>
 
           <div>
+            <label class="small text-muted d-block mb-0">Plan</label>
+            <select name="id_plan" id="id_plan" class="form-control form-control-sm" style="width:140px">
+              <option value="">All Plan</option>
+              @foreach ($plans as $id => $planName)
+              <option value="{{ $id }}">{{ $planName }}</option>
+              @endforeach
+            </select>
+          </div>
+
+          <div>
             <label class="small text-muted d-block mb-0">Status</label>
             <select name="paymentStatus" id="paymentStatus" class="form-control form-control-sm" style="width:110px">
               <option value="">All</option>
@@ -215,6 +225,7 @@
             <th>Invoice No</th>
             <th class="text-center">CID</th>
             <th>Name</th>
+            <th>Plan</th>
             <th>Merchant</th>
             <th>Address</th>
             <th class="text-center">Period</th>
