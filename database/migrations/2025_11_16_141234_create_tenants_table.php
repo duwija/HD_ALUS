@@ -13,6 +13,10 @@ class CreateTenantsTable extends Migration
      */
     public function up()
     {
+        if (Schema::hasTable('tenants')) {
+            return;
+        }
+
         Schema::create('tenants', function (Blueprint $table) {
             $table->id();
             $table->string('domain')->unique();

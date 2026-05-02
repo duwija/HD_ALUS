@@ -13,6 +13,10 @@ class AddGroupToMapLayersTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('map_layers') || Schema::hasColumn('map_layers', 'group')) {
+            return;
+        }
+
         Schema::table('map_layers', function (Blueprint $table) {
             $table->string('group')->nullable()->after('type');
         });
@@ -25,6 +29,10 @@ class AddGroupToMapLayersTable extends Migration
      */
     public function down()
     {
+        if (!Schema::hasTable('map_layers') || !Schema::hasColumn('map_layers', 'group')) {
+            return;
+        }
+
         Schema::table('map_layers', function (Blueprint $table) {
             $table->dropColumn('group');
         });

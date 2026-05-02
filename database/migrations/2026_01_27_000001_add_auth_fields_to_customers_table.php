@@ -13,10 +13,22 @@ class AddAuthFieldsToCustomersTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('customers')) {
+            return;
+        }
+
         Schema::table('customers', function (Blueprint $table) {
-            $table->string('portal_password', 225)->nullable()->after('ip')->comment('Customer portal login password');
-            $table->rememberToken()->after('portal_password');
-            $table->timestamp('last_login_at')->nullable()->after('remember_token');
+            if (!Schema::hasColumn('customers', 'portal_password')) {
+                $table->string('portal_password', 225)->nullable()->after('ip')->comment('Customer portal login password');
+            }
+
+            if (!Schema::hasColumn('customers', 'remember_token')) {
+                $table->rememberToken()->after('portal_password');
+            }
+
+            if (!Schema::hasColumn('customers', 'last_login_at')) {
+                $table->timestamp('last_login_at')->nullable()->after('remember_token');
+            }
         });
     }
 
@@ -27,8 +39,28 @@ class AddAuthFieldsToCustomersTable extends Migration
      */
     public function down()
     {
+        if (!Schema::hasTable('customers')) {
+            return;
+        }
+
         Schema::table('customers', function (Blueprint $table) {
-            $table->dropColumn(['portal_password', 'remember_token', 'last_login_at']);
+            $columns = [];
+
+            if (Schema::hasColumn('customers', 'portal_password')) {
+                $columns[] = 'portal_password';
+            }
+
+            if (Schema::hasColumn('customers', 'remember_token')) {
+                $columns[] = 'remember_token';
+            }
+
+            if (Schema::hasColumn('customers', 'last_login_at')) {
+                $columns[] = 'last_login_at';
+            }
+
+            if (!empty($columns)) {
+                $table->dropColumn($columns);
+            }
         });
     }
 }

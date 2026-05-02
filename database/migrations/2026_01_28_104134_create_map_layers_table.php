@@ -13,6 +13,10 @@ class CreateMapLayersTable extends Migration
      */
     public function up()
     {
+        if (Schema::hasTable('map_layers')) {
+            return;
+        }
+
         Schema::create('map_layers', function (Blueprint $table) {
             $table->id();
             $table->string('name')->nullable(); // Nama layer

@@ -13,10 +13,22 @@ class AddPaymentGatewayConfigToTenantsTable extends Migration
      */
     public function up()
     {
+        if (!Schema::hasTable('tenants')) {
+            return;
+        }
+
         Schema::table('tenants', function (Blueprint $table) {
-            $table->tinyInteger('payment_bumdes_enabled')->default(1)->after('features');
-            $table->tinyInteger('payment_winpay_enabled')->default(1)->after('payment_bumdes_enabled');
-            $table->tinyInteger('payment_tripay_enabled')->default(1)->after('payment_winpay_enabled');
+            if (!Schema::hasColumn('tenants', 'payment_bumdes_enabled')) {
+                $table->tinyInteger('payment_bumdes_enabled')->default(1)->after('features');
+            }
+
+            if (!Schema::hasColumn('tenants', 'payment_winpay_enabled')) {
+                $table->tinyInteger('payment_winpay_enabled')->default(1)->after('payment_bumdes_enabled');
+            }
+
+            if (!Schema::hasColumn('tenants', 'payment_tripay_enabled')) {
+                $table->tinyInteger('payment_tripay_enabled')->default(1)->after('payment_winpay_enabled');
+            }
         });
     }
 
@@ -27,8 +39,28 @@ class AddPaymentGatewayConfigToTenantsTable extends Migration
      */
     public function down()
     {
+        if (!Schema::hasTable('tenants')) {
+            return;
+        }
+
         Schema::table('tenants', function (Blueprint $table) {
-            $table->dropColumn(['payment_bumdes_enabled', 'payment_winpay_enabled', 'payment_tripay_enabled']);
+            $columns = [];
+
+            if (Schema::hasColumn('tenants', 'payment_bumdes_enabled')) {
+                $columns[] = 'payment_bumdes_enabled';
+            }
+
+            if (Schema::hasColumn('tenants', 'payment_winpay_enabled')) {
+                $columns[] = 'payment_winpay_enabled';
+            }
+
+            if (Schema::hasColumn('tenants', 'payment_tripay_enabled')) {
+                $columns[] = 'payment_tripay_enabled';
+            }
+
+            if (!empty($columns)) {
+                $table->dropColumn($columns);
+            }
         });
     }
 }

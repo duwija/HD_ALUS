@@ -25,11 +25,17 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 use Barryvdh\DomPDF\Facade as PDF;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Schema;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use App\Helpers\WaGatewayHelper;
 
 class CustomerController extends Controller
 {
+    private function hasCustomerTagTables(): bool
+    {
+        return Schema::hasTable('customer_tag_definitions') && Schema::hasTable('customer_tag_map');
+    }
+
     // Update workflow stage
     public function updateWorkflow(Request $request, $id)
     {
@@ -455,7 +461,9 @@ public function subscribeform($id)
             ->get();
         $totalDeletedCustomers = $dailyDeletedCustomers->sum('deleted_count');
 
-        $tags = \App\CustomerTag::pluck('name', 'id');
+        $tags = $this->hasCustomerTagTables()
+            ? \App\CustomerTag::pluck('name', 'id')
+            : collect();
 
         return view('customer/index', [
             'totalNewCustomers' => $totalNewCustomers,
@@ -506,6 +514,8 @@ public function subscribeform($id)
 
   public function table_customer(Request $request)
   {
+        $canUseTagFilter = $this->hasCustomerTagTables();
+
     // Start building the query
     $customerQuery = \App\Customer::select('id', 'customer_id', 'name', 'address', 'id_merchant', 'billing_start', 'isolir_date', 'id_plan', 'id_status', 'id_sale','id_distrouter','notification','fcm_token');
 // Hitung jumlah pelanggan berdasarkan status
@@ -529,7 +539,7 @@ public function subscribeform($id)
     ->when(!empty($request->id_merchant), function ($query) use ($request) {
         $query->where('id_merchant', $request->id_merchant);
     })
-    ->when(!empty($request->id_tag), function ($query) use ($request) {
+    ->when($canUseTagFilter && !empty($request->id_tag), function ($query) use ($request) {
         $tagIds = (array) $request->id_tag;
         foreach ($tagIds as $tagId) {
             $query->whereHas('tags', function ($q) use ($tagId) {
@@ -574,7 +584,7 @@ public function subscribeform($id)
     }
 
     // Filter by tag (AND: customer must have ALL selected tags)
-    if (!empty($request->id_tag)) {
+    if ($canUseTagFilter && !empty($request->id_tag)) {
         $tagIds = (array) $request->id_tag;
         foreach ($tagIds as $tagId) {
             $customerQuery->whereHas('tags', function ($q) use ($tagId) {

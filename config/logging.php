@@ -125,6 +125,12 @@ return [
             'level' => 'info',
             'days' => 90,
         ],
+        'mikrotik' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/mikrotik.log'),
+            'level' => 'info',
+            'days' => 90,
+        ],
 
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
