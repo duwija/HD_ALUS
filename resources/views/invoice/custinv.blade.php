@@ -9,8 +9,8 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary:   #667eea;
-            --primary-d: #5a67d8;
+            --primary:   #2563eb;
+            --primary-d: #1d4ed8;
             --success:   #10b981;
             --warning:   #f59e0b;
             --danger:    #ef4444;
@@ -34,7 +34,7 @@
         /* Bundle sticky bar */
         .bundle-bar {
             position: fixed; bottom: 0; left: 0; right: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             padding: 12px 16px 16px;
             box-shadow: 0 -4px 20px rgba(0,0,0,.18);
             display: flex; z-index: 98;
@@ -62,7 +62,7 @@
         .btn-bundle-pay.primary:hover { background: #fff; }
         /* Header */
         .page-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             padding: 20px 16px 28px;
             text-align: center;
             color: #fff;

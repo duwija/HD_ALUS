@@ -771,13 +771,15 @@ public function sendPaymentLinkWa(Request $request, $id)
 
         $encrypted = Crypt::encryptString($customer->id);
         $paymentUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . '/invoice/cst/' . $encrypted;
+        $waPaymentUrl = \App\Services\WaService::maybeShortenUrlForGateway($paymentUrl);
 
         $caption = "Link pembayaran\n"
             . "Customer ID: {$customer->customer_id}\n"
             . "Nama: {$customer->name}\n"
-            . "Silahkan scan QRcode ini untuk melihat daftar tagihan anda";
+            . "Silahkan scan QRcode ini untuk melihat daftar tagihan anda\n"
+            . $waPaymentUrl;
 
-        $qrBinary = QrCode::format('png')->size(800)->margin(1)->generate($paymentUrl);
+        $qrBinary = QrCode::format('png')->size(800)->margin(1)->generate($waPaymentUrl);
         $tmpDir = storage_path('app/tmp');
         if (!File::exists($tmpDir)) {
             File::makeDirectory($tmpDir, 0755, true);
@@ -1104,7 +1106,9 @@ finally {
        $message .="\nTagihan Customer dengan CID *".$customer->customer_id."* sudah kami Terbitkan sebesar *Rp.". $total_amount."*";
        $message .="\nSilahkan melakukan pembayaran sebelum tanggal 20-".date("m-Y", time());
        $message .="\nUntuk info lebih lengkap silahkan klik link berikut";
-       $message .="\nhttp://".tenant_config('domain_name', env("DOMAIN_NAME"))."/suminvoice/".$tempcode."/print";
+       $message .="\n" . \App\Services\WaService::maybeShortenUrlForGateway(
+           'https://' . tenant_config('domain_name', env("DOMAIN_NAME")) . '/suminvoice/' . $tempcode . '/print'
+       );
        $message .="\n";
 
        $message .="\nUntuk pembayaran non-tunai, Mohon mengirimkan bukti transfer ke nomor ini karena nomor sebelumnya sudah tidak aktif.";
@@ -1345,7 +1349,9 @@ finally {
        $message .="\nTagihan Customer dengan CID *".$customer->customer_id."* sudah kami Terbitkan sebesar *Rp.". $total_amount."*";
        $message .="\nSilahakan melakukan pembayaran sebelum tanggal 20-".date("m-Y", time());
        $message .="\nUntuk info lebih lengkap silahkan klik link berikut";
-       $message .="\nhttp://".tenant_config('domain_name', env("DOMAIN_NAME"))."/suminvoice/".$tempcode."/print";
+       $message .="\n" . \App\Services\WaService::maybeShortenUrlForGateway(
+           'https://' . tenant_config('domain_name', env("DOMAIN_NAME")) . '/suminvoice/' . $tempcode . '/print'
+       );
        $message .="\n";
 
        $message .="\nUntuk pembayaran non-tunai, Mohon mengirimkan bukti transfer karena nomor sebelumnya sudah tidak aktif.";

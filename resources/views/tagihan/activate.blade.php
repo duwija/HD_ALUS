@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #eef6ff 0%, #f8fbff 45%, #f3f7ff 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -25,7 +25,7 @@
             overflow: hidden;
         }
         .activate-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             color: white;
             padding: 40px 30px;
             text-align: center;
@@ -54,11 +54,11 @@
             font-size: 15px;
         }
         .form-control:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.1);
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.12);
         }
         .btn-activate {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             color: white;
             border: none;
             padding: 12px;
@@ -70,7 +70,7 @@
         }
         .btn-activate:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 5px 20px rgba(37, 99, 235, 0.35);
             color: white;
         }
         .alert {
@@ -99,7 +99,7 @@
             font-size: 14px;
         }
         .login-link a {
-            color: #667eea;
+            color: #2563eb;
             font-weight: 500;
             text-decoration: none;
         }
@@ -206,7 +206,7 @@
             </div>
 
             <div class="text-center mt-4">
-                <p class="text-white small">
+                <p class="small" style="color:#475569;">
                     <i class="fas fa-shield-alt"></i> Data Anda aman dan terenkripsi
                 </p>
             </div>

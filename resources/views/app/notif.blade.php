@@ -175,7 +175,7 @@
         display: block;
         width: 100%;
         padding: 12px;
-        background: var(--primary, #4f46e5);
+        background: var(--primary, #2563eb);
         color: #fff;
         border: none;
         border-radius: 10px;

@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #eef6ff 0%, #f8fbff 45%, #f3f7ff 100%);
             min-height: 100vh;
             padding: 40px 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -26,7 +26,7 @@
             text-align: center;
         }
         .header-card h3 {
-            color: #667eea;
+            color: #2563eb;
             font-weight: 600;
             margin-bottom: 10px;
         }
@@ -35,7 +35,7 @@
             margin-bottom: 0;
         }
         .greeting-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             border-radius: 15px;
             padding: 24px;
             margin-bottom: 24px;
@@ -105,7 +105,7 @@
         .customer-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            border-color: #667eea;
+            border-color: #3b82f6;
         }
         .customer-card .card-header {
             display: flex;
@@ -116,7 +116,7 @@
         .customer-card .customer-icon {
             width: 60px;
             height: 60px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -152,7 +152,7 @@
             align-items: center;
         }
         .customer-card .detail-item i {
-            color: #667eea;
+            color: #2563eb;
             margin-right: 10px;
             width: 20px;
         }
@@ -160,18 +160,31 @@
             color: #666;
             font-size: 14px;
         }
-        .customer-card .btn-view {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 10px 25px;
+        .card-footer-actions {
+            display: flex;
+            gap: 10px;
+            padding: 12px 16px 14px;
+            border-top: 1px solid #e8f0fe;
+        }
+        .card-footer-actions .btn-view {
+            flex: 1;
+            text-align: center;
+            padding: 10px 8px;
             border-radius: 8px;
             font-weight: 600;
-            transition: all 0.3s;
+            color: #fff;
+            text-decoration: none;
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
         }
-        .customer-card .btn-view:hover {
-            transform: scale(1.05);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        .card-footer-actions .btn-view:hover {
+            transform: scale(1.03);
+            box-shadow: 0 4px 12px rgba(37,99,235,.3);
         }
         .status-badge {
             display: inline-block;
@@ -190,11 +203,12 @@
         }
         .logout-btn {
             background: white;
-            color: #667eea;
+            color: #2563eb;
             border: 2px solid white;
-            padding: 10px 25px;
-            border-radius: 8px;
+            padding: 5px 14px;
+            border-radius: 6px;
             font-weight: 600;
+            font-size: 12px;
             text-decoration: none;
             display: inline-block;
             transition: all 0.3s;
@@ -239,16 +253,16 @@
         }
         .addon-toggle-btn {
             background: #fff;
-            color: #5b63d3;
-            border: 1px solid #ced4ff;
+            color: #2563eb;
+            border: 1px solid #bfdbfe;
             padding: 8px 12px;
             border-radius: 8px;
             font-weight: 700;
             font-size: 13px;
         }
         .addon-toggle-btn:hover {
-            background: #eef1ff;
-            color: #4c54c7;
+            background: #eff6ff;
+            color: #1d4ed8;
         }
         .addon-order-panel {
             display: none;
@@ -304,7 +318,7 @@
         .addon-option-price {
             display: block;
             font-size: 13px;
-            color: #667eea;
+            color: #2563eb;
             font-weight: 700;
         }
         .addon-option-desc {
@@ -400,14 +414,6 @@
                             <h5 class="customer-name">{{ $customer->name }}</h5>
                             <p class="customer-id">CID: {{ $customer->customer_id }}</p>
                         </div>
-                    </div>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
-                        <a href="{{ url('/tagihan/view-invoice/' . $customer->id) }}" class="btn btn-view" onclick="event.stopPropagation()">
-                            <i class="fas fa-file-invoice"></i> Tagihan
-                        </a>
-                        <a href="{{ url('/tagihan/tickets/' . $customer->id) }}" class="btn btn-view" style="background: linear-gradient(135deg, #20c997 0%, #17a673 100%);" onclick="event.stopPropagation()">
-                            <i class="fas fa-ticket-alt"></i> Status Tiket
-                        </a>
                     </div>
                 </div>
 
@@ -528,21 +534,29 @@
                         @endif
                     </div>
                 </div>
+                <div class="card-footer-actions">
+                    <a href="{{ url('/tagihan/view-invoice/' . $customer->id) }}" class="btn btn-view" onclick="event.stopPropagation()">
+                        <i class="fas fa-file-invoice"></i> Tagihan
+                    </a>
+                    <a href="{{ url('/tagihan/tickets/' . $customer->id) }}" class="btn btn-view" style="background: linear-gradient(135deg, #20c997 0%, #17a673 100%);" onclick="event.stopPropagation()">
+                        <i class="fas fa-ticket-alt"></i> Status Tiket
+                    </a>
+                </div>
             </div>
             @endforeach
 
             <div class="text-center mt-4">
-                <p class="text-white">
+                <p style="color:#475569;">
                     <i class="fas fa-info-circle"></i> Pilih <strong>Tagihan</strong> untuk melihat invoice, atau <strong>Status Tiket</strong> untuk monitor pengaduan
                 </p>
             </div>
 
             <div class="text-center mt-3">
-                <p class="mb-1 text-white" style="font-size: 0.85rem; opacity: 0.95;">
+                <p class="mb-1" style="font-size: 0.85rem; color:#334155; opacity: 0.95;">
                     <strong>{{ $companyName }}</strong>
                 </p>
                 @if(!empty($companyAddress1) || !empty($companyAddress2))
-                    <p class="mb-0 text-white" style="font-size: 0.8rem; opacity: 0.85; line-height: 1.4;">
+                    <p class="mb-0" style="font-size: 0.8rem; color:#64748b; opacity: 0.95; line-height: 1.4;">
                         {{ trim($companyAddress1 . ' ' . $companyAddress2) }}
                     </p>
                 @endif
@@ -569,7 +583,7 @@
                     title: 'Order berhasil',
                     text: popupMessage,
                     confirmButtonText: 'OK',
-                    confirmButtonColor: '#667eea'
+                    confirmButtonColor: '#2563eb'
                 });
                 return;
             }

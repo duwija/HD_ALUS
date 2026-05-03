@@ -220,7 +220,7 @@ class CreateInvJob implements ShouldQueue
                         $message .= "\n\n";
                         $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
                         $originalInvUrl = "https://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedUrl;
-                        try { $invLink = \App\ShortUrl::shorten($originalInvUrl); } catch (\Throwable $e) { $invLink = $originalInvUrl; }
+                        $invLink = \App\Services\WaService::maybeShortenUrlForGateway($originalInvUrl);
                         $message .= "\n" . $invLink;
                         $message .= "\n\n";
                         $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";

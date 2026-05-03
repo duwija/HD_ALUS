@@ -914,30 +914,19 @@ return("ACCEPTED");
             $originalPaymentUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . $openUrl;
             $shortPaymentUrl = $originalPaymentUrl;
             $shortPaymentPath = $openUrl;
-            try {
-                $generatedShortUrl = \App\ShortUrl::shorten($originalPaymentUrl);
-                if (!empty($generatedShortUrl)) {
-                    $shortPaymentUrl = $generatedShortUrl;
-                    $parsedPath = parse_url($generatedShortUrl, PHP_URL_PATH);
-                    if (!empty($parsedPath)) {
-                        $shortPaymentPath = $parsedPath;
-                    }
-                }
-            } catch (\Throwable $e) {
-                Log::channel('payment')->warning('[ShortUrl] sendPaymentNotification fallback to original URL', [
-                    'customer_id' => $customers->customer_id,
-                    'invoice_number' => $invoiceNumber,
-                    'source' => $source,
-                    'tenant' => tenant_config('domain_name', env('DOMAIN_NAME')),
-                    'original_url' => $originalPaymentUrl,
-                    'error' => $e->getMessage(),
-                ]);
-            }
             $tenantDomain  = tenant_config('domain_name', env('DOMAIN_NAME'));
 
             if ($customers->notification == 1) {
                 // ── WhatsApp ──────────────────────────────────────────────
                 $waProvider = tenant_config('wa_provider', 'gateway');
+
+                if ($waProvider === 'gateway') {
+                    $shortPaymentUrl = \App\Services\WaService::maybeShortenUrlForGateway($originalPaymentUrl);
+                    $parsedPath = parse_url($shortPaymentUrl, PHP_URL_PATH);
+                    if (!empty($parsedPath)) {
+                        $shortPaymentPath = $parsedPath;
+                    }
+                }
 
                 if ($waProvider === 'qontak') {
                     $response = qontak_whatsapp_helper_receive_payment_confirmation(

@@ -2364,7 +2364,9 @@ if($customers->notification == 1)
  $message .= "\n*Batas Pembayaran:* " . $request->due_date;
  $message .= "\n\n";
  $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
- $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedurl;
+ $message .= "\n" . \App\Services\WaService::maybeShortenUrlForGateway(
+     'https://' . tenant_config('domain_name', env("DOMAIN_NAME")) . '/invoice/cst/' . $encryptedurl
+ );
  $message .= "\n\n";
  $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
  $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
@@ -3189,7 +3191,9 @@ if($customers->notification == 1)
     $message .= "\nSejumlah Rp.".$jumlah ." Sudah kami TERIMA";
     $message .= "\n\n";
     $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
-    $message .= "\n" . "http://" . tenant_config('domain_name', env("DOMAIN_NAME")) . "/invoice/cst/" . $encryptedurl;
+    $message .= "\n" . \App\Services\WaService::maybeShortenUrlForGateway(
+        'https://' . tenant_config('domain_name', env("DOMAIN_NAME")) . '/invoice/cst/' . $encryptedurl
+    );
     $message .= "\n\n";
     $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
     $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
@@ -3419,21 +3423,7 @@ public function send_reminder_inv(Request $request, $id)
         $duedate = $suminvoice->due_date ?: 'N/A';
         $encryptedurl = '/invoice/cst/' . Crypt::encryptString($customer->id);
         $originalInvoiceUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . $encryptedurl;
-        $shortInvoiceUrl = $originalInvoiceUrl;
-        try {
-            $generatedShortUrl = \App\ShortUrl::shorten($originalInvoiceUrl);
-            if (!empty($generatedShortUrl)) {
-                $shortInvoiceUrl = $generatedShortUrl;
-            }
-        } catch (\Throwable $e) {
-            Log::warning('[ShortUrl] send_reminder_inv fallback to original URL', [
-                'suminvoice_id' => $suminvoice->id,
-                'customer_id' => $customer->id,
-                'tenant' => tenant_config('domain_name', env('DOMAIN_NAME')),
-                'original_url' => $originalInvoiceUrl,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        $shortInvoiceUrl = \App\Services\WaService::maybeShortenUrlForGateway($originalInvoiceUrl);
         $formattedDate = Carbon::parse($suminvoice->date)->translatedFormat('M Y');
 
         // if ($type == 'wa') {
@@ -3842,7 +3832,9 @@ public function cancelInvoice(Request $request, $id)
           $message .= "\n\nTagihan dengan CID *" . $customer->customer_id . "* telah diterbitkan sebesar *Rp. " . number_format($inv->total_amount, 0, ',', '.') . "*.";
           $message .= "\nMohon melakukan pembayaran sebelum *20-" . date("m-Y") . "*.";
           $message .= "\n\nUntuk informasi lebih lanjut, silakan klik tautan berikut:";
-          $message .= "\n👉 " . url("/suminvoice/" . $inv->tempcode . "/print");
+          $message .= "\n👉 " . \App\Services\WaService::maybeShortenUrlForGateway(
+              url('/suminvoice/' . $inv->tempcode . '/print')
+          );
           $message .= "\n\nTerima kasih atas perhatian Anda.";
           $message .= "\n~ *" . config("app.signature") . "* ~";
 

@@ -6,7 +6,7 @@
 @push('styles')
 <style>
     .greeting-card {
-        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        background: linear-gradient(135deg, #60a5fa, #2563eb);
         border-radius: 16px;
         padding: 20px;
         color: #fff;
@@ -85,7 +85,7 @@
     .sheet-handle { text-align: center; padding: 12px 0 4px; }
     .sheet-handle span { display: inline-block; width: 36px; height: 4px; background: #e5e7eb; border-radius: 2px; }
     .sheet-head { text-align: center; padding: 8px 16px 12px; border-bottom: 1px solid #f1f1f1; }
-    .sheet-avatar { width: 52px; height: 52px; background: linear-gradient(135deg,#4f46e5,#7c3aed); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 700; margin: 0 auto 8px; }
+    .sheet-avatar { width: 52px; height: 52px; background: linear-gradient(135deg,#60a5fa,#2563eb); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 700; margin: 0 auto 8px; }
     .sheet-head h3 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
     .sheet-body { padding: 4px 16px; }
     .drow { display: flex; padding: 11px 0; border-bottom: 1px solid #f9f9f9; font-size: 14px; gap: 12px; }
@@ -181,7 +181,7 @@
     .sheet-addon-price {
         display: block;
         font-size: 12px;
-        color: #667eea;
+        color: #2563eb;
         font-weight: 700;
         margin-top: 2px;
     }
@@ -472,7 +472,7 @@ window.addEventListener('load', function () {
             title: 'Order berhasil',
             text: popupMessage,
             confirmButtonText: 'OK',
-            confirmButtonColor: '#4f46e5'
+            confirmButtonColor: '#2563eb'
         });
         return;
     }

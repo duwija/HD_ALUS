@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #eef6ff 0%, #f8fbff 45%, #f3f7ff 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -46,13 +46,21 @@
             overflow: hidden;
         }
         .login-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             color: #fff;
             padding: 32px 28px;
             text-align: center;
         }
         .login-header h3 { margin: 0; font-weight: 700; font-size: 1.25rem; }
         .login-header p  { margin: 8px 0 0; opacity: .9; font-size: .92rem; }
+        .login-company {
+            margin: 8px 0 0;
+            font-size: .78rem;
+            font-weight: 600;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            opacity: .88;
+        }
         .login-body { padding: 30px 28px; }
         .form-group label { font-weight: 500; color: #333; margin-bottom: 6px; }
         .form-control {
@@ -62,11 +70,11 @@
             font-size: 14.5px;
         }
         .form-control:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 .2rem rgba(102,126,234,.12);
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 .2rem rgba(59,130,246,.12);
         }
         .btn-login {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             color: #fff; border: none;
             padding: 12px; border-radius: 8px;
             font-weight: 600; font-size: 15px;
@@ -74,29 +82,29 @@
         }
         .btn-login:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 18px rgba(102,126,234,.4);
+            box-shadow: 0 5px 18px rgba(37,99,235,.35);
             color: #fff;
         }
         .alert { border-radius: 8px; border: none; }
         .custom-checkbox .custom-control-label { font-size: 13.5px; color: #666; }
         .activate-link { text-align: center; margin-top: 18px; font-size: 13.5px; }
-        .activate-link a { color: #667eea; font-weight: 500; text-decoration: none; }
+        .activate-link a { color: #2563eb; font-weight: 500; text-decoration: none; }
         .activate-link a:hover { text-decoration: underline; }
 
         /* ── Promo column ── */
         .promo-title {
-            color: #fff;
+            color: #475569;
             font-size: .8rem;
             font-weight: 700;
             letter-spacing: .08em;
             text-transform: uppercase;
-            opacity: .85;
+            opacity: .95;
             margin-bottom: 10px;
         }
         .promo-card {
-            background: rgba(255,255,255,.15);
+            background: rgba(255,255,255,.82);
             backdrop-filter: blur(6px);
-            border: 1px solid rgba(255,255,255,.25);
+            border: 1px solid rgba(148,163,184,.22);
             border-radius: 12px;
             overflow: hidden;
             margin-bottom: 14px;
@@ -110,8 +118,8 @@
         .promo-body { padding: 14px 16px; }
         .promo-badge {
             display: inline-block;
-            background: rgba(255,255,255,.28);
-            color: #fff;
+            background: rgba(59,130,246,.12);
+            color: #2563eb;
             font-size: .72rem;
             font-weight: 700;
             letter-spacing: .04em;
@@ -121,14 +129,14 @@
             margin-bottom: 6px;
         }
         .promo-name {
-            color: #fff;
+            color: #1f2937;
             font-size: 1rem;
             font-weight: 700;
             margin: 0 0 6px;
             line-height: 1.3;
         }
         .promo-desc {
-            color: rgba(255,255,255,.85);
+            color: #4b5563;
             font-size: .82rem;
             margin: 0;
             line-height: 1.5;
@@ -144,12 +152,12 @@
             margin: 6px 0 0;
         }
         .promo-date {
-            color: rgba(255,255,255,.65);
+            color: #6b7280;
             font-size: .75rem;
             margin-top: 8px;
         }
         .no-promo {
-            color: rgba(255,255,255,.7);
+            color: #64748b;
             font-size: .88rem;
             text-align: center;
             padding: 30px 0;
@@ -157,10 +165,10 @@
 
         /* ── Carousel dots ── */
         #promoSlider .carousel-indicators li {
-            background-color: rgba(255,255,255,.6);
+            background-color: rgba(71,85,105,.35);
             width: 8px; height: 8px; border-radius: 50%;
         }
-        #promoSlider .carousel-indicators .active { background-color: #fff; }
+        #promoSlider .carousel-indicators .active { background-color: #475569; }
     </style>
 </head>
 <body>
@@ -244,7 +252,9 @@
                 <div class="login-header">
                     <i class="fas fa-user-circle fa-3x mb-2"></i>
                     <h3>Login Pelanggan</h3>
+                    <h3><p class="login-company">{{ $companyName }}</p></h3>
                     <p>Akses tagihan dan informasi akun Anda</p>
+                    
                 </div>
                 <div class="login-body">
                     @if(session('success'))

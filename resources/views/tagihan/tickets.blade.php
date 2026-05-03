@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #eef6ff 0%, #f8fbff 45%, #f3f7ff 100%);
             min-height: 100vh;
             padding: 40px 0 60px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -33,7 +33,7 @@
         .header-left { display: flex; align-items: center; gap: 18px; }
         .header-icon {
             width: 56px; height: 56px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             color: white; font-size: 22px; flex-shrink: 0;
@@ -41,7 +41,7 @@
         .header-title { margin: 0; font-size: 20px; font-weight: 700; color: #333; }
         .header-sub  { margin: 3px 0 0; color: #888; font-size: 14px; }
         .btn-back {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
             color: white; border: none;
             padding: 9px 20px; border-radius: 8px; font-weight: 600;
             text-decoration: none; display: inline-flex; align-items: center; gap: 7px;
@@ -120,7 +120,7 @@
             background: #e0e0e0; border-radius: 2px;
             position: relative; top: -9px;
         }
-        .workflow-steps .step-conn.done { background: #667eea; }
+        .workflow-steps .step-conn.done { background: #2563eb; }
 
         .step-item {
             display: flex; flex-direction: column;
@@ -135,13 +135,13 @@
             transition: all .2s;
         }
         .step-dot.done {
-            background: #667eea; border-color: #667eea;
+            background: #2563eb; border-color: #2563eb;
             color: white;
         }
         .step-dot.active {
-            background: white; border-color: #667eea;
-            color: #667eea;
-            box-shadow: 0 0 0 4px rgba(102,126,234,0.15);
+            background: white; border-color: #2563eb;
+            color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37,99,235,0.15);
         }
         .step-dot.finish-done {
             background: #28a745; border-color: #28a745; color: white;
@@ -151,8 +151,8 @@
             margin-top: 6px; text-align: center;
             max-width: 64px; word-break: break-word; line-height: 1.2;
         }
-        .step-name.active { color: #667eea; font-weight: 700; }
-        .step-name.done   { color: #667eea; }
+        .step-name.active { color: #2563eb; font-weight: 700; }
+        .step-name.done   { color: #2563eb; }
         .step-name.finish-done { color: #28a745; font-weight: 700; }
 
         /* progress bar */
@@ -162,7 +162,7 @@
             font-size: 11px; color: #999; margin-bottom: 4px;
         }
         .progress { height: 6px; border-radius: 10px; background: #eee; }
-        .progress-bar { border-radius: 10px; background: linear-gradient(90deg,#667eea,#764ba2); }
+        .progress-bar { border-radius: 10px; background: linear-gradient(90deg,#60a5fa,#2563eb); }
 
         /* empty state */
         .empty-state {
@@ -304,7 +304,7 @@
                     <div class="prog-label">
                         <span>
                             @if($current)
-                                <i class="fas fa-map-marker-alt" style="color:#667eea"></i>
+                                <i class="fas fa-map-marker-alt" style="color:#2563eb"></i>
                                 {{ $current->name }}
                                 (Langkah {{ $currentPos }} dari {{ $totalSteps }})
                             @else

@@ -18,7 +18,13 @@ class ShortUrl extends Model
      */
     public static function shorten(string $originalUrl, ?int $expiryDays = 365): string
     {
-        $tenant = tenant_config('domain_name', env('DOMAIN_NAME', parse_url(config('app.url'), PHP_URL_HOST)));
+        // Extract tenant domain from original URL to ensure consistency
+        // (important for queue jobs where tenant context may not be set)
+        $parsedUrl = parse_url($originalUrl);
+        $urlHost = $parsedUrl['host'] ?? null;
+        
+        // Use URL domain if available, otherwise fall back to tenant config
+        $tenant = $urlHost ?? tenant_config('domain_name', env('DOMAIN_NAME', parse_url(config('app.url'), PHP_URL_HOST)));
 
         // Re-use existing short code if same URL + tenant
         $existing = static::where('original_url', $originalUrl)

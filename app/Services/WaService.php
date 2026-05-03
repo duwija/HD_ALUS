@@ -116,6 +116,31 @@ class WaService
         }
     }
 
+    /**
+     * Gunakan short URL hanya untuk provider WA gateway.
+     */
+    public static function maybeShortenUrlForGateway(string $url): string
+    {
+        $provider = strtolower((string) tenant_config('WA_PROVIDER', tenant_config('wa_provider', 'gateway')));
+
+        if ($provider !== 'gateway') {
+            return $url;
+        }
+
+        try {
+            return \App\ShortUrl::shorten($url);
+        } catch (\Throwable $e) {
+            Log::channel('notif')->warning('[ShortUrl] fallback to original URL', [
+                'provider' => $provider,
+                'tenant' => tenant_config('domain_name', env('DOMAIN_NAME')),
+                'original_url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $url;
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────
     //  Provider implementations
     // ──────────────────────────────────────────────────────────────
@@ -449,13 +474,8 @@ class WaService
         $paymentWa = tenant_config('payment_wa',   env('PAYMENT_WA',   ''));
         $signature = tenant_config('signature',    env('SIGNATURE',    ''));
 
-        // Buat short URL agar link tidak terdeteksi spam oleh WA
         $originalUrl = "https://{$domain}{$encryptedurl}";
-        try {
-            $link = \App\ShortUrl::shorten($originalUrl);
-        } catch (\Throwable $e) {
-            $link = $originalUrl; // fallback ke URL asli jika gagal
-        }
+        $link = static::maybeShortenUrlForGateway($originalUrl);
 
         // Template rotation ringan (3 varian) agar pesan tidak identik di setiap blast.
         try {
@@ -521,11 +541,7 @@ class WaService
             ? $openUrl
             : 'https://' . $domain . $openUrl;
 
-        try {
-            $fullUrl = \App\ShortUrl::shorten($fullUrl);
-        } catch (\Throwable $e) {
-            // fallback URL asli
-        }
+        $fullUrl = static::maybeShortenUrlForGateway($fullUrl);
 
         $msg  = "Yth. {$name}\n";
         $msg .= "\nTerimakasih, pembayaran tagihan Customer dengan CID *{$cid}* sudah kami *TERIMA*";

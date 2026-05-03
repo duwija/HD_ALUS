@@ -575,13 +575,16 @@
         <label for="description">Description  </label>
         @php
         if  ($suminvoice_number->payment_status ==0){ 
+          $invoiceUrl = \App\Services\WaService::maybeShortenUrlForGateway(
+            'https://' . tenant_config('domain_name', env("DOMAIN_NAME")) . '/suminvoice/' . $suminvoice_number->tempcode . '/print'
+          );
           $message = "Remainder";
           $message .= "\n";                     
           $message .= "Yth. ".$customer->name." ";
           $message .= "\nTagihan Customer dengan CID *".$customer->customer_id."* sudah kami Terbitkan sebesar *Rp.".$total."*";
           $message .="\nSilahkan melakukan pembayaran sebelum tanggal 20-".date("m-Y", time());
           $message .="\nUntuk info lebih lengkap silahkan klik link berikut";
-          $message .="\nhttp://".tenant_config('domain_name', env("DOMAIN_NAME"))."/suminvoice/".$suminvoice_number->tempcode."/print";
+          $message .="\n" . $invoiceUrl;
           $message .="\n";
 
           $message .="\nUntuk pembayaran non-tunai, Mohon mengirimkan bukti transfer ke nomor ini karena nomor sebelumnya sudah tidak aktif .";
@@ -592,12 +595,15 @@
         }
         elseif  ($suminvoice_number->payment_status ==1)
         {
+         $invoiceUrl = \App\Services\WaService::maybeShortenUrlForGateway(
+           'https://' . tenant_config('domain_name', env("DOMAIN_NAME")) . '/suminvoice/' . $suminvoice_number->tempcode . '/print'
+         );
          $message = "Yth. ".$customer->name." ";
 
          $message .="\n";
          $message .="\nTerimakasih, Pembayaran tagihan Customer dengan CID ".$customer->customer_id." sudah kami *TERIMA* ";
          $message .="\nUntuk info lebih lengkap silahkan klik link";
-         $message .="\nhttp://".tenant_config('domain_name', env("DOMAIN_NAME"))."/suminvoice/".$suminvoice_number->tempcode."/print";
+         $message .="\n" . $invoiceUrl;
          $message .="\n";
          $message .="\n* Payment System Alusnet *";
 

@@ -9,9 +9,9 @@
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
         :root {
-            --primary: #4f46e5;
-            --primary-light: #6366f1;
-            --primary-dark: #3730a3;
+            --primary: #2563eb;
+            --primary-light: #3b82f6;
+            --primary-dark: #1d4ed8;
             --success: #10b981;
             --warning: #f59e0b;
             --danger: #ef4444;
@@ -44,7 +44,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            box-shadow: 0 2px 8px rgba(79,70,229,.25);
+            box-shadow: 0 2px 8px rgba(37,99,235,.25);
         }
         .app-topbar h1 { font-size: 17px; font-weight: 600; flex: 1; }
         .app-topbar .badge-unread {
