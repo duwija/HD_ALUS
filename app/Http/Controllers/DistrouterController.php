@@ -13,7 +13,8 @@ class DistrouterController extends Controller
  public function __construct()
  {
     $this->middleware('auth');
-    $this->middleware('checkPrivilege:admin,noc,user');
+    $this->middleware('checkPrivilege:admin,noc,user')->except(['client_monitor']);
+    $this->middleware('checkPrivilege:admin,noc,user,accounting')->only(['client_monitor']);
 }
 
     /**
@@ -1131,64 +1132,46 @@ public function show($id)
     // public function client_monitor($ip,$user,$pass,$port,$cid)
     public function client_monitor(Request $request)
     {
-        $result = 'unknow';
-
+        $tx = 0;
+        $rx = 0;
+        $rawInterface = trim((string) $request->interface);
+        $normalizedInterface = trim($rawInterface, "<> \t\n\r\0\x0B");
+        $interfaceCandidates = array_values(array_unique(array_filter([
+            $rawInterface,
+            $normalizedInterface,
+        ])));
 
         try {
-
             $client = new Client([
-
-
                 'host' => $request->ip,
                 'user' => $request->user,
                 'pass' => $request->password,
-                // 'port' => intval($request->port)
                 'port' => $request->filled('port') ? intval($request->port) : 8728,
             ]);
 
+            foreach ($interfaceCandidates as $interfaceCandidate) {
+                $query = (new Query('/interface/monitor-traffic'))
+                    ->equal('interface', $interfaceCandidate)
+                    ->equal('once');
 
+                $traffic = $client->query($query)->read();
 
-            $query =
-            (new Query('/interface/monitor-traffic'))
-            ->equal('interface',$request->interface)
-            ->equal('once');
-            $rows = array(); $rows2 = array();
-
-            $getinterfacetraffic= $client->query($query)->read();
-            $ftx = $getinterfacetraffic[0]['tx-bits-per-second'];
-            $frx = $getinterfacetraffic[0]['rx-bits-per-second'];
-
-            $rows['name'] = 'Tx';
-            $rows['data'][] = $ftx;
-            $rows2['name'] = 'Rx';
-            $rows2['data'][] = $frx;
-// Ask for monitoring details
-            $result = array();
-
-            array_push($result,$rows);
-            array_push($result,$rows2);
-            print json_encode($result);
-
-
-
-        }
-
-
-        // catch (Exception $ex) {
-        //     $result = 'Unknow';
-        // }
-
-        catch (\RouterOS\Exceptions\ConnectException $ex) {
-            $result = 'Connection Timeout';
+                if (!empty($traffic) && isset($traffic[0]) && (isset($traffic[0]['tx-bits-per-second']) || isset($traffic[0]['rx-bits-per-second']))) {
+                    $tx = (int) ($traffic[0]['tx-bits-per-second'] ?? 0);
+                    $rx = (int) ($traffic[0]['rx-bits-per-second'] ?? 0);
+                    break;
+                }
+            }
+        } catch (\RouterOS\Exceptions\ConnectException $ex) {
+            Log::channel('jobsprocess')->warning('client_monitor timeout: ' . $ex->getMessage());
         } catch (\Exception $ex) {
-            $result = 'Unknown Error';
+            Log::channel('jobsprocess')->warning('client_monitor error: ' . $ex->getMessage());
         }
 
-
-
-
-        
-
+        return response()->json([
+            ['name' => 'Tx', 'data' => [$tx]],
+            ['name' => 'Rx', 'data' => [$rx]],
+        ]);
     }
 
     public function getMikrotikLogs($id)

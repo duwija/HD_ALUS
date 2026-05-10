@@ -1959,6 +1959,7 @@ function confirmDeleteCustomer(customerId) {
       $.ajax({
         url: '/distrouter/client_monitor',
         method: 'post',
+        dataType: 'json',
         data: {
           interface: document.getElementById("interface").value,
           ip:        document.getElementById("ip").value,
@@ -1967,10 +1968,22 @@ function confirmDeleteCustomer(customerId) {
           port:      document.getElementById("port").value
         },
         success: function(data) {
-          var midata = JSON.parse(data);
+          var midata = data;
+          if (typeof data === 'string') {
+            try {
+              midata = JSON.parse(data);
+            } catch (e) {
+              midata = [];
+            }
+          }
+
+          if (!Array.isArray(midata)) {
+            midata = [];
+          }
+
           if (midata.length > 0) {
-            var TX = parseInt(midata[0].data);
-            var RX = parseInt(midata[1].data);
+            var TX = parseInt(Array.isArray(midata[0].data) ? midata[0].data[0] : midata[0].data);
+            var RX = parseInt(Array.isArray(midata[1].data) ? midata[1].data[0] : midata[1].data);
             var x  = (new Date()).getTime();
             var shift = chart.series[0].data.length > 19;
             chart.series[0].addPoint([x, TX], true, shift);
