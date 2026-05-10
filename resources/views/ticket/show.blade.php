@@ -33,6 +33,84 @@
   display: block;
   border-radius: 4px;
 }
+
+/* Ticket show dark mode refinement */
+body.dark-mode .content .card[style*="border:1px solid #dee2e6"] {
+  border-color: #3a445a !important;
+  background: #1f2735 !important;
+}
+
+body.dark-mode .content .card-header[style*="background:#f4f6f8"] {
+  background: #273246 !important;
+  border-color: #3a445a !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .content .card-body[style*="background:#fff"] {
+  background: #1f2735 !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .content .alert.alert-light {
+  background: #253146 !important;
+  border-color: #3a445a !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .content .table thead.thead-light th {
+  background: #2b364b !important;
+  color: #dbe2ef !important;
+  border-color: #46526b !important;
+}
+
+body.dark-mode .content .table td,
+body.dark-mode .content .table th {
+  border-color: #3a445a !important;
+}
+
+body.dark-mode .content .progress {
+  background-color: #334155 !important;
+}
+
+body.dark-mode .content .badge.badge-light {
+  background-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+body.dark-mode .content .tkt-desc-body a:not(.badge) {
+  color: #8ecbff !important;
+}
+
+body.dark-mode .content div[style*="background:#dee2e6"][style*="height:3px"] {
+  background: #425068 !important;
+}
+
+body.dark-mode .content div[style*="background:#e9ecef"] {
+  background: #475569 !important;
+  color: #e2e8f0 !important;
+}
+
+body.dark-mode #modal-ticketupdate .modal-content,
+body.dark-mode #modal-ticketedit .modal-content,
+body.dark-mode #modal-workflow .modal-content,
+body.dark-mode #modal-notify .modal-content,
+body.dark-mode #modal-pause-ticket .modal-content {
+  background: #1f2735;
+  color: #e5e7eb;
+}
+
+body.dark-mode #modal-ticketupdate .modal-header,
+body.dark-mode #modal-ticketedit .modal-header,
+body.dark-mode #modal-workflow .modal-header,
+body.dark-mode #modal-notify .modal-header,
+body.dark-mode #modal-pause-ticket .modal-header,
+body.dark-mode #modal-ticketupdate .modal-footer,
+body.dark-mode #modal-ticketedit .modal-footer,
+body.dark-mode #modal-workflow .modal-footer,
+body.dark-mode #modal-notify .modal-footer,
+body.dark-mode #modal-pause-ticket .modal-footer {
+  border-color: #3a445a;
+}
 </style>
 <section class="content-header">
   <div class="container-fluid">

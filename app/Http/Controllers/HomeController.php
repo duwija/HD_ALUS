@@ -13,6 +13,7 @@ use \Auth;
 use Carbon\Carbon;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 class HomeController extends Controller
 {
     /**
@@ -549,6 +550,7 @@ if (in_array($userPrivilege, $dashboardRoles)) {
     $cust_block = \App\Customer::where('id_status', '4')->count();
     $cust_potensial = \App\Customer::where('id_status', '1')->count();
     $cust_inactive = \App\Customer::where('id_status', '3')->count();
+    $hasDeletionTypeColumn = Schema::hasColumn('customers', 'deletion_type');
 
     // 📊 Monthly customer growth chart — last 6 months
     // New = id_status 2 (Active) by billing_start
@@ -557,6 +559,8 @@ if (in_array($userPrivilege, $dashboardRoles)) {
     $custMonthLabels    = [];
     $custNewMonthly     = [];
     $custBlockMonthly   = [];
+    $custTerminateMonthly = [];
+    $custCancelMonthly  = [];
     $custInactiveMonthly = [];
     for ($mi = 5; $mi >= 0; $mi--) {
         $m = \Carbon\Carbon::now()->subMonths($mi);
@@ -564,9 +568,35 @@ if (in_array($userPrivilege, $dashboardRoles)) {
         $custNewMonthly[]      = \App\Customer::where('id_status', 2)
                                     ->whereYear('billing_start', $m->year)
                                     ->whereMonth('billing_start', $m->month)->count();
-        $custBlockMonthly[]    = \App\Customer::onlyTrashed()
-                                    ->whereYear('deleted_at', $m->year)
-                                    ->whereMonth('deleted_at', $m->month)->count();
+
+        if ($hasDeletionTypeColumn) {
+            $terminateCount = \App\Customer::onlyTrashed()
+                ->whereYear('deleted_at', $m->year)
+                ->whereMonth('deleted_at', $m->month)
+                ->whereIn('deletion_type', ['terminate', 'berhenti_berlangganan'])
+                ->count();
+
+            $cancelCount = \App\Customer::onlyTrashed()
+                ->whereYear('deleted_at', $m->year)
+                ->whereMonth('deleted_at', $m->month)
+                ->whereIn('deletion_type', ['cancel', 'tidak_jadi_berlangganan'])
+                ->count();
+
+            $custTerminateMonthly[] = $terminateCount;
+            $custCancelMonthly[] = $cancelCount;
+            // Backward compatibility for existing references.
+            $custBlockMonthly[] = $terminateCount;
+        } else {
+            $legacyDeletedCount = \App\Customer::onlyTrashed()
+                ->whereYear('deleted_at', $m->year)
+                ->whereMonth('deleted_at', $m->month)
+                ->count();
+
+            $custTerminateMonthly[] = $legacyDeletedCount;
+            $custCancelMonthly[] = 0;
+            $custBlockMonthly[] = $legacyDeletedCount;
+        }
+
         $custInactiveMonthly[] = \App\Customer::where('id_status', 3)
                                     ->whereYear('updated_at', $m->year)
                                     ->whereMonth('updated_at', $m->month)->count();
@@ -863,7 +893,7 @@ if (in_array($userPrivilege, $dashboardRoles)) {
         'leadsConverted', 'leadsLost', 'leadsMyActive', 'allActiveLeads', 'adminInprogressLeads',
         'recentLeadActivity',
         // customer growth chart
-        'custMonthLabels', 'custNewMonthly', 'custBlockMonthly', 'custInactiveMonthly',
+        'custMonthLabels', 'custNewMonthly', 'custBlockMonthly', 'custTerminateMonthly', 'custCancelMonthly', 'custInactiveMonthly',
         // accounting data (home-v5)
         'acctTotalReceivable', 'acctPaymentToday', 'acctPaymentThisWeek', 'acctPaymentThisMonth',
         'acctDailyTransactions', 'acctGroupedByUser', 'acctRecentPaid', 'acctUnpaidTop',

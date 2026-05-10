@@ -89,8 +89,27 @@
       </div>
 
       <div class="form-group col-md-2">
+        <label for="deletion_type_filter">Status Berhenti</label>
+        <select name="deletion_type_filter" id="deletion_type_filter" class="form-control">
+          <option value="">All</option>
+          <option value="terminate">Berhenti Berlangganan</option>
+          <option value="cancel">Tidak Jadi Berlangganan</option>
+        </select>
+      </div>
+
+      <div class="form-group col-md-2">
+        <label for="start_date">Deleted Dari Tanggal</label>
+        <input type="date" id="start_date" name="start_date" class="form-control">
+      </div>
+
+      <div class="form-group col-md-2">
+        <label for="end_date">Deleted Sampai Tanggal</label>
+        <input type="date" id="end_date" name="end_date" class="form-control">
+      </div>
+
+      <div class="form-group col-md-2">
         <label for="id_plan">Plan</label>
-        <select name="id_plan" id="id_plan" class="form-control">
+        <select name="id_plan" id="id_plan" class="form-control select2" data-placeholder="Cari plan...">
           <option value="">All</option>
           @foreach ($plan as $id => $name)
           <option value="{{ $id }}">{{ $name }}</option>
@@ -121,9 +140,9 @@
     <!-- /.card-header -->
     <div class="card-body">
       
-      @if($customers->count() > 0)
+      @if($deletedCustomersCount > 0)
         <div class="alert alert-info">
-          <i class="fas fa-info-circle"></i> Found {{ $customers->count() }} deleted customer(s)
+          <i class="fas fa-info-circle"></i> Found {{ $deletedCustomersCount }} deleted customer(s)
         </div>
       @else
         <div class="alert alert-warning">
@@ -144,93 +163,12 @@
             <th scope="col">Plan</th>
             <th scope="col">Status</th>
             <th scope="col">Deleted At</th>
+            <th scope="col">Status Berhenti</th>
+            <th scope="col">Alasan Hapus</th>
             <th scope="col">Action</th>
           </tr>
         </thead>
-        <tbody>
-         @foreach( $customers as $cust)
-         <tr data-merchant-id="{{ $cust->id_merchant ?? '' }}"
-             data-status-id="{{ $cust->id_status ?? '' }}"
-             data-plan-id="{{ $cust->id_plan ?? '' }}"
-             data-tag-ids="{{ $cust->tags->pluck('id')->implode(',') }}"
-             data-customer-id="{{ $cust->customer_id }}"
-             data-name="{{ strtolower($cust->name) }}"
-             data-address="{{ strtolower($cust->address) }}"
-             data-phone="{{ $cust->phone ?? '' }}"
-             data-id-card="{{ $cust->id_card ?? '' }}">
-          <td>{{ $loop->iteration }}</td>
-          <td><span class="badge badge-secondary">{{ $cust->customer_id }}</span></td>
-          <td>{{ $cust->name }}</td>
-          <td><small class="text-muted">{{ $cust->phone ?? '-' }}</small></td>
-          <td><small class="text-muted">{{ $cust->address }}</small></td>
-          <td>
-            @if($cust->id_merchant)
-              {{ $cust->merchant_name->name }}
-            @else
-              <span class="badge badge-light">No Merchant</span>
-            @endif
-          </td>
-          <td>
-            @if($cust->id_plan)
-              {{ $cust->plan_name->name }} <small class="text-muted">(Rp {{ number_format($cust->plan_name->price)}})</small>
-            @else
-              <span class="badge badge-light">No Plan</span>
-            @endif
-          </td>
-          <td>
-            @if($cust->id_status)
-              @php
-                $badge_sts = "badge-secondary";
-                if ($cust->status_name->name == 'Active') $badge_sts = "badge-success";
-                elseif ($cust->status_name->name == 'Inactive') $badge_sts = "badge-secondary";
-                elseif ($cust->status_name->name == 'Block') $badge_sts = "badge-danger";
-                elseif ($cust->status_name->name == 'Company_Properti') $badge_sts = "badge-primary";
-              @endphp
-              <span class="badge {{$badge_sts}}">{{ $cust->status_name->name }}</span>
-            @else
-              <span class="badge badge-light">No Status</span>
-            @endif
-          </td>
-          <td class="text-center">
-            <small class="text-danger">
-              <i class="far fa-calendar-times"></i> {{ $cust->deleted_at->format('d M Y') }}<br>
-              <i class="far fa-clock"></i> {{ $cust->deleted_at->format('H:i:s') }}
-            </small>
-          </td>
-          <td>
-            <div class="btn-group btn-group-sm" role="group">
-              <button type="button" class="btn btn-info btn-sm view-detail" 
-                      data-id="{{ $cust->id }}"
-                      data-customer-id="{{ $cust->customer_id }}"
-                      data-name="{{ $cust->name }}"
-                      data-email="{{ $cust->email ?? '-' }}"
-                      data-phone="{{ $cust->phone ?? '-' }}"
-                      data-address="{{ $cust->address }}"
-                      data-coordinate="{{ $cust->coordinate ?? '' }}"
-                      data-merchant="{{ $cust->id_merchant ? $cust->merchant_name->name : 'No Merchant' }}"
-                      data-status="{{ $cust->id_status ? $cust->status_name->name : 'No Status' }}"
-                      data-plan="{{ $cust->id_plan ? $cust->plan_name->name : 'No Plan' }}"
-                      data-price="{{ $cust->id_plan ? number_format($cust->plan_name->price) : '0' }}"
-                      data-deleted="{{ $cust->deleted_at->format('d M Y H:i:s') }}"
-                      data-updated-by="{{ $cust->updated_by ?? '-' }}"
-                      data-toggle="modal" 
-                      data-target="#detailModal"
-                      title="View Detail">
-                <i class="fas fa-eye"></i>
-              </button>
-              
-              <form action="/customer/restore/{{$cust->id}}" method="POST" class="d-inline item-restore">
-                @method('patch')
-                @csrf
-                <button title="Restore Customer" type="submit" class="btn btn-warning btn-sm">
-                  <i class="fas fa-undo"></i>
-                </button>
-              </form>
-            </div>
-          </td>
-        </tr>
-        @endforeach
-        </tbody>
+        <tbody></tbody>
       </table>
   </div>
 </div>
@@ -294,6 +232,14 @@
                 <td class="text-danger" id="modal-deleted"></td>
               </tr>
               <tr>
+                <th>Status Berhenti:</th>
+                <td id="modal-deletion-type"></td>
+              </tr>
+              <tr>
+                <th>Alasan Hapus:</th>
+                <td id="modal-deletion-reason"></td>
+              </tr>
+              <tr>
                 <th>Updated By:</th>
                 <td id="modal-updated-by"></td>
               </tr>
@@ -330,9 +276,12 @@ $(document).ready(function() {
   // Render Deleted Customers Chart
   var deletedCtx = document.getElementById('deletedCustomersChart').getContext('2d');
   var deletedData = @json($dailyDeletedCustomers);
+  var deletedByTypeData = @json($dailyDeletedByType);
   
   var labels = [];
   var data = [];
+  var berhentiData = [];
+  var tidakJadiData = [];
   
   // Generate all dates for last 30 days
   var endDate = new Date();
@@ -351,6 +300,16 @@ $(document).ready(function() {
     });
     
     data.push(found ? found.count : 0);
+
+    var berhentiFound = deletedByTypeData.find(function(item) {
+      return item.date === dateStr && item.deletion_type === 'terminate';
+    });
+    berhentiData.push(berhentiFound ? berhentiFound.count : 0);
+
+    var tidakJadiFound = deletedByTypeData.find(function(item) {
+      return item.date === dateStr && item.deletion_type === 'cancel';
+    });
+    tidakJadiData.push(tidakJadiFound ? tidakJadiFound.count : 0);
   }
   
   var deletedChart = new Chart(deletedCtx, {
@@ -361,12 +320,26 @@ $(document).ready(function() {
         return parts[2] + '/' + parts[1];
       }),
       datasets: [{
-        label: 'Deleted Customers',
+        label: 'Total Delete',
         data: data,
         borderColor: 'rgb(239, 68, 68)',
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        tension: 0.4,
-        fill: true
+        tension: 0.35,
+        fill: false
+      }, {
+        label: 'Berhenti Berlangganan',
+        data: berhentiData,
+        borderColor: 'rgb(22, 163, 74)',
+        backgroundColor: 'rgba(22, 163, 74, 0.1)',
+        tension: 0.35,
+        fill: false
+      }, {
+        label: 'Tidak Jadi Berlangganan',
+        data: tidakJadiData,
+        borderColor: 'rgb(245, 158, 11)',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        tension: 0.35,
+        fill: false
       }]
     },
     options: {
@@ -426,120 +399,77 @@ $(document).ready(function() {
     }
   });
 
-  // Destroy DataTable yang sudah diinisialisasi oleh layout (tapi simpan HTML-nya)
-  if ($.fn.DataTable.isDataTable('#example1')) {
+  // Destroy DataTable auto-init from layout before re-init custom server-side table
+  if ($.fn.DataTable.isDataTable('#example')) {
     $('#example').DataTable().destroy();
-    // Jangan clear HTML, biarkan tbody tetap ada
   }
-  
-  // DataTable initialization - simple without custom filters
+
   var table = $('#example').DataTable({
-    "responsive": true,
-    "lengthChange": true,
-    "autoWidth": false,
-    "buttons": ["copy", "csv", "excel", "pdf", "print"],
-    "pageLength": 25,
-    "order": [[8, 'desc']] // Deleted at column (index 8 sekarang karena ada phone)
+    responsive: true,
+    lengthChange: true,
+    autoWidth: false,
+    buttons: ["copy", "csv", "excel", "pdf", "print"],
+    pageLength: 25,
+    processing: true,
+    serverSide: true,
+    order: [[8, 'desc']],
+    ajax: {
+      url: '{{ route('trash.data') }}',
+      data: function(d) {
+        d.filter = $('#filter').val();
+        d.parameter = $('#parameter').val();
+        d.id_merchant = $('#id_merchant').val();
+        d.id_status = $('#id_status').val();
+        d.deletion_type = $('#deletion_type_filter').val();
+        d.start_date = $('#start_date').val();
+        d.end_date = $('#end_date').val();
+        d.id_plan = $('#id_plan').val();
+        d.id_tag = $('#id_tag').val() || [];
+      }
+    },
+    columns: [
+      { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
+      { data: 'customer_id', name: 'customer_id' },
+      { data: 'name', name: 'name' },
+      { data: 'phone', name: 'phone', orderable: false },
+      { data: 'address', name: 'address', orderable: false },
+      { data: 'merchant', name: 'merchant', orderable: false, searchable: false },
+      { data: 'plan', name: 'plan', orderable: false, searchable: false },
+      { data: 'status', name: 'status', orderable: false, searchable: false },
+      { data: 'deleted_at', name: 'deleted_at' },
+      { data: 'deletion_type', name: 'deletion_type', orderable: false, searchable: false },
+      { data: 'deletion_reason', name: 'deletion_reason', orderable: false, searchable: false },
+      { data: 'action', name: 'action', orderable: false, searchable: false }
+    ]
   });
   
   table.buttons().container().appendTo('#example_wrapper .col-md-6:eq(0)');
 
-  // Filter button click
-  $('#trash_filter').on('click', function() {
-    applyFilters();
-  });
+  if ($.fn.select2) {
+    $('#id_plan').select2({
+      width: '100%',
+      allowClear: true,
+      placeholder: 'Cari plan...'
+    });
 
-  // Auto filter on dropdown change
-  $('#id_merchant, #id_status, #id_plan, #id_tag').on('change', function() {
-    applyFilters();
-  });
+    $('#id_tag').select2({
+      width: '100%',
+      placeholder: 'Semua Tag'
+    });
+  }
 
-  // Enter key on parameter input
+  function applyFilters() {
+    table.ajax.reload();
+  }
+
+  $('#trash_filter').on('click', applyFilters);
+  $('#id_merchant, #id_status, #deletion_type_filter, #id_plan, #id_tag, #start_date, #end_date').on('change', applyFilters);
   $('#parameter').on('keypress', function(e) {
-    if (e.which == 13) {
+    if (e.which === 13) {
       e.preventDefault();
       applyFilters();
     }
   });
-
-  function applyFilters() {
-    var filter = $('#filter').val();
-    var parameter = $('#parameter').val().toLowerCase();
-    var id_merchant = $('#id_merchant').val();
-    var id_status = $('#id_status').val();
-    var id_plan = $('#id_plan').val();
-    var id_tags = $('#id_tag').val() || [];
-
-    // Show all rows first
-    $('#example tbody tr').show();
-
-    // Apply filters
-    $('#example tbody tr').each(function() {
-      var $row = $(this);
-      var show = true;
-
-      // Filter by parameter based on selected filter field
-      if (parameter !== '') {
-        var filterValue = '';
-        if (filter === 'name') {
-          filterValue = $row.data('name');
-        } else if (filter === 'customer_id') {
-          filterValue = $row.data('customer-id').toString().toLowerCase();
-        } else if (filter === 'address') {
-          filterValue = $row.data('address');
-        } else if (filter === 'phone') {
-          filterValue = $row.data('phone').toString().toLowerCase();
-        } else if (filter === 'id_card') {
-          filterValue = $row.data('id-card').toString().toLowerCase();
-        }
-        
-        if (filterValue.indexOf(parameter) === -1) {
-          show = false;
-        }
-      }
-
-      // Filter by merchant
-      if (show && id_merchant !== '') {
-        var merchantId = $row.data('merchant-id').toString();
-        if (merchantId !== id_merchant) {
-          show = false;
-        }
-      }
-
-      // Filter by status
-      if (show && id_status !== '') {
-        var statusId = $row.data('status-id').toString();
-        if (statusId !== id_status) {
-          show = false;
-        }
-      }
-
-      // Filter by plan
-      if (show && id_plan !== '') {
-        var planId = $row.data('plan-id').toString();
-        if (planId !== id_plan) {
-          show = false;
-        }
-      }
-
-      // Filter by tag (AND: customer must have ALL selected tags)
-      if (show && id_tags.length > 0) {
-        var tagIds = ($row.data('tag-ids') || '').toString();
-        var tagArr = tagIds ? tagIds.split(',').map(function(t) { return t.trim(); }) : [];
-        var hasAll = id_tags.every(function(tid) {
-          return tagArr.indexOf(String(tid)) !== -1;
-        });
-        if (!hasAll) show = false;
-      }
-
-      if (!show) {
-        $row.hide();
-      }
-    });
-
-    // Redraw table
-    table.draw(false);
-  }
 
   // View detail modal
   $(document).on('click', '.view-detail', function() {
@@ -553,8 +483,17 @@ $(document).ready(function() {
     var status = $(this).data('status');
     var plan = $(this).data('plan');
     var price = $(this).data('price');
+    var deletionType = $(this).data('deletion-type');
+    var deletionReason = $(this).data('deletion-reason');
     var deleted = $(this).data('deleted');
     var updatedBy = $(this).data('updated-by');
+
+    var deletionTypeLabel = '-';
+    if (deletionType === 'terminate') {
+      deletionTypeLabel = 'Berhenti Berlangganan';
+    } else if (deletionType === 'cancel') {
+      deletionTypeLabel = 'Tidak Jadi Berlangganan';
+    }
 
     $('#modal-customer-id').text(customerId);
     $('#modal-name').text(name);
@@ -565,6 +504,8 @@ $(document).ready(function() {
     $('#modal-plan').text(plan);
     $('#modal-price').text(price);
     $('#modal-deleted').text(deleted);
+    $('#modal-deletion-type').text(deletionTypeLabel);
+    $('#modal-deletion-reason').text(deletionReason || '-');
     $('#modal-updated-by').text(updatedBy || '-');
     $('#modal-address').text(address || '-');
 

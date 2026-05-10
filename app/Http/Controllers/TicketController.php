@@ -112,17 +112,33 @@ public function moveToInprogress($ticketId)
     if ($ticket->status !== 'Inprogress') {
         $ticket->update(['status' => 'Inprogress']);
 
-            // kalau workflow di ticketcategories disimpan dalam string "Survey,Installasi,Testing"
-        $defaultSteps = $ticket->category && $ticket->category->workflow
-        ? explode(',', $ticket->category->workflow)
-        : [];
+            // Support workflow saved as array cast, JSON string, or legacy CSV.
+        $defaultSteps = [];
+        if ($ticket->category && !empty($ticket->category->workflow)) {
+            $workflow = $ticket->category->workflow;
+
+            if (is_array($workflow)) {
+                $defaultSteps = $workflow;
+            } elseif (is_string($workflow)) {
+                $decoded = json_decode($workflow, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $defaultSteps = $decoded;
+                } else {
+                    $defaultSteps = array_map('trim', explode(',', $workflow));
+                }
+            }
+        }
+
+        $defaultSteps = array_values(array_filter(array_map('trim', $defaultSteps), function ($step) {
+            return $step !== '';
+        }));
 
             $position = 2; // setelah Open
             foreach ($defaultSteps as $stepName) {
-                if (!$ticket->steps()->where('name', trim($stepName))->exists()) {
+                if (!$ticket->steps()->where('name', $stepName)->exists()) {
                     TicketStep::create([
                         'ticket_id' => $ticket->id,
-                        'name'      => trim($stepName),
+                        'name'      => $stepName,
                         'position'  => $position++,
                     ]);
                 }
@@ -2047,6 +2063,74 @@ public function tvwall()
     ->get();
 
     return view('ticket.tvwall', compact('tickets'));
+}
+
+public function scheduleList()
+{
+    $today = Carbon::today();
+
+    $tickets = $this->getTodayScheduleTickets($today, request());
+    $categories = \App\Ticketcategorie::orderBy('name')->get();
+    $tags = \App\Tag::orderBy('name')->get();
+
+    return view('ticket.schedule-list', [
+        'tickets' => $tickets,
+        'today' => $today,
+        'categories' => $categories,
+        'tags' => $tags,
+    ]);
+}
+
+public function scheduleListData(Request $request)
+{
+    $today = Carbon::today();
+    $tickets = $this->getTodayScheduleTickets($today, $request);
+
+    return response()->json([
+        'html' => view('ticket.schedule-list-cards', compact('tickets'))->render(),
+        'count' => $tickets->count(),
+        'updated_at' => Carbon::now()->format('H:i:s'),
+    ]);
+}
+
+private function getTodayScheduleTickets(Carbon $today, ?Request $request = null)
+{
+    $query = \App\Ticket::with(['steps', 'user', 'customer', 'categorie'])
+    ->leftJoin('tickettags', 'tickets.id', '=', 'tickettags.ticket_id')
+    ->leftJoin('tags', 'tickettags.tag_id', '=', 'tags.id')
+    ->select('tickets.*')
+    ->distinct('tickets.id');
+
+    if ($request) {
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('tickets.status', $request->status);
+        }
+
+        if ($request->filled('category') && $request->category !== 'all') {
+            $query->where('tickets.id_categori', $request->category);
+        }
+
+        if ($request->filled('tag') && $request->tag !== 'all') {
+            $query->where('tags.id', $request->tag);
+        }
+
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $query->whereBetween('tickets.date', [$request->start_date, $request->end_date]);
+        } elseif ($request->filled('start_date')) {
+            $query->whereDate('tickets.date', '>=', $request->start_date);
+        } elseif ($request->filled('end_date')) {
+            $query->whereDate('tickets.date', '<=', $request->end_date);
+        } else {
+            $query->whereDate('tickets.date', $today);
+        }
+    } else {
+        $query->whereDate('tickets.date', $today);
+    }
+
+    return $query
+    ->orderBy('time', 'asc')
+    ->orderBy('id', 'desc')
+    ->get();
 }
 
 // public function tvwallData()

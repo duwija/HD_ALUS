@@ -440,6 +440,7 @@ public function subscribeform($id)
     {
         $startOfMonth = Carbon::now()->startOfMonth();
         $endOfMonth = Carbon::now()->endOfMonth();
+        $hasDeletionTypeColumn = Schema::hasColumn('customers', 'deletion_type');
         $status = \App\Statuscustomer::pluck('name', 'id');
         $merchant = \App\Merchant::pluck('name', 'id');
         $plan = \App\Plan::pluck('name', 'id');
@@ -461,6 +462,26 @@ public function subscribeform($id)
             ->get();
         $totalDeletedCustomers = $dailyDeletedCustomers->sum('deleted_count');
 
+        $dailyTerminateCustomers = collect();
+        $dailyCancelCustomers = collect();
+        if ($hasDeletionTypeColumn) {
+            $dailyTerminateCustomers = \App\Customer::onlyTrashed()
+                ->whereBetween('deleted_at', [$startOfMonth, $endOfMonth])
+                ->whereIn('deletion_type', ['terminate', 'berhenti_berlangganan'])
+                ->selectRaw('DATE(deleted_at) as date, COUNT(*) as terminate_count')
+                ->groupBy(DB::raw('DATE(deleted_at)'))
+                ->orderBy('date')
+                ->get();
+
+            $dailyCancelCustomers = \App\Customer::onlyTrashed()
+                ->whereBetween('deleted_at', [$startOfMonth, $endOfMonth])
+                ->whereIn('deletion_type', ['cancel', 'tidak_jadi_berlangganan'])
+                ->selectRaw('DATE(deleted_at) as date, COUNT(*) as cancel_count')
+                ->groupBy(DB::raw('DATE(deleted_at)'))
+                ->orderBy('date')
+                ->get();
+        }
+
         $tags = $this->hasCustomerTagTables()
             ? \App\CustomerTag::pluck('name', 'id')
             : collect();
@@ -470,6 +491,8 @@ public function subscribeform($id)
             'dailyNewCustomers' => $dailyNewCustomers,
             'totalDeletedCustomers' => $totalDeletedCustomers,
             'dailyDeletedCustomers' => $dailyDeletedCustomers,
+            'dailyTerminateCustomers' => $dailyTerminateCustomers,
+            'dailyCancelCustomers' => $dailyCancelCustomers,
             'status' => $status,
             'plan' => $plan,
             'merchant' => $merchant,
@@ -821,9 +844,8 @@ return DataTables::of($customerQuery)
 
 public function trash()
 {
-    $customers = \App\Customer::onlyTrashed()
-        ->with(['merchant_name', 'plan_name', 'status_name', 'tags'])
-        ->get();
+    $hasDeletionTypeColumn = Schema::hasColumn('customers', 'deletion_type');
+    $deletedCustomersCount = \App\Customer::onlyTrashed()->count();
     $status = \App\Statuscustomer::pluck('name', 'id');
     $merchant = \App\Merchant::pluck('name', 'id');
     $plan = \App\Plan::pluck('name', 'id');
@@ -839,6 +861,30 @@ public function trash()
         ->groupBy(DB::raw('DATE(deleted_at)'))
         ->orderBy('date')
         ->get();
+
+    $dailyDeletedByType = collect();
+    if ($hasDeletionTypeColumn) {
+        $dailyDeletedByType = \App\Customer::onlyTrashed()
+            ->whereBetween('deleted_at', [$startDate, $endDate])
+            ->whereNotNull('deletion_type')
+            ->selectRaw("DATE(deleted_at) as date,
+                CASE
+                    WHEN deletion_type IN ('terminate', 'berhenti_berlangganan') THEN 'terminate'
+                    WHEN deletion_type IN ('cancel', 'tidak_jadi_berlangganan') THEN 'cancel'
+                    ELSE deletion_type
+                END as deletion_type,
+                COUNT(*) as count")
+            ->groupBy(
+                DB::raw('DATE(deleted_at)'),
+                DB::raw("CASE
+                    WHEN deletion_type IN ('terminate', 'berhenti_berlangganan') THEN 'terminate'
+                    WHEN deletion_type IN ('cancel', 'tidak_jadi_berlangganan') THEN 'cancel'
+                    ELSE deletion_type
+                END")
+            )
+            ->orderBy('date')
+            ->get();
+    }
     
     $totalDeletedCustomers = $dailyDeletedCustomers->sum('count');
     
@@ -872,18 +918,33 @@ public function trash()
         $merchantData[] = $item->count;
     }
     
-    return view ('customer/trash', compact('customers', 'status', 'plan', 'merchant', 'tags', 'dailyDeletedCustomers', 'totalDeletedCustomers', 'planLabels', 'planData', 'merchantLabels', 'merchantData'));
+    return view ('customer/trash', compact('deletedCustomersCount', 'status', 'plan', 'merchant', 'tags', 'dailyDeletedCustomers', 'dailyDeletedByType', 'totalDeletedCustomers', 'planLabels', 'planData', 'merchantLabels', 'merchantData'));
 }
 
 public function trashData(Request $request)
 {
-    $query = \App\Customer::onlyTrashed();
+    $hasDeletionTypeColumn = Schema::hasColumn('customers', 'deletion_type');
+
+    $query = \App\Customer::onlyTrashed()->with(['merchant_name', 'plan_name', 'status_name'])
+        ->orderBy('deleted_at', 'desc');
+
+    $filterableColumns = [
+        'name' => 'name',
+        'customer_id' => 'customer_id',
+        'address' => 'address',
+        'phone' => 'phone',
+        'id_card' => 'id_card',
+        'billing_start' => 'billing_start',
+        'deleted_at' => 'deleted_at',
+    ];
 
     // Apply filters
     if ($request->has('filter') && $request->has('parameter') && $request->parameter != '') {
         $filter = $request->filter;
         $parameter = $request->parameter;
-        $query->where($filter, 'like', '%' . $parameter . '%');
+        if (isset($filterableColumns[$filter])) {
+            $query->where($filterableColumns[$filter], 'like', '%' . $parameter . '%');
+        }
     }
 
     if ($request->has('id_merchant') && $request->id_merchant != '') {
@@ -898,8 +959,36 @@ public function trashData(Request $request)
         $query->where('id_plan', $request->id_plan);
     }
 
+    if ($hasDeletionTypeColumn && $request->has('deletion_type') && $request->deletion_type != '') {
+        $query->where('deletion_type', $request->deletion_type);
+    }
+
+    if ($request->has('start_date') && $request->start_date != '') {
+        $query->whereDate('deleted_at', '>=', $request->start_date);
+    }
+
+    if ($request->has('end_date') && $request->end_date != '') {
+        $query->whereDate('deleted_at', '<=', $request->end_date);
+    }
+
+    if ($request->filled('id_tag')) {
+        $selectedTags = $request->input('id_tag', []);
+        if (!is_array($selectedTags)) {
+            $selectedTags = [$selectedTags];
+        }
+
+        foreach ($selectedTags as $tagId) {
+            $query->whereHas('tags', function ($tagQuery) use ($tagId) {
+                $tagQuery->whereKey($tagId);
+            });
+        }
+    }
+
     return DataTables::of($query)
         ->addIndexColumn()
+        ->addColumn('phone', function($row) {
+            return '<small class="text-muted">' . e($row->phone ?? '-') . '</small>';
+        })
         ->addColumn('customer_id', function($row) {
             return '<span class="badge badge-secondary">' . $row->customer_id . '</span>';
         })
@@ -931,7 +1020,32 @@ public function trashData(Request $request)
             return '<span class="badge badge-light">No Status</span>';
         })
         ->addColumn('deleted_at', function($row) {
-            return '<small class="text-danger">' . $row->deleted_at->diffForHumans() . '</small>';
+            return '<small class="text-danger">'
+                . '<i class="far fa-calendar-times mr-1"></i>' . $row->deleted_at->format('d M Y')
+                . '<br><i class="far fa-clock mr-1"></i>' . $row->deleted_at->format('H:i:s')
+                . '</small>';
+        })
+        ->addColumn('deletion_type', function($row) {
+            if (empty($row->deletion_type)) {
+                return '<span class="badge badge-light">-</span>';
+            }
+
+            if ($row->deletion_type === 'terminate') {
+                return '<span class="badge badge-danger">Berhenti Berlangganan</span>';
+            }
+
+            if ($row->deletion_type === 'cancel') {
+                return '<span class="badge badge-warning text-dark">Tidak Jadi Berlangganan</span>';
+            }
+
+            return e($row->deletion_type);
+        })
+        ->addColumn('deletion_reason', function($row) {
+            if (empty($row->deletion_reason)) {
+                return '<small class="text-muted">-</small>';
+            }
+
+            return '<small>' . e($row->deletion_reason) . '</small>';
         })
         ->addColumn('action', function($row) {
             $merchant = $row->id_merchant ? $row->merchant_name->name : 'No Merchant';
@@ -953,7 +1067,10 @@ public function trashData(Request $request)
                       data-status="' . $status . '"
                       data-plan="' . $plan . '"
                       data-price="' . $price . '"
+                      data-deletion-type="' . e($row->deletion_type ?? '-') . '"
+                      data-deletion-reason="' . e($row->deletion_reason ?? '-') . '"
                       data-deleted="' . $row->deleted_at->format('d M Y H:i') . '"
+                      data-updated-by="' . e($row->updated_by ?? '-') . '"
                       data-toggle="modal" 
                       data-target="#detailModal"
                       title="View Detail">
@@ -969,7 +1086,10 @@ public function trashData(Request $request)
               </form>
             </div>';
         })
-        ->rawColumns(['customer_id', 'address', 'merchant', 'plan', 'status', 'deleted_at', 'action'])
+        ->orderColumn('deleted_at', function($query, $order) {
+            $query->orderBy('deleted_at', $order);
+        })
+        ->rawColumns(['phone', 'customer_id', 'address', 'merchant', 'plan', 'status', 'deleted_at', 'deletion_type', 'deletion_reason', 'action'])
         ->make(true);
 }
 
@@ -2510,6 +2630,7 @@ public function update(Request $request, $id)
 
     $customer = Customer::findOrFail($id);
     $oldData = $customer->toArray();
+    $oldRawData = $customer->getAttributes();
 
     // Guard: Lead Potensial tidak bisa langsung diubah ke Active via form edit
     if ($customer->id_status == 1 && in_array((int)$request->id_status, [2, 5])) {
@@ -2588,63 +2709,125 @@ public function update(Request $request, $id)
     // }
 
 
+    $fieldLabels = [
+        'name' => 'Nama Customer',
+        'id_card' => 'No KTP',
+        'date_of_birth' => 'Tanggal Lahir',
+        'pppoe' => 'PPPoE',
+        'password' => 'Password PPPoE',
+        'contact_name' => 'Nama Kontak',
+        'phone' => 'No HP',
+        'address' => 'Alamat',
+        'id_merchant' => 'Merchant',
+        'npwp' => 'NPWP',
+        'tax' => 'Pajak',
+        'billing_start' => 'Mulai Tagihan',
+        'isolir_date' => 'Tanggal Isolir',
+        'email' => 'Email',
+        'id_sale' => 'Sales',
+        'id_plan' => 'Plan',
+        'id_distpoint' => 'Distpoint',
+        'id_distrouter' => 'Router',
+        'id_status' => 'Status',
+        'coordinate' => 'Koordinat',
+        'id_olt' => 'OLT',
+        'id_onu' => 'ONU',
+        'note' => 'Catatan',
+        'notification' => 'Notifikasi',
+        'ip' => 'IP',
+    ];
+
+    $notificationLabels = [
+        0 => 'None',
+        1 => 'Whatsapp',
+        2 => 'Email',
+        3 => 'Mobile App',
+    ];
+
+    $emptyValue = '(kosong)';
+
     $changes = [];
     foreach ($newData as $key => $value) {
-        // Skip password fields (hidden from toArray)
+        // metadata ini selalu berubah setiap submit, tidak perlu tampil di log perubahan data.
+        if (in_array($key, ['updated_by', 'updated_at'], true)) {
+            continue;
+        }
+
+        if (!array_key_exists($key, $oldRawData)) {
+            continue;
+        }
+
+        $oldValue = $oldRawData[$key];
+
+        // Perlakukan null/empty setara saat compare.
+        $oldComparable = is_null($oldValue) ? '' : trim((string) $oldValue);
+        $newComparable = is_null($value) ? '' : trim((string) $value);
+        if ($oldComparable === $newComparable) {
+            continue;
+        }
+
         if ($key === 'password' || $key === 'portal_password') {
+            $changes[$fieldLabels[$key] ?? 'Password'] = [
+                'old' => '••••••',
+                'new' => '•••••• (diubah)'
+            ];
             continue;
         }
-        
-        // Check if key exists in oldData before comparing
-        if (!array_key_exists($key, $oldData)) {
-            continue;
-        }
-        
-        if ($oldData[$key] != $value) {
-            switch ($key) {
-                case 'id_plan':
-                $oldName = \App\Plan::withTrashed()->find($oldData[$key])->name ?? 'Unknown';
+
+        switch ($key) {
+            case 'id_plan':
+                $oldName = \App\Plan::withTrashed()->find($oldValue)->name ?? 'Unknown';
                 $newName = \App\Plan::withTrashed()->find($value)->name ?? 'Unknown';
-                $changes['Plan'] = ['old' => $oldName, 'new' => $newName];
+                $changes[$fieldLabels[$key]] = ['old' => $oldName, 'new' => $newName];
                 break;
 
-                case 'id_status':
-                $oldName = \App\Statuscustomer::withTrashed()->find($oldData[$key])->name ?? 'Unknown';
+            case 'id_status':
+                $oldName = \App\Statuscustomer::withTrashed()->find($oldValue)->name ?? 'Unknown';
                 $newName = \App\Statuscustomer::withTrashed()->find($value)->name ?? 'Unknown';
-                $changes['Status'] = ['old' => $oldName, 'new' => $newName];
+                $changes[$fieldLabels[$key]] = ['old' => $oldName, 'new' => $newName];
                 break;
 
-                case 'id_distrouter':
-                $oldName = \App\Distrouter::withTrashed()->find($oldData[$key])->name ?? 'Unknown';
+            case 'id_distrouter':
+                $oldName = \App\Distrouter::withTrashed()->find($oldValue)->name ?? 'Unknown';
                 $newName = \App\Distrouter::withTrashed()->find($value)->name ?? 'Unknown';
-                $changes['Router'] = ['old' => $oldName, 'new' => $newName];
+                $changes[$fieldLabels[$key]] = ['old' => $oldName, 'new' => $newName];
                 break;
 
-                case 'id_distpoint':
-                $oldName = \App\Distpoint::withTrashed()->find($oldData[$key])->name ?? 'Unknown';
+            case 'id_distpoint':
+                $oldName = \App\Distpoint::withTrashed()->find($oldValue)->name ?? 'Unknown';
                 $newName = \App\Distpoint::withTrashed()->find($value)->name ?? 'Unknown';
-                $changes['Distpoint'] = ['old' => $oldName, 'new' => $newName];
+                $changes[$fieldLabels[$key]] = ['old' => $oldName, 'new' => $newName];
                 break;
 
-                case 'id_merchant':
-                $oldName = \App\Merchant::withTrashed()->find($oldData[$key])->name ?? 'Unknown';
+            case 'id_merchant':
+                $oldName = \App\Merchant::withTrashed()->find($oldValue)->name ?? 'Unknown';
                 $newName = \App\Merchant::withTrashed()->find($value)->name ?? 'Unknown';
-                $changes['Merchant'] = ['old' => $oldName, 'new' => $newName];
+                $changes[$fieldLabels[$key]] = ['old' => $oldName, 'new' => $newName];
                 break;
 
-                case 'id_olt':
-                $oldName = \App\Olt::withTrashed()->find($oldData[$key])->name ?? 'Unknown';
+            case 'id_olt':
+                $oldName = \App\Olt::withTrashed()->find($oldValue)->name ?? 'Unknown';
                 $newName = \App\Olt::withTrashed()->find($value)->name ?? 'Unknown';
-                $changes['OLT'] = ['old' => $oldName, 'new' => $newName];
+                $changes[$fieldLabels[$key]] = ['old' => $oldName, 'new' => $newName];
                 break;
 
+            case 'id_sale':
+                $oldName = \App\Sale::withTrashed()->find($oldValue)->name ?? 'Unknown';
+                $newName = \App\Sale::withTrashed()->find($value)->name ?? 'Unknown';
+                $changes[$fieldLabels[$key]] = ['old' => $oldName, 'new' => $newName];
+                break;
 
-                default:
-                $changes[$key] = [
-                    'old' => $oldData[$key],
-                    'new' => $value
+            case 'notification':
+                $oldLabel = $notificationLabels[(int) $oldValue] ?? (string) $oldValue;
+                $newLabel = $notificationLabels[(int) $value] ?? (string) $value;
+                $changes[$fieldLabels[$key]] = ['old' => $oldLabel, 'new' => $newLabel];
+                break;
+
+            default:
+                $changes[$fieldLabels[$key] ?? ucfirst($key)] = [
+                    'old' => $oldComparable !== '' ? $oldValue : $emptyValue,
+                    'new' => $newComparable !== '' ? $value : $emptyValue,
                 ];
-            }
         }
     }
 
@@ -2749,10 +2932,23 @@ public function update(Request $request, $id)
 
         return view('/customer/log', compact('logEntries', 'id', 'customers'));
     }
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
       try
       {
+          $hasDeletionColumns = Schema::hasColumn('customers', 'deletion_type')
+              && Schema::hasColumn('customers', 'deletion_reason');
+
+          $validated = $request->validate([
+              'deletion_type' => 'required|in:terminate,cancel',
+              'deletion_reason' => 'required|string|min:5|max:1000',
+          ], [
+              'deletion_type.required' => 'Pilihan status berhenti wajib diisi.',
+              'deletion_type.in' => 'Pilihan status berhenti tidak valid.',
+              'deletion_reason.required' => 'Alasan hapus customer wajib diisi.',
+              'deletion_reason.min' => 'Alasan minimal 5 karakter.',
+          ]);
+
           $customers = \App\Customer::Where('id',$id)->first();
 
           if (!$customers) {
@@ -2773,6 +2969,12 @@ public function update(Request $request, $id)
                   "Tidak dapat menghapus customer. Terdapat {$unpaidCount} invoice yang belum dibayar. "
                   . "Harap lunasi atau batalkan invoice tersebut terlebih dahulu."
               );
+          }
+
+          if ($hasDeletionColumns) {
+              $customers->deletion_type = $validated['deletion_type'];
+              $customers->deletion_reason = trim($validated['deletion_reason']);
+              $customers->save();
           }
 
           $distrouter = \App\Distrouter::withTrashed()->Where('id',$customers->id_distrouter)->first();

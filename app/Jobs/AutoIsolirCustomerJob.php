@@ -16,6 +16,32 @@ class AutoIsolirCustomerJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /**
+     * Hitung delay isolir berbasis env tenant agar konsisten dengan jalur manual.
+     */
+    private function resolveDelaySeconds(int $index, array $tenant, int $longPauseEvery): int
+    {
+        $delayMin = max(10, (int) ($tenant['NOTIF_DELAY_MIN'] ?? $tenant['notif_delay_min'] ?? 180));
+        $delayMax = max($delayMin + 10, (int) ($tenant['NOTIF_DELAY_MAX'] ?? $tenant['notif_delay_max'] ?? 360));
+        $longExtra = max(60, (int) ($tenant['NOTIF_LONG_PAUSE_EXTRA'] ?? $tenant['notif_long_pause_extra'] ?? 600));
+
+        $base = rand($delayMin, $delayMax);
+
+        // Tambah variasi kecil agar ritme tidak statis.
+        $variance = rand(0, 40);
+        $base += (rand(0, 1) ? $variance : -$variance);
+
+        if ($index % 10 === 0) {
+            $base += rand(20, 60);
+        }
+
+        if ($index > 0 && $index % $longPauseEvery === 0) {
+            $base += rand((int) ($longExtra * 0.5), $longExtra * 2);
+        }
+
+        return max((int) ($delayMin * 0.8), $base);
+    }
+
     public function handle()
     {
         $isolirdate = now()->day;
@@ -53,16 +79,20 @@ class AutoIsolirCustomerJob implements ShouldQueue
 
                 $start = Carbon::now();
                 $count = 0;
+                $longPauseEvery = max(1, (int) ($tenant['NOTIF_LONG_PAUSE_EVERY'] ?? $tenant['notif_long_pause_every'] ?? rand(18, 27)));
 
                 // Set tenant context agar IsolirJob constructor bisa simpan tenantDomain
                 app()->instance('tenant', $tenant);
 
                 foreach ($customers as $cust) {
                     $count++;
+
+                    $delay = $this->resolveDelaySeconds($count, $tenant, $longPauseEvery);
+
                     IsolirJob::dispatch($cust->id, $cust->id_status)
                         ->onQueue($tenantQueue)
-                        ->delay($start->addSeconds(5));
-                    Log::channel('isolir')->info("[{$tenantQueue}] Auto Isolir: {$cust->customer_id} | {$cust->name}");
+                        ->delay($start->addSeconds($delay));
+                    Log::channel('isolir')->info("[{$tenantQueue}] Auto Isolir: {$cust->customer_id} | {$cust->name} | ETA +{$delay}s");
                 }
 
                 Log::channel('isolir')->info("[{$tenantQueue}] ✅ Total customer processed for isolir: {$count}");

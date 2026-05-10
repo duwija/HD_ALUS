@@ -239,7 +239,7 @@ $(document).ready(function() {
 
         // Initialize sortable
         $('#sortable-workflow').sortable({
-            items: '.workflow-item',
+            items: '.wf-item',
             placeholder: 'ui-state-highlight',
             tolerance: 'pointer',
             cursor: 'move',

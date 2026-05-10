@@ -224,6 +224,7 @@
             <th>Invoice Date</th>
             <th>Invoice No</th>
             <th class="text-center">CID</th>
+            <th class="text-center">Billing Start</th>
             <th>Name</th>
             <th>Plan</th>
             <th>Merchant</th>

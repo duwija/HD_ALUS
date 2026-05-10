@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use \RouterOS\Client;
 use \RouterOS\Query;
 use Carbon\Carbon;
@@ -82,6 +83,22 @@ class DistrouterController extends Controller
     public function pppoeMapData(Request $request)
     {
         $routerId = $request->input('router_id'); // optional filter
+        $loadOdpInfo = (int) $request->input('load_odp_info', 0) === 1;
+        $defaultStatusIds = [2, 3, 4, 5]; // Active, Inactive, Block, Company Properti
+        $statusIds = $defaultStatusIds;
+
+        if ($request->has('status_ids')) {
+            $statusIds = collect(explode(',', (string) $request->input('status_ids')))
+                ->map(function ($v) {
+                    return (int) trim($v);
+                })
+                ->filter(function ($v) {
+                    return $v > 0;
+                })
+                ->unique()
+                ->values()
+                ->all();
+        }
 
         $routerTimeout = (int) tenant_env('PPPOE_MAP_ROUTER_TIMEOUT', 2);
         if ($routerTimeout < 1) {
@@ -98,84 +115,69 @@ class DistrouterController extends Controller
             ? \App\Distrouter::where('id', $routerId)->get()
             : \App\Distrouter::where('is_active', 1)->get();
 
-        $markers = [];
+        $markers   = [];
+        $syncedAt  = null;
+        $useDbData = false;
 
-        foreach ($routers as $router) {
-            if (empty($router->ip)) {
-                \Log::warning("[PppoeMap] Router {$router->name}: skipped because host/ip is empty");
-                continue;
+        // ── DB-first: check if pppoe_sessions table has recent data ──────────
+        // The pppoe:sync-sessions command runs every 5 minutes and keeps this table fresh.
+        // If data exists and is fresh (synced within 15 minutes), use it (fast path).
+        // Otherwise fall back to live router queries.
+        $staleLimitMinutes = 15;
+        try {
+            $latestSync = \DB::table('pppoe_sessions')->max('synced_at');
+            if ($latestSync && Carbon::parse($latestSync)->diffInMinutes(now()) <= $staleLimitMinutes) {
+                $syncedAt  = $latestSync;
+                $useDbData = true;
+            }
+        } catch (\Exception $e) {
+            // Table may not exist yet (migration pending) – fall through to live queries
+            \Log::info('[PppoeMap] pppoe_sessions table unavailable, using live queries: ' . $e->getMessage());
+        }
+
+        if ($useDbData) {
+            // ── Fast path: read offline PPPoE names from synced DB table ─────
+            $dbQuery = \DB::table('pppoe_sessions')
+                ->where('is_online', false)
+                ->select('pppoe_name', 'distrouter_id', 'last_offline_at');
+
+            if ($routerId) {
+                $dbQuery->where('distrouter_id', $routerId);
             }
 
-            $skipKey = 'pppoe_map_skip_router_' . $router->id;
-            if (!$routerId && Cache::has($skipKey)) {
-                \Log::info("[PppoeMap] Router {$router->name}: skipped due to recent connection failure");
-                continue;
-            }
+            $offlineSessions = $dbQuery->get()->keyBy('pppoe_name');
+            $offlinePppoeNames = $offlineSessions->keys()->toArray();
 
-            try {
-                $client = new Client([
-                    'host'    => $router->ip,
-                    'user'    => $router->user,
-                    'pass'    => $router->password,
-                    'port'    => (int) $router->port,
-                    'timeout' => $routerTimeout,
-                ]);
+            if (!empty($offlinePppoeNames)) {
+                // Build router name lookup
+                $routerNames = $routers->pluck('name', 'id')->toArray();
 
-                // Reset fail counter on successful connection
-                if ($router->fail_count > 0 || !$router->is_active) {
-                    $router->fail_count = 0;
-                    $router->is_active  = 1;
-                    $router->save();
-                }
-                Cache::forget($skipKey);
-
-                // Get active sessions first
-                $onlineNames = [];
-                $q = new Query('/ppp/active/print');
-                $active = $client->query($q)->read();
-                $onlineNames = collect($active)->pluck('name')->toArray();
-
-                // Get all secrets, find offline ones + capture last-logged-out
-                $offlineNames = [];
-                $lastLoggedOut = []; // name => timestamp string
-                $q = new Query('/ppp/secret/print');
-                $secrets = $client->query($q)->read();
-                $onlineIndex = array_flip($onlineNames); // O(1) lookup
-                foreach ($secrets as $s) {
-                    $isDisabled = isset($s['disabled']) && $s['disabled'] === 'true';
-                    if (!$isDisabled && !isset($onlineIndex[$s['name']])) {
-                        $offlineNames[] = $s['name'];
-                    }
-                    // capture last-logged-out for all secrets
-                    if (!empty($s['last-logged-out']) && $s['last-logged-out'] !== 'never') {
-                        $lastLoggedOut[$s['name']] = $s['last-logged-out'];
-                    }
-                }
-
-                if (empty($offlineNames)) continue;
-
-                // Match against customers who have coordinates
                 $customers = \App\Customer::with('distpoint_name')
-                    ->whereIn('pppoe', $offlineNames)
+                    ->whereIn('pppoe', $offlinePppoeNames)
+                    ->whereIn('id_status', $statusIds)
                     ->whereNotNull('coordinate')
                     ->where('coordinate', '!=', '')
-                    ->get(['id', 'name', 'pppoe', 'coordinate', 'phone', 'address', 'customer_id', 'id_distpoint']);
+                    ->limit(5000)
+                    ->get(['id', 'name', 'pppoe', 'coordinate', 'phone', 'address', 'customer_id', 'id_distpoint', 'id_olt', 'id_onu', 'id_distrouter', 'id_status']);
 
                 foreach ($customers as $c) {
                     $coords = array_map('trim', explode(',', $c->coordinate));
                     if (count($coords) < 2) continue;
                     $lat = (float) $coords[0];
                     $lng = (float) $coords[1];
-                        if ($lat === 0.0 || $lng === 0.0) continue;
-                        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) continue;
+                    if ($lat === 0.0 || $lng === 0.0) continue;
+                    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) continue;
 
-                    // Distpoint (ODP) coordinate
+                    $sess   = $offlineSessions->get($c->pppoe);
+                    $rName  = $sess ? ($routerNames[$sess->distrouter_id] ?? 'Unknown') : '-';
+                    $lastOff= $sess ? $sess->last_offline_at : null;
+
                     $odpLat = null; $odpLng = null; $odpName = null;
                     if ($c->distpoint_name && $c->distpoint_name->coordinate) {
                         $dc = array_map('trim', explode(',', $c->distpoint_name->coordinate));
                         if (count($dc) >= 2) {
                             $dl = (float)$dc[0]; $dn = (float)$dc[1];
-                                if (!($dl === 0.0 || $dn === 0.0) && $dl >= -90 && $dl <= 90 && $dn >= -180 && $dn <= 180) {
+                            if (!($dl === 0.0 || $dn === 0.0) && $dl >= -90 && $dl <= 90 && $dn >= -180 && $dn <= 180) {
                                 $odpLat  = $dl;
                                 $odpLng  = $dn;
                                 $odpName = $c->distpoint_name->name;
@@ -192,7 +194,150 @@ class DistrouterController extends Controller
                         'pppoe'        => $c->pppoe,
                         'phone'        => $c->phone,
                         'address'      => $c->address,
+                        'router'       => $rName,
+                        'id_olt'       => $c->id_olt,
+                        'id_onu'       => $c->id_onu,
+                        'id_distrouter'=> $c->id_distrouter,
+                        'id_status'    => $c->id_status,
+                        'secret_status'=> 'enable',
+                        'last_offline' => $lastOff,
+                        'odp_id'       => $c->distpoint_name ? $c->distpoint_name->id : null,
+                        'odp_lat'      => $odpLat,
+                        'odp_lng'      => $odpLng,
+                        'odp_name'     => $odpName,
+                    ];
+                }
+            }
+
+        } else {
+            // ── Fallback: live router queries (2-pass approach) ───────────────
+            $globalOnlineIndex = [];
+            $routerDataCache   = [];
+
+            foreach ($routers as $router) {
+                if (empty($router->ip)) continue;
+
+                $skipKey = 'pppoe_map_skip_router_' . $router->id;
+                if (!$routerId && Cache::has($skipKey)) continue;
+
+                try {
+                    $client = new Client([
+                        'host'    => $router->ip,
+                        'user'    => $router->user,
+                        'pass'    => $router->password,
+                        'port'    => (int) $router->port,
+                        'timeout' => $routerTimeout,
+                    ]);
+
+                    if ($router->fail_count > 0 || !$router->is_active) {
+                        $router->fail_count = 0;
+                        $router->is_active  = 1;
+                        $router->save();
+                    }
+                    Cache::forget($skipKey);
+
+                    $q           = new Query('/ppp/active/print');
+                    $active      = $client->query($q)->read();
+                    $onlineNames = collect($active)->pluck('name')->toArray();
+
+                    $q       = new Query('/ppp/secret/print');
+                    $secrets = $client->query($q)->read();
+
+                    $routerDataCache[$router->id] = [
+                        'router'        => $router,
+                        'onlineNames'   => $onlineNames,
+                        'secrets'       => $secrets,
+                        'lastLoggedOut' => [],
+                    ];
+
+                    foreach ($onlineNames as $name) {
+                        $globalOnlineIndex[$name] = $router->name;
+                    }
+
+                    foreach ($secrets as $s) {
+                        if (!empty($s['last-logged-out']) && $s['last-logged-out'] !== 'never') {
+                            $routerDataCache[$router->id]['lastLoggedOut'][$s['name']] = $s['last-logged-out'];
+                        }
+                    }
+
+                } catch (\Exception $e) {
+                    if (!$routerId) {
+                        Cache::put($skipKey, 1, now()->addSeconds($skipFailSeconds));
+                        $router->fail_count = ($router->fail_count ?? 0) + 1;
+                        if ($autoDisableThreshold > 0 && $router->fail_count >= $autoDisableThreshold) {
+                            $router->is_active = 0;
+                            \Log::warning("[PppoeMap] Router {$router->name}: auto-disabled after {$router->fail_count} failures");
+                        }
+                        $router->save();
+                    }
+                    \Log::warning("[PppoeMap] Router {$router->name}: " . $e->getMessage());
+                }
+            }
+
+            foreach ($routerDataCache as $routerData) {
+                $router        = $routerData['router'];
+                $secrets       = $routerData['secrets'];
+                $lastLoggedOut = $routerData['lastLoggedOut'];
+                $secretMeta    = [];
+
+                $offlineNames = [];
+                foreach ($secrets as $s) {
+                    $name = $s['name'] ?? null;
+                    if (!$name) continue;
+
+                    $isDisabled = isset($s['disabled']) && $s['disabled'] === 'true';
+                    $isOnline   = isset($globalOnlineIndex[$name]);
+                    $status     = $isDisabled ? 'disabled' : ($isOnline ? 'online' : 'enable');
+                    $secretMeta[$name] = $status;
+
+                    if (!$isDisabled && !$isOnline) {
+                        $offlineNames[] = $name;
+                    }
+                }
+
+                if (empty($offlineNames)) continue;
+
+                $customers = \App\Customer::with('distpoint_name')
+                    ->whereIn('pppoe', $offlineNames)
+                    ->whereIn('id_status', $statusIds)
+                    ->whereNotNull('coordinate')
+                    ->where('coordinate', '!=', '')
+                    ->get(['id', 'name', 'pppoe', 'coordinate', 'phone', 'address', 'customer_id', 'id_distpoint', 'id_olt', 'id_onu', 'id_distrouter', 'id_status']);
+
+                foreach ($customers as $c) {
+                    $coords = array_map('trim', explode(',', $c->coordinate));
+                    if (count($coords) < 2) continue;
+                    $lat = (float) $coords[0];
+                    $lng = (float) $coords[1];
+                    if ($lat === 0.0 || $lng === 0.0) continue;
+                    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) continue;
+
+                    $odpLat = null; $odpLng = null; $odpName = null;
+                    if ($c->distpoint_name && $c->distpoint_name->coordinate) {
+                        $dc = array_map('trim', explode(',', $c->distpoint_name->coordinate));
+                        if (count($dc) >= 2) {
+                            $dl = (float)$dc[0]; $dn = (float)$dc[1];
+                            if (!($dl === 0.0 || $dn === 0.0) && $dl >= -90 && $dl <= 90 && $dn >= -180 && $dn <= 180) {
+                                $odpLat  = $dl; $odpLng  = $dn; $odpName = $c->distpoint_name->name;
+                            }
+                        }
+                    }
+
+                    $markers[] = [
+                        'lat'          => $lat,
+                        'lng'          => $lng,
+                        'id'           => $c->id,
+                        'name'         => $c->name,
+                        'customer_id'  => $c->customer_id,
+                        'pppoe'        => $c->pppoe,
+                        'phone'        => $c->phone,
+                        'address'      => $c->address,
                         'router'       => $router->name,
+                        'id_olt'       => $c->id_olt,
+                        'id_onu'       => $c->id_onu,
+                        'id_distrouter'=> $c->id_distrouter,
+                        'id_status'    => $c->id_status,
+                        'secret_status'=> $secretMeta[$c->pppoe] ?? 'enable',
                         'last_offline' => $lastLoggedOut[$c->pppoe] ?? null,
                         'odp_id'       => $c->distpoint_name ? $c->distpoint_name->id : null,
                         'odp_lat'      => $odpLat,
@@ -201,54 +346,79 @@ class DistrouterController extends Controller
                     ];
                 }
 
-            } catch (\Exception $e) {
-                if (!$routerId) {
-                    Cache::put($skipKey, 1, now()->addSeconds($skipFailSeconds));
-                    // Increment fail counter and auto-disable after threshold
-                    $router->fail_count = ($router->fail_count ?? 0) + 1;
-                    if ($autoDisableThreshold > 0 && $router->fail_count >= $autoDisableThreshold) {
-                        $router->is_active = 0;
-                        \Log::warning("[PppoeMap] Router {$router->name}: auto-disabled after {$router->fail_count} consecutive failures");
-                    }
-                    $router->save();
+                if (count($markers) > 5000) {
+                    $markers = array_slice($markers, 0, 5000);
+                    break;
                 }
-                \Log::warning("[PppoeMap] Router {$router->name}: " . $e->getMessage());
             }
         }
 
-        // --- Build ODP info (id + total customer count) ---
+        // --- Build ODP info (cached) ---
+        $odpInfoCacheKey = 'pppoe_map_odp_info_' . md5(tenant_id());
+        $odpInfoTtl = (int) tenant_env('PPPOE_MAP_ODP_INFO_CACHE_SECONDS', 300);
+        if ($odpInfoTtl < 60) {
+            $odpInfoTtl = 60;
+        }
         $odpInfo = [];
-        try {
-            $allDistpoints = \App\Distpoint::withCount('customer')
-                ->whereNotNull('coordinate')->where('coordinate', '!=', '')
-                ->get(['id', 'name', 'description']);
-            foreach ($allDistpoints as $dp) {
-                $odpInfo[$dp->id] = [
-                    'id'             => $dp->id,
-                    'name'           => $dp->name,
-                    'description'    => $dp->description,
-                    'customer_count' => $dp->customer_count,
-                ];
-            }
-        } catch (\Exception $e) {
-            \Log::warning('[PppoeMap] ODP info build: ' . $e->getMessage());
+        if ($loadOdpInfo) {
+            $odpInfo = Cache::remember($odpInfoCacheKey, $odpInfoTtl, function() {
+                $odpInfo = [];
+                try {
+                    $odpInfoLimit = (int) tenant_env('PPPOE_MAP_ODP_INFO_LIMIT', 5000);
+                    if ($odpInfoLimit < 1000) {
+                        $odpInfoLimit = 1000;
+                    }
+                    // Build accurate ODP totals directly from customers table.
+                    $customerCounts = DB::table('customers')
+                        ->select('id_distpoint', DB::raw('COUNT(*) as total_count'))
+                        ->whereNull('deleted_at')
+                        ->whereNotNull('id_distpoint')
+                        ->groupBy('id_distpoint')
+                        ->get()
+                        ->keyBy('id_distpoint');
+
+                    $allDistpoints = \App\Distpoint::query()
+                        ->whereNotNull('coordinate')->where('coordinate', '!=', '')
+                        ->select(['id', 'name', 'description', 'ip'])
+                        ->limit($odpInfoLimit)
+                        ->get();
+                    foreach ($allDistpoints as $dp) {
+                        $capacity = is_numeric($dp->ip) ? (int) $dp->ip : null;
+                        $totalCount = 0;
+                        if (isset($customerCounts[$dp->id])) {
+                            $totalCount = (int) ($customerCounts[$dp->id]->total_count ?? 0);
+                        }
+                        $odpInfo[$dp->id] = [
+                            'id'             => $dp->id,
+                            'name'           => $dp->name,
+                            'description'    => $dp->description,
+                            'customer_count' => $totalCount,
+                            'total_customer_count' => $totalCount,
+                            'capacity'       => $capacity,
+                        ];
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('[PppoeMap] ODP info build: ' . $e->getMessage());
+                }
+                return $odpInfo;
+            });
         }
 
-        // --- Build ODP parent-child links ---
-        // Collect all unique distpoint IDs seen in markers
-        $odpIds = [];
-        foreach ($markers as $m) {
-            // We need the original id_distpoint; store it temporarily in marker
-        }
-        // Re-collect from customers query results - gather all distpoints that appeared
-        // We'll do a fresh query: all distpoints that have coordinates AND have a parent with coordinates
-        $odpLinks = [];
-        try {
-            // Load all distpoints that have coordinates and a parent
-            $distpoints = \App\Distpoint::with('parentDistPoint')
-                ->whereNotNull('coordinate')->where('coordinate', '!=', '')
-                ->whereNotNull('parrent')->where('parrent', '!=', 0)
-                ->get(['id', 'name', 'coordinate', 'parrent']);
+        // --- Build ODP parent-child links (cached) ---
+        $odpLinksCacheKey = 'pppoe_map_odp_links_' . md5(tenant_id());
+        $odpLinks = Cache::remember($odpLinksCacheKey, 3600, function() {
+            $odpLinks = [];
+            try {
+                $odpLinkLimit = (int) tenant_env('PPPOE_MAP_ODP_LINK_LIMIT', 5000);
+                if ($odpLinkLimit < 500) {
+                    $odpLinkLimit = 500;
+                }
+                $distpoints = \App\Distpoint::with('parentDistPoint')
+                    ->whereNotNull('coordinate')->where('coordinate', '!=', '')
+                    ->whereNotNull('parrent')->where('parrent', '!=', 0)
+                    ->select(['id', 'name', 'coordinate', 'parrent'])
+                    ->limit($odpLinkLimit)
+                    ->get();
 
             foreach ($distpoints as $dp) {
                 $parent = $dp->parentDistPoint;
@@ -273,16 +443,136 @@ class DistrouterController extends Controller
                     'parent_lat'  => $plat, 'parent_lng'  => $plng, 'parent_name' => $parent->name,
                 ];
             }
-        } catch (\Exception $e) {
-            \Log::warning('[PppoeMap] ODP link build: ' . $e->getMessage());
-        }
+            } catch (\Exception $e) {
+                \Log::warning('[PppoeMap] ODP link build: ' . $e->getMessage());
+            }
+            return $odpLinks;
+        });
 
         return response()->json([
-            'count'     => count($markers),
-            'markers'   => $markers,
-            'odp_links' => $odpLinks,
-            'odp_info'  => $odpInfo,
+            'count'       => count($markers),
+            'markers'     => $markers,
+            'odp_links'   => $odpLinks,
+            'odp_info'    => $odpInfo,
+            'synced_at'   => $syncedAt,
+            'data_source' => $useDbData ? 'db' : 'live',
         ]);
+    }
+
+    public function pppoeMapOdpInfo(Request $request)
+    {
+        $odpId = (int) $request->input('id');
+        if ($odpId <= 0) {
+            return response()->json(['success' => false, 'message' => 'Invalid ODP id'], 422);
+        }
+
+        $dp = \App\Distpoint::select(['id', 'name', 'description', 'ip'])->find($odpId);
+        if (!$dp) {
+            return response()->json(['success' => false, 'message' => 'ODP not found'], 404);
+        }
+
+        $totalCount = (int) DB::table('customers')
+            ->whereNull('deleted_at')
+            ->where('id_distpoint', $odpId)
+            ->count();
+
+        $capacity = is_numeric($dp->ip) ? (int) $dp->ip : null;
+
+        return response()->json([
+            'success' => true,
+            'info' => [
+                'id' => $dp->id,
+                'name' => $dp->name,
+                'description' => $dp->description,
+                'customer_count' => $totalCount,
+                'total_customer_count' => $totalCount,
+                'capacity' => $capacity,
+            ],
+        ]);
+    }
+
+    public function pppoeMapSecretStatus(Request $request)
+    {
+        $pppoe = trim((string) $request->input('pppoe'));
+        $routerId = (int) $request->input('router_id');
+
+        if ($pppoe === '') {
+            return response()->json(['success' => false, 'message' => 'PPPoE is required'], 422);
+        }
+
+        $router = null;
+        if ($routerId > 0) {
+            $router = \App\Distrouter::find($routerId);
+        }
+
+        if (!$router) {
+            $customer = \App\Customer::where('pppoe', $pppoe)->first(['id_distrouter']);
+            if ($customer && $customer->id_distrouter) {
+                $router = \App\Distrouter::find($customer->id_distrouter);
+            }
+        }
+
+        if (!$router || empty($router->ip)) {
+            return response()->json([
+                'success'       => true,
+                'secret_status' => 'unknown',
+                'router'        => $router ? $router->name : null,
+                'source'        => 'none',
+                'message'       => 'Router not found',
+            ]);
+        }
+
+        try {
+            $client = new Client([
+                'host'    => $router->ip,
+                'user'    => $router->user,
+                'pass'    => $router->password,
+                'port'    => (int) $router->port,
+                'timeout' => (int) tenant_env('PPPOE_MAP_ROUTER_TIMEOUT', 2),
+            ]);
+
+            $secretQuery = (new Query('/ppp/secret/print'))->where('name', $pppoe);
+            $secrets = $client->query($secretQuery)->read();
+            $secret = !empty($secrets) ? $secrets[0] : null;
+
+            if (!$secret) {
+                return response()->json([
+                    'success'       => true,
+                    'secret_status' => 'not-found',
+                    'router'        => $router->name,
+                    'source'        => 'router-live',
+                ]);
+            }
+
+            $isDisabled = isset($secret['disabled']) && $secret['disabled'] === 'true';
+            if ($isDisabled) {
+                return response()->json([
+                    'success'       => true,
+                    'secret_status' => 'disabled',
+                    'router'        => $router->name,
+                    'source'        => 'router-live',
+                ]);
+            }
+
+            $activeQuery = (new Query('/ppp/active/print'))->where('name', $pppoe);
+            $active = $client->query($activeQuery)->read();
+            $isOnline = !empty($active);
+
+            return response()->json([
+                'success'       => true,
+                'secret_status' => $isOnline ? 'online' : 'enable',
+                'router'        => $router->name,
+                'source'        => 'router-live',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success'       => true,
+                'secret_status' => 'unknown',
+                'router'        => $router->name,
+                'source'        => 'error',
+                'message'       => $e->getMessage(),
+            ]);
+        }
     }
 
     public function index()

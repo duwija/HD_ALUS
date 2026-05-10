@@ -588,7 +588,7 @@ class JurnalController extends Controller
     $date_end    = $request->input('date_end');
     $akun_filter = $request->input('akun_filter');
     $start       = $request->start ?? 0;
-    $length      = $request->length ?? 1000;
+    $length      = $request->length ?? 50;
 
     // fungsi bantu format saldo
     function formatSaldo($value)
@@ -598,14 +598,39 @@ class JurnalController extends Controller
       : number_format($value, 2, ',', '.');
     }
 
-    // ========== QUERY DASAR (periode dipilih) ==========
-    $query = \App\Jurnal::with('akun_name')
-    ->whereBetween('date', [$date_from, $date_end])
-    ->whereNull('deleted_at');
+    // ========== GET UNIQUE ACCOUNTS WITH PAGINATION ==========
+    // Step 1: Get total count of unique accounts
+    $akunCountQuery = DB::table('jurnals as j')
+    ->select('j.id_akun')
+    ->distinct()
+    ->whereBetween('j.date', [$date_from, $date_end])
+    ->whereNull('j.deleted_at');
 
     if (!empty($akun_filter)) {
-      $query->where('id_akun', $akun_filter);
+      $akunCountQuery->where('j.id_akun', $akun_filter);
     }
+
+    $recordsTotal = $akunCountQuery->count();
+
+    // Step 2: Get paginated unique accounts
+    $paginatedAkuns = DB::table('jurnals as j')
+    ->select('j.id_akun')
+    ->distinct()
+    ->whereBetween('j.date', [$date_from, $date_end])
+    ->whereNull('j.deleted_at')
+    ->orderBy('j.id_akun', 'asc');
+
+    if (!empty($akun_filter)) {
+      $paginatedAkuns->where('j.id_akun', $akun_filter);
+    }
+
+    $paginatedAkuns = $paginatedAkuns->skip($start)->take($length)->pluck('id_akun')->toArray();
+
+    // Step 3: Load transactions only for paginated accounts
+    $query = \App\Jurnal::with('akun_name')
+    ->whereBetween('date', [$date_from, $date_end])
+    ->whereNull('deleted_at')
+    ->whereIn('id_akun', $paginatedAkuns);
 
     $allTransactions = $query
     ->orderBy('id_akun', 'asc')
@@ -613,9 +638,16 @@ class JurnalController extends Controller
     ->get()
     ->groupBy('id_akun');
 
-    $recordsTotal = $allTransactions->count();
-    $totalDebet   = $query->sum('debet');
-    $totalKredit  = $query->sum('kredit');
+    // Calculate totals for ALL transactions in range (not just paginated)
+    $totalQuery = \App\Jurnal::whereBetween('date', [$date_from, $date_end])
+    ->whereNull('deleted_at');
+
+    if (!empty($akun_filter)) {
+      $totalQuery->where('id_akun', $akun_filter);
+    }
+
+    $totalDebet   = $totalQuery->sum('debet');
+    $totalKredit  = $totalQuery->sum('kredit');
 
     // =========================================================
     // 1️⃣ SALDO AWAL — dengan join ke akuns untuk menentukan arah normal
@@ -641,13 +673,8 @@ class JurnalController extends Controller
       ")
     )
     ->where('j.date', '<', $date_from)
-    ->whereNull('j.deleted_at');
-
-    if (!empty($akun_filter)) {
-      $saldoAwalQuery->where('j.id_akun', $akun_filter);
-    }
-
-    $saldoAwalQuery = $saldoAwalQuery
+    ->whereNull('j.deleted_at')
+    ->whereIn('j.id_akun', $paginatedAkuns)
     ->groupBy('j.id_akun')
     ->pluck('saldo_awal', 'id_akun');
 

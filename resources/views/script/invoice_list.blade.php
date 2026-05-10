@@ -70,7 +70,11 @@
      },
 
      dataSrc: function(json) {
-      var fmt = new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 });
+      var fmt = new Intl.NumberFormat('en-US', {
+        style: 'decimal',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
       $('#total').text(fmt.format(json.total));
       $('#total_paid').text(fmt.format(json.total_paid));
       $('#unpaid_payment').text(fmt.format(json.unpaid_payment));
@@ -114,27 +118,32 @@
 
     },
     {
-      "targets": 7, // address
+      "targets": 4, // billing start
+      "className": "text-center",
+
+    },
+    {
+      "targets": 8, // address
       "className": "text-left",
 
     },
     {
-      "targets": 8, // period
+      "targets": 9, // period
       "className": "text-center font-weight-bold",
 
     },
     {
-      "targets": 10, // tax
+      "targets": 11, // tax
       "className": "text-center font-weight-bold",
 
     },
     {
-      "targets": 11, // total_amount
+      "targets": 12, // total_amount
       "className": "text-right font-weight-bold",
 
     },
     {
-      "targets": 12, // status
+      "targets": 13, // status
       "className": "text-center font-weight-bold",
 
     },
@@ -144,6 +153,7 @@
     {data: 'date', name: 'date'},
     {data: 'number', name: 'number'},
     {data: 'cid', name: 'cid'},
+    {data: 'billing_start', name: 'billing_start'},
     {data: 'name', name: 'name'},
     {data: 'plan', name: 'plan'},
     {data: 'merchant', name: 'merchant'},

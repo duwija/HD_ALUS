@@ -286,6 +286,19 @@
                     </div>
                     <div class="col-md-6">
                         <div class="form-group">
+                            <label for="id_card">ID Card / KTP</label>
+                            <input type="text"
+                                   class="form-control @error('id_card') is-invalid @enderror"
+                                   id="id_card" name="id_card"
+                                   value="{{ old('id_card', $customer->id_card) }}"
+                                   placeholder="Nomor KTP / ID Card">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
                             <label for="npwp">NPWP</label>
                             <input type="text"
                                    class="form-control @error('npwp') is-invalid @enderror"
@@ -294,6 +307,7 @@
                                    placeholder="Nomor NPWP">
                         </div>
                     </div>
+                    <div class="col-md-6"></div>
                 </div>
 
                 <div class="row">

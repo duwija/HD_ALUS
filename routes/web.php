@@ -125,6 +125,7 @@ Route::prefix('sales')->group(function() {
         Route::get('/customer/{id}/edit', [SalesAuthController::class, 'showEditCustomer'])->name('sales.customer.edit');
         Route::post('/customer/{id}/update', [SalesAuthController::class, 'updateCustomer'])->name('sales.customer.update');
         Route::post('/customer/{id}/stage', [SalesAuthController::class, 'updateCustomerStage'])->name('sales.customer.stage');
+        Route::post('/customer/{id}/file', [SalesAuthController::class, 'uploadCustomerFile'])->name('sales.customer.file.upload');
         Route::get('/logout', [SalesAuthController::class, 'logout'])->name('sales.logout');
     });
 });
@@ -374,6 +375,8 @@ Route::post('/ticket/{id}/workflow/resume', [TicketController::class, 'resumeTic
 
 
 Route::get('/schedule', [TicketController::class, 'tvwall'])->name('ticket.tvwall');
+Route::get('/schedule/list', [TicketController::class, 'scheduleList'])->name('ticket.schedule.list');
+Route::get('/ticket/schedule-list/data', [TicketController::class, 'scheduleListData'])->name('ticket.schedule.list.data');
 Route::get('/ticket/tvwall/data', [TicketController::class, 'tvwallData'])->name('ticket.tvwall.data');
 
 
@@ -727,6 +730,8 @@ Route::get('/pppoe-monitor','DistrouterController@pppoeMonitor')->name('pppoe.mo
 Route::get('/pppoe-monitor/data','DistrouterController@pppoeMonitorData')->name('pppoe.monitor.data');
 Route::get('/pppoe-map','DistrouterController@pppoeMap')->name('pppoe.map');
 Route::get('/pppoe-map/data','DistrouterController@pppoeMapData')->name('pppoe.map.data');
+Route::get('/pppoe-map/odp-info','DistrouterController@pppoeMapOdpInfo')->name('pppoe.map.odp-info');
+Route::get('/pppoe-map/secret-status','DistrouterController@pppoeMapSecretStatus')->name('pppoe.map.secret-status');
 Route::post('/distrouter/executeCommand','DistrouterController@executeCommand');
 
 Route::get('/distrouter/logs/{id}', 'DistrouterController@getMikrotikLogs');

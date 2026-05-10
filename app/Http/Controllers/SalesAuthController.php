@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\File as FileFacade;
 use App\Sale;
 use App\Customer;
 
@@ -170,7 +171,7 @@ class SalesAuthController extends Controller
         // Verify this customer belongs to this sales
         $customer = Customer::where('id', $id)
             ->where('id_sale', $sales->id)
-            ->with(['plan_name', 'status_name', 'distrouter', 'merchant_name'])
+            ->with(['plan_name', 'status_name', 'distrouter', 'merchant_name', 'file'])
             ->firstOrFail();
 
         $workflowStages = \App\LeadWorkflow::orderBy('order')->get();
@@ -180,6 +181,46 @@ class SalesAuthController extends Controller
             'customer'       => $customer,
             'workflowStages' => $workflowStages,
         ]);
+    }
+
+    public function uploadCustomerFile(Request $request, $id)
+    {
+        $sales = Auth::guard('sales')->user();
+
+        $customer = Customer::where('id', $id)
+            ->where('id_sale', $sales->id)
+            ->firstOrFail();
+
+        $request->validate([
+            'file' => 'required|file|max:10240',
+            'file_name' => 'nullable|string|max:191',
+        ]);
+
+        $uploadedFile = $request->file('file');
+        $originalName = $uploadedFile->getClientOriginalName();
+        $safeOriginal = preg_replace('/[^A-Za-z0-9._-]/', '_', $originalName);
+        $filename = time() . '_' . $safeOriginal;
+
+        $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
+        $location = public_path("tenants/{$rescode}/upload/customerfiles");
+        $relativePath = "tenants/{$rescode}/upload/customerfiles";
+
+        if (!FileFacade::exists($location)) {
+            FileFacade::makeDirectory($location, 0755, true, true);
+        }
+
+        $uploadedFile->move($location, $filename);
+
+        $customName = trim($request->input('file_name', ''));
+        $displayName = $customName !== '' ? $customName : $originalName;
+
+        \App\File::create([
+            'id_customer' => $customer->id,
+            'name' => $displayName,
+            'path' => $relativePath . '/' . $filename,
+        ]);
+
+        return redirect('/sales/customer/' . $customer->id)->with('success', 'File berhasil diupload.');
     }
 
     /**
@@ -347,6 +388,7 @@ class SalesAuthController extends Controller
             'phone'                  => 'required|string|max:191',
             'date_of_birth'          => 'nullable|date',
             'email'                  => 'nullable|email|max:191',
+            'id_card'                => 'nullable|string|max:191',
             'npwp'                   => 'nullable|string|max:191',
             'id_plan'                => 'required|exists:plans,id',
             'id_merchant'            => 'nullable|exists:merchants,id',
@@ -367,6 +409,7 @@ class SalesAuthController extends Controller
             'phone'                  => $request->phone,
             'date_of_birth'          => $request->date_of_birth,
             'email'                  => $request->email,
+            'id_card'                => $request->id_card,
             'npwp'                   => $request->npwp,
             'id_plan'                => $request->id_plan,
             'id_merchant'            => $request->id_merchant,
@@ -419,6 +462,7 @@ class SalesAuthController extends Controller
             'phone'                   => 'required|string|max:191',
             'date_of_birth'           => 'nullable|date',
             'email'                   => 'nullable|email|max:191',
+            'id_card'                 => 'nullable|string|max:191',
             'npwp'                    => 'nullable|string|max:191',
             'id_plan'                 => 'required|exists:plans,id',
             'id_merchant'             => 'nullable|exists:merchants,id',
@@ -461,6 +505,7 @@ class SalesAuthController extends Controller
             'phone'                   => $request->phone,
             'date_of_birth'           => $request->date_of_birth,
             'email'                   => $request->email,
+            'id_card'                 => $request->id_card,
             'npwp'                    => $request->npwp,
             'id_plan'                 => $request->id_plan,
             'id_merchant'             => $request->id_merchant,

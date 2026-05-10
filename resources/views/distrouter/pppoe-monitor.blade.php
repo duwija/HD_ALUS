@@ -1,7 +1,6 @@
 @extends('layout.main')
 @section('title','PPPoE Monitor')
 @section('content')
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   .mon-card {
     background: var(--bg-surface);
@@ -38,103 +37,32 @@
     border:1px solid rgba(74,118,189,.25); border-radius:20px;
     padding:3px 10px; font-weight:600;
   }
-  /* Map panel */
-  #mapPanel {
-    position: sticky;
-    top: 10px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px;
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 130px);
-    min-height: 420px;
+  .metric-filter-wrap {
+    display:inline-flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:8px;
+    padding:6px 10px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:var(--bg-surface);
   }
-  #pppoe-inline-map {
-    flex: 1;
-    border-radius: 8px;
-    overflow: hidden;
-    min-height: 300px;
+  .metric-filter-item {
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    margin:0;
+    font-size:12px;
+    color:var(--text-secondary);
+    cursor:pointer;
+    user-select:none;
   }
-  .map-offline-badge {
-    display:inline-flex;align-items:center;gap:4px;
-    padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;
-    background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.25);
+  .metric-dot {
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    display:inline-block;
   }
-  /* Leaflet popup dark theme */
-  .leaflet-popup-content-wrapper {
-    background: var(--bg-surface) !important;
-    color: var(--text-primary) !important;
-    border: 1px solid var(--border) !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,.3) !important;
-  }
-  .leaflet-popup-tip { background: var(--bg-surface) !important; }
-  .mpopup-title { font-weight:700;font-size:12px;margin-bottom:4px; }
-  .mpopup-row   { font-size:11px;color:var(--text-secondary);margin:2px 0; }
-  .mpopup-badge { display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);margin-top:3px; }
-  .mpopup-badge-link {
-    display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;
-    font-weight:600;background:rgba(59,130,246,.15);color:#3b82f6;
-    border:1px solid rgba(59,130,246,.3);margin-top:3px;margin-left:4px;text-decoration:none;
-  }
-  .mpopup-badge-link:hover { background:rgba(59,130,246,.28);color:#2563eb;text-decoration:none; }
-
-  /* ODP marker */
-  .pppoe-odp-dot {
-    width: 14px; height: 14px;
-    background: #f59e0b;
-    border: 2px solid #fff;
-    border-radius: 3px;
-    box-shadow: 0 0 0 2px rgba(245,158,11,.4);
-  }
-  /* Map legend */
-  .map-legend {
-    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-    font-size:11px;color:var(--text-secondary);margin-bottom:6px;
-  }
-  .legend-dot { width:12px;height:12px;border-radius:50%;border:2px solid #fff;display:inline-block;vertical-align:middle;margin-right:3px; }
-  .legend-sq  { width:12px;height:12px;border-radius:3px;border:2px solid #fff;display:inline-block;vertical-align:middle;margin-right:3px; }
-  .legend-line { width:24px;height:0;border-top:2px dashed;display:inline-block;vertical-align:middle;margin-right:3px; }
-
-  /* Pulsing offline marker */
-  @keyframes pppoe-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(239,68,68,.7), 0 0 0 0 rgba(239,68,68,.4); }
-    50%  { box-shadow: 0 0 0 6px rgba(239,68,68,.0), 0 0 0 10px rgba(239,68,68,.0); }
-    100% { box-shadow: 0 0 0 0 rgba(239,68,68,.7), 0 0 0 0 rgba(239,68,68,.4); }
-  }
-  @keyframes pppoe-blink {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: .35; }
-  }
-  .pppoe-marker-dot {
-    width: 14px; height: 14px;
-    background: #ef4444;
-    border: 2px solid #fff;
-    border-radius: 50%;
-    animation: pppoe-pulse 1.4s ease-out infinite, pppoe-blink 1.4s ease-in-out infinite;
-  }
-  /* Animated flow: parent → child */
-  @keyframes dashFlow {
-    from { stroke-dashoffset: 20; }
-    to   { stroke-dashoffset: 0; }
-  }
-  path.odp-flow-line {
-    animation: dashFlow 1.2s linear infinite;
-    stroke-linecap: round;
-  }
-  @keyframes legendFlow {
-    from { stroke-dashoffset: 10; }
-    to   { stroke-dashoffset: 0; }
-  }
-  .legend-flow-line { animation: legendFlow 1.2s linear infinite; }
-  /* Full page map mode */
-  body.map-fullscreen #mapPanel {
-    position: fixed; inset: 0; z-index: 1100; border-radius: 0;
-    height: 100vh !important; margin: 0; padding: 14px;
-  }
-  body.map-fullscreen #pppoe-inline-map { height: calc(100vh - 110px) !important; }
 </style>
 
 <div class="container-fluid">
@@ -147,6 +75,25 @@
       <div style="font-size:12px;color:var(--text-muted)">Update otomatis setiap 3 menit &bull; Tampil: <span id="rangeLabel">2 jam terakhir</span></div>
     </div>
     <div class="d-flex align-items-center" style="gap:10px">
+      <div class="metric-filter-wrap" title="Tampilkan/sembunyikan seri chart">
+        <span style="font-size:11px;color:var(--text-muted);font-weight:700">Chart:</span>
+        <label class="metric-filter-item">
+          <input type="checkbox" class="metricFilter" value="total" checked>
+          <span class="metric-dot" style="background:#4a76bd"></span>Total
+        </label>
+        <label class="metric-filter-item">
+          <input type="checkbox" class="metricFilter" value="active" checked>
+          <span class="metric-dot" style="background:#10b981"></span>Aktif
+        </label>
+        <label class="metric-filter-item">
+          <input type="checkbox" class="metricFilter" value="offline" checked>
+          <span class="metric-dot" style="background:#ef4444"></span>Offline
+        </label>
+        <label class="metric-filter-item">
+          <input type="checkbox" class="metricFilter" value="disabled" checked>
+          <span class="metric-dot" style="background:#9ca3af"></span>Disable
+        </label>
+      </div>
       <select id="rangeSelect" class="form-control form-control-sm" style="width:auto;background:var(--input-bg);color:var(--text-primary);border-color:var(--input-border)">
         <option value="1">1 Jam</option>
         <option value="2" selected>2 Jam</option>
@@ -168,61 +115,12 @@
 
   <div class="row" style="margin:0 -8px">
 
-    {{-- LEFT: Charts --}}
-    <div class="col-xl-7 col-lg-7 col-12" style="padding:0 8px">
+    {{-- Charts --}}
+    <div class="col-12" style="padding:0 8px">
       <div id="monitorGrid" class="row">
         <div class="col-12 text-center py-5" style="color:var(--text-muted)">
           <i class="fas fa-spinner fa-spin fa-2x"></i>
           <div class="mt-2">Memuat data...</div>
-        </div>
-      </div>
-    </div>
-
-    {{-- RIGHT: Offline Map --}}
-    <div class="col-xl-5 col-lg-5 col-12" style="padding:0 8px">
-      <div id="mapPanel">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-          <span style="font-size:14px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:6px">
-            <i class="fas fa-map-marked-alt" style="color:#ef4444;font-size:13px"></i>PPPoE Offline Map
-          </span>
-          <div style="display:flex;align-items:center;gap:6px">
-            <select id="mapRouterFilter" class="form-control form-control-sm" style="width:auto;background:var(--input-bg);color:var(--text-primary);border-color:var(--input-border)">
-              <option value="">Semua Router</option>
-            </select>
-            <button id="btnRefreshMap" class="btn btn-sm btn-outline-danger" style="border-radius:8px" title="Refresh map">
-              <i class="fas fa-sync-alt"></i>
-            </button>
-            <button id="btnZoomOffline" class="btn btn-sm btn-outline-warning" style="border-radius:8px" title="Zoom ke area offline" onclick="zoomToOffline()">
-              <i class="fas fa-crosshairs"></i>
-            </button>
-            <button id="btnFullPage" class="btn btn-sm btn-outline-secondary" style="border-radius:8px" title="Full Page" onclick="toggleFullPage()">
-              <i class="fas fa-expand"></i>
-            </button>
-          </div>
-        </div>
-        <div style="margin-bottom:8px;min-height:18px">
-          <span id="mapStatBadge" class="map-offline-badge" style="display:none;cursor:pointer" title="Klik untuk lihat daftar" onclick="openOfflineModal()">
-            <i class="fas fa-circle" style="font-size:7px"></i><span id="mapCount">0</span> customer offline
-          </span>
-          <span id="mapLoadingText" style="font-size:11px;color:var(--text-muted);display:none">
-            <i class="fas fa-spinner fa-spin mr-1"></i>Menghubungi router...
-          </span>
-        </div>
-        <div class="map-legend">
-          <span><span class="legend-dot" style="background:#ef4444"></span>Pelanggan Offline</span>
-          <span><span class="legend-sq" style="background:#f59e0b"></span>ODP / Dispoint</span>
-          <span><span class="legend-line" style="border-color:#f59e0b"></span>Pelanggan → ODP</span>
-          <span>
-            <svg width="28" height="10" style="vertical-align:middle;margin-right:3px;overflow:visible">
-              <path class="legend-flow-line" d="M0,5 L28,5"
-                stroke="#60a5fa" stroke-width="2.5"
-                stroke-dasharray="6,4" stroke-linecap="round" fill="none"/>
-              <polygon points="24,2 28,5 24,8" fill="#60a5fa"/>
-            </svg>Aliran Parent &rarr; Child ODP
-          </span>
-        </div>
-        <div style="position:relative;flex:1;display:flex;flex-direction:column">
-          <div id="pppoe-inline-map"></div>
         </div>
       </div>
     </div>
@@ -279,36 +177,18 @@
   </div>
 </div>
 
-{{-- Offline Customer List Modal (map panel) --}}
-<div class="modal fade" id="offlineMonitorModal" tabindex="-1" role="dialog" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
-    <div class="modal-content" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border)">
-      <div class="modal-header" style="border-color:var(--border);padding:12px 16px">
-        <h5 class="modal-title" style="font-size:15px;font-weight:700">
-          <i class="fas fa-exclamation-circle mr-2" style="color:#ef4444"></i>Daftar Customer Offline
-        </h5>
-        <button type="button" class="close" data-dismiss="modal" style="color:var(--text-primary);opacity:.7">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body" id="offlineMonitorListBody" style="padding:0;max-height:70vh;overflow-y:auto"></div>
-      <div class="modal-footer" style="border-color:var(--border);padding:8px 16px">
-        <span id="offlineMonitorCount" style="font-size:12px;color:var(--text-muted);flex:1"></span>
-        <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Tutup</button>
-      </div>
-    </div>
-  </div>
-</div>
 @endsection
 
 @section('footer-scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function(){
   var charts = {};
+  var detailChart = null;
+  var monitorDataCache = [];
   var AUTO = 180; // 3 menit
   var countdown = AUTO;
+  var metricFilterStorageKey = 'pppoe_monitor_metric_filters_' + window.location.host;
 
   var COLORS = {
     total:    { border:'#4a76bd', bg:'rgba(74,118,189,.15)' },
@@ -320,6 +200,7 @@
   function buildDataset(label, key, rows){
     return {
       label: label,
+      metricKey: key,
       data: rows,
       borderColor: COLORS[key].border,
       backgroundColor: COLORS[key].bg,
@@ -329,6 +210,59 @@
       fill: true,
       tension: 0.4,
     };
+  }
+
+  function getSelectedMetricMap() {
+    var selected = {};
+    document.querySelectorAll('.metricFilter:checked').forEach(function(el) {
+      selected[el.value] = true;
+    });
+    return selected;
+  }
+
+  function saveMetricFilterSelection() {
+    try {
+      var selected = [];
+      document.querySelectorAll('.metricFilter:checked').forEach(function(el) {
+        selected.push(el.value);
+      });
+      localStorage.setItem(metricFilterStorageKey, JSON.stringify(selected));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }
+
+  function restoreMetricFilterSelection() {
+    try {
+      var raw = localStorage.getItem(metricFilterStorageKey);
+      if (!raw) return;
+      var selected = JSON.parse(raw);
+      if (!Array.isArray(selected)) return;
+
+      var selectedMap = {};
+      selected.forEach(function(key) { selectedMap[String(key)] = true; });
+      document.querySelectorAll('.metricFilter').forEach(function(el) {
+        el.checked = !!selectedMap[String(el.value)];
+      });
+    } catch (e) {
+      // Ignore malformed storage data
+    }
+  }
+
+  function applyMetricVisibilityToChart(chart) {
+    if (!chart || !chart.data || !chart.data.datasets) return;
+    var selectedMap = getSelectedMetricMap();
+    chart.data.datasets.forEach(function(ds, idx) {
+      chart.setDatasetVisibility(idx, !!selectedMap[ds.metricKey]);
+    });
+    chart.update('none');
+  }
+
+  function applyMetricVisibilityToAllCharts() {
+    Object.keys(charts).forEach(function(key) {
+      applyMetricVisibilityToChart(charts[key]);
+    });
+    applyMetricVisibilityToChart(detailChart);
   }
 
   function renderCard(r){
@@ -395,6 +329,7 @@
         }
       }
     });
+    applyMetricVisibilityToChart(charts[r.id]);
   }
 
   function loadData(){
@@ -412,9 +347,8 @@
       var html = '';
       data.forEach(function(r){ html += renderCard(r); });
       $('#monitorGrid').html(html);
+      monitorDataCache = data;
       data.forEach(function(r){ drawChart(r); });
-      // Populate map router filter
-      if(window.populateMapRouters) window.populateMapRouters(data.map(function(r){ return {id:r.id, name:r.name}; }));
     }).fail(function(){
       $('#monitorGrid').html('<div class="col-12"><div class="alert alert-danger">Gagal memuat data.</div></div>');
     });
@@ -450,7 +384,6 @@
       });
     });
 
-    var detailChart = null;
     function loadDetailChart(rid, hours){
       $.getJSON('/pppoe-monitor/data?hours='+hours, function(data){
         var r = null;
@@ -486,6 +419,7 @@
             }
           }
         });
+        applyMetricVisibilityToChart(detailChart);
         // Show latest stats in modal footer
         var l = r.latest||{};
         $('#detailStats').html(
@@ -556,228 +490,22 @@
     });
 
     // Countdown + auto refresh
+    restoreMetricFilterSelection();
+
+    $(document).on('change', '.metricFilter', function(){
+      saveMetricFilterSelection();
+      applyMetricVisibilityToAllCharts();
+    });
+
     setInterval(function(){
       countdown--;
       $('#countdown').text(countdown + 's');
       if(countdown <= 0){
         loadData();
-        loadMap();
         countdown = AUTO;
       }
     }, 1000);
   });
-})();
-
-// ── Inline PPPoE Offline Map ────────────────────────────────
-(function(){
-  var map = L.map('pppoe-inline-map', { zoomControl: true }).setView([-2.5, 118], 5);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OSM contributors', maxZoom: 19
-  }).addTo(map);
-
-  var redIcon = L.divIcon({
-    className: '',
-    html: '<div class="pppoe-marker-dot"></div>',
-    iconSize:[14,14], iconAnchor:[7,7], popupAnchor:[0,-10]
-  });
-
-  var odpIcon = L.divIcon({
-    className: '',
-    html: '<div class="pppoe-odp-dot"></div>',
-    iconSize:[14,14], iconAnchor:[7,7], popupAnchor:[0,-10]
-  });
-
-  var markerLayer = L.layerGroup().addTo(map);
-
-  window.loadMap = function(){
-    var rid = document.getElementById('mapRouterFilter').value;
-    var url = '/pppoe-map/data' + (rid ? '?router_id='+rid : '');
-
-    map.invalidateSize(); // ensure correct tile/marker rendering
-    document.getElementById('mapLoadingText').style.display = 'inline-flex';
-    document.getElementById('mapStatBadge').style.display   = 'none';
-    markerLayer.clearLayers();
-
-    $.getJSON(url, function(data){
-      document.getElementById('mapLoadingText').style.display = 'none';
-      var pts = data.markers || [];
-      document.getElementById('mapCount').textContent = pts.length;
-      document.getElementById('mapStatBadge').style.display = pts.length ? 'inline-flex' : 'none';
-
-      window._offlineCustomers = pts;
-      var odpInfo = data.odp_info || {};  // keyed by odp id
-      var bounds = [];
-      pts.forEach(function(m){
-        var ll = [m.lat, m.lng];
-        bounds.push(ll);
-        var popup = '<div class="mpopup-title"><i class="fas fa-user" style="margin-right:4px"></i>'+m.name+'</div>'
-          +'<div class="mpopup-row"><i class="fas fa-wifi" style="width:12px;margin-right:3px"></i>'+m.pppoe+'</div>'
-          +(m.phone   ? '<div class="mpopup-row"><i class="fas fa-phone" style="width:12px;margin-right:3px"></i>'+m.phone+'</div>'   : '')
-          +(m.address ? '<div class="mpopup-row"><i class="fas fa-map-pin" style="width:12px;margin-right:3px"></i>'+m.address+'</div>' : '')
-          +'<div class="mpopup-row"><i class="fas fa-server" style="width:12px;margin-right:3px"></i>'+m.router+'</div>'
-          +(m.last_offline ? '<div class="mpopup-row" style="color:#f59e0b"><i class="fas fa-clock" style="width:12px;margin-right:3px"></i>Offline sejak: <b>'+m.last_offline+'</b></div>' : '')
-          +'<span class="mpopup-badge"><i class="fas fa-exclamation-circle" style="margin-right:3px"></i>Offline</span>'
-          +(m.id ? '<a href="/customer/'+m.id+'" target="_blank" class="mpopup-badge-link"><i class="fas fa-external-link-alt" style="margin-right:3px"></i>Lihat Pelanggan</a>' : '');
-        L.marker(ll, { icon: redIcon }).bindPopup(popup, { maxWidth:240 }).addTo(markerLayer);
-
-        // ODP marker + dashed line
-        if(m.odp_lat != null && m.odp_lng != null){
-          var odpll = [m.odp_lat, m.odp_lng];
-          var odpInf = odpInfo[m.odp_id] || {};
-          var odpCount = (odpInf.customer_count !== undefined) ? odpInf.customer_count : '-';
-          var odpBtn = m.odp_id ? '<a href="/distpoint/'+m.odp_id+'" target="_blank" class="mpopup-badge-link" style="background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)"><i class="fas fa-external-link-alt" style="margin-right:3px"></i>Lihat ODP</a>' : '';
-          var odpPopup = '<div class="mpopup-title"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:#f59e0b"></i>'+(odpInf.name||m.odp_name||'ODP')+'</div>'
-            +'<div class="mpopup-row"><i class="fas fa-users" style="width:12px;margin-right:3px"></i>Pelanggan: <strong>'+odpCount+'</strong></div>'
-            +(odpInf.description && odpInf.description !== '-' ? '<div class="mpopup-row" style="font-size:10px">'+odpInf.description+'</div>' : '')
-            +'<div style="margin-top:4px">'+odpBtn+'</div>';
-          L.marker(odpll, { icon: odpIcon }).bindPopup(odpPopup, { maxWidth:200 }).addTo(markerLayer);
-          L.polyline([ll, odpll], {
-            color: '#f59e0b',
-            weight: 2,
-            dashArray: '6, 5',
-            opacity: 0.8
-          }).addTo(markerLayer);
-          bounds.push(odpll);
-        }
-      });
-
-      window._offlineBounds = bounds.slice();
-      if(bounds.length === 1)       map.setView(bounds[0], 15);
-      else if(bounds.length > 1)    map.fitBounds(bounds, { padding:[30,30], maxZoom:15 });
-
-      // Draw ODP parent-child links (only ODPs connected to offline users on this map)
-      var odpLinks = data.odp_links || [];
-      // Build set of ODP names that appear in current offline markers
-      var visibleOdpNames = {};
-      pts.forEach(function(m){ if(m.odp_name) visibleOdpNames[m.odp_name] = true; });
-
-      odpLinks.forEach(function(link){
-        // Only draw if child ODP has at least one offline user visible
-        if(!visibleOdpNames[link.child_name]) return;
-        var childll  = [link.child_lat,  link.child_lng];
-        var parentll = [link.parent_lat, link.parent_lng];
-
-        // Parent ODP marker (blue-ish to distinguish from child ODP)
-        var parentIcon = L.divIcon({
-          className: '',
-          html: '<div style="width:16px;height:16px;background:#3b82f6;border:2px solid #fff;border-radius:3px;box-shadow:0 0 0 2px rgba(59,130,246,.4)"></div>',
-          iconSize:[16,16], iconAnchor:[8,8], popupAnchor:[0,-10]
-        });
-        var parentInf  = odpInfo[link.parent_id]  || {};
-        var childInf   = odpInfo[link.child_id]    || {};
-        var parentCount = (parentInf.customer_count !== undefined) ? parentInf.customer_count : '-';
-        var childCount  = (childInf.customer_count  !== undefined) ? childInf.customer_count  : '-';
-        var parentBtn = link.parent_id ? '<a href="/distpoint/'+link.parent_id+'" target="_blank" class="mpopup-badge-link" style="background:rgba(59,130,246,.15);color:#3b82f6;border-color:rgba(59,130,246,.3)"><i class="fas fa-external-link-alt" style="margin-right:3px"></i>Lihat ODP</a>' : '';
-        var childBtn  = link.child_id  ? '<a href="/distpoint/'+link.child_id+'" target="_blank" class="mpopup-badge-link" style="background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)"><i class="fas fa-external-link-alt" style="margin-right:3px"></i>Lihat ODP</a>' : '';
-        var parentPopup = '<div class="mpopup-title"><i class="fas fa-sitemap" style="margin-right:4px;color:#3b82f6"></i>'+(parentInf.name||link.parent_name)+'</div>'
-          +'<div class="mpopup-row"><i class="fas fa-users" style="width:12px;margin-right:3px"></i>Pelanggan: <strong>'+parentCount+'</strong></div>'
-          +'<div class="mpopup-row" style="font-size:10px">Parent ODP</div>'
-          +'<div style="margin-top:4px">'+parentBtn+'</div>';
-        var childPopup = '<div class="mpopup-title"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:#f59e0b"></i>'+(childInf.name||link.child_name)+'</div>'
-          +'<div class="mpopup-row"><i class="fas fa-users" style="width:12px;margin-right:3px"></i>Pelanggan: <strong>'+childCount+'</strong></div>'
-          +'<div class="mpopup-row" style="font-size:10px">Child ODP &rarr; <b>'+link.parent_name+'</b></div>'
-          +'<div style="margin-top:4px">'+childBtn+'</div>';
-
-        // Only add parent marker once (avoid duplicates by checking layerGroup)
-        var alreadyAdded = false;
-        markerLayer.eachLayer(function(l){
-          if(l._popup && l._popup._content && l._popup._content.indexOf(link.parent_name) !== -1
-            && l._popup._content.indexOf('Parent ODP') !== -1) alreadyAdded = true;
-        });
-        if(!alreadyAdded) L.marker(parentll, { icon: parentIcon }).bindPopup(parentPopup, { maxWidth:180 }).addTo(markerLayer);
-
-        // Animated flow line parent → child
-        L.polyline([parentll, childll], {
-          color: '#60a5fa',
-          weight: 2.5,
-          dashArray: '12, 8',
-          opacity: 0.9,
-          className: 'odp-flow-line'
-        }).addTo(markerLayer);
-      });
-    }).fail(function(){
-      document.getElementById('mapLoadingText').style.display = 'none';
-    });
-  };
-
-  // Populate router dropdown from chart data when chart loads
-  window.populateMapRouters = function(routers){
-    var sel = document.getElementById('mapRouterFilter');
-    // keep only first option
-    while(sel.options.length > 1) sel.remove(1);
-    routers.forEach(function(r){
-      var opt = document.createElement('option');
-      opt.value = r.id; opt.textContent = r.name;
-      sel.appendChild(opt);
-    });
-  };
-
-  document.getElementById('btnRefreshMap').addEventListener('click', window.loadMap);
-  document.getElementById('mapRouterFilter').addEventListener('change', window.loadMap);
-
-  // Initial load after layout settles
-  $(document).ready(function(){
-    setTimeout(function(){
-      map.invalidateSize();
-      window.loadMap();
-    }, 800);
-  });
-
-  // Fix map size after layout settles
-  setTimeout(function(){ map.invalidateSize(); }, 300);
-
-  // === Global helper functions for map panel buttons ===
-  window._pppoeInlineMap   = map;
-  window._offlineCustomers = [];
-  window._offlineBounds    = [];
-
-  window.zoomToOffline = function() {
-    var b = window._offlineBounds || [];
-    if (!b.length) return;
-    if (b.length === 1) map.setView(b[0], 15);
-    else map.fitBounds(b, { padding:[30,30], maxZoom:15 });
-  };
-
-  window.toggleFullPage = function() {
-    document.body.classList.toggle('map-fullscreen');
-    var icon = document.querySelector('#btnFullPage i');
-    if (document.body.classList.contains('map-fullscreen')) {
-      icon.className = 'fas fa-compress';
-      document.getElementById('btnFullPage').title = 'Keluar Full Page';
-    } else {
-      icon.className = 'fas fa-expand';
-      document.getElementById('btnFullPage').title = 'Full Page';
-    }
-    setTimeout(function() { map.invalidateSize(); }, 200);
-  };
-
-  window.openOfflineModal = function() {
-    var customers = window._offlineCustomers || [];
-    var rows = '';
-    if (!customers.length) {
-      rows = '<p class="text-center" style="padding:20px;color:var(--text-muted)">Tidak ada customer offline.</p>';
-    } else {
-      rows += '<table class="table table-sm" style="margin:0;font-size:12px">'
-            + '<thead style="position:sticky;top:0;background:var(--bg-surface);z-index:1">'
-            + '<tr><th style="width:32px">#</th><th>Nama</th><th>PPPoE</th><th>Router</th><th>Offline Sejak</th><th></th></tr>'
-            + '</thead><tbody>';
-      customers.forEach(function(m, i) {
-        rows += '<tr>'
-          + '<td style="color:var(--text-muted)">' + (i+1) + '</td>'
-          + '<td><strong>' + (m.name||'-') + '</strong><br><span style="color:var(--text-muted);font-size:11px">' + (m.customer_id||'') + '</span></td>'
-          + '<td><code style="font-size:11px">' + (m.pppoe||'-') + '</code></td>'
-          + '<td style="font-size:11px">' + (m.router||'-') + '</td>'
-          + '<td style="color:#f59e0b;font-size:11px">' + (m.last_offline||'-') + '</td>'
-          + '<td>' + (m.id ? '<a href="/customer/'+m.id+'" target="_blank" class="btn btn-xs btn-outline-primary" style="font-size:10px;padding:1px 7px;border-radius:20px"><i class="fas fa-external-link-alt"></i></a>' : '') + '</td>'
-          + '</tr>';
-      });
-      rows += '</tbody></table>';
-    }
-    document.getElementById('offlineMonitorListBody').innerHTML  = rows;
-    document.getElementById('offlineMonitorCount').textContent   = customers.length + ' customer offline';
-    $('#offlineMonitorModal').modal('show');
-  };
 })();
 </script>
 @endsection

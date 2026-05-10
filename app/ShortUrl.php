@@ -7,6 +7,9 @@ use Illuminate\Support\Str;
 
 class ShortUrl extends Model
 {
+    // Gunakan koneksi pusat agar tidak ikut switch ke DB tenant (yang tidak punya tabel short_urls).
+    protected $connection = 'mysql_queue';
+
     protected $fillable = ['code', 'original_url', 'tenant', 'expires_at'];
 
     protected $casts = ['expires_at' => 'datetime'];
@@ -16,7 +19,7 @@ class ShortUrl extends Model
      *
     * Returns the full short URL string: https://domain/s/CODE
      */
-    public static function shorten(string $originalUrl, ?int $expiryDays = 365): string
+    public static function shorten(string $originalUrl, ?int $expiryDays = null): string
     {
         // Extract tenant domain from original URL to ensure consistency
         // (important for queue jobs where tenant context may not be set)

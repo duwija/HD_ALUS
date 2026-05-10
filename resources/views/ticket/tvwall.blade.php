@@ -117,6 +117,16 @@
       border:2px solid rgba(255,255,255,0.6); flex-shrink:0;
       vertical-align:middle;
     }
+    .assign-icon {
+      width:28px; height:28px; border-radius:50%;
+      display:inline-flex; align-items:center; justify-content:center;
+      border:2px solid rgba(255,255,255,0.6);
+      background:rgba(0,0,0,0.25);
+      color:#fff;
+      flex-shrink:0;
+      vertical-align:middle;
+      font-size:12px;
+    }
 
     /* === Workflow === */
     .workflow-wrapper { position:relative; margin-top:8px; margin-bottom:6px; }

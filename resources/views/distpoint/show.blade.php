@@ -381,10 +381,9 @@
   <div class="form-group">
     <label for="maps"></label>
 
-    @if ($distpoint->coordinate == null)
-    <br><a class="p-md-2">No Map set !!</a> 
-    @else
     <div id="map" style="width: 100%; height: 700px; position: relative;"></div>
+    @if ($distpoint->coordinate == null)
+    <div class="mt-2 text-muted" style="font-size:12px">Coordinate ODP belum diisi, peta tetap ditampilkan dengan titik pusat tenant.</div>
     @endif
   </div>
 </div>
@@ -502,6 +501,54 @@
 </script>
 
 <style>
+  @keyframes losPulse {
+    0% { box-shadow: 0 0 0 0 rgba(239,68,68,.7); }
+    70% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+  }
+  @keyframes losBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .35; }
+  }
+  @keyframes dashFlow {
+    from { stroke-dashoffset: 20; }
+    to { stroke-dashoffset: 0; }
+  }
+  .customer-marker-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59,130,246,.35);
+  }
+  .customer-marker-dot.los {
+    background: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239,68,68,.4);
+    animation: losPulse 1.4s ease-out infinite, losBlink 1.4s ease-in-out infinite;
+  }
+  .distpoint-marker-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 2px solid #fff;
+    background: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245,158,11,.45);
+  }
+  path.odp-flow-line {
+    animation: dashFlow 1.2s linear infinite;
+    stroke-linecap: round;
+  }
+  .flow-arrow {
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 8px solid #60a5fa;
+    transform-origin: center;
+    filter: drop-shadow(0 0 2px rgba(96,165,250,.6));
+  }
+
   /* Label untuk Customer dan ODP pada Map */
   .customer-label {
     background: #3b82f6 !important;
@@ -588,23 +635,49 @@
 </style>
 
 <script>
-  const iconRed = new L.Icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.3/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41]
+  const iconDistpoint = L.divIcon({
+    className: '',
+    html: '<div class="distpoint-marker-dot"></div>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+    popupAnchor: [0, -12]
   });
 
-  const iconBlue = new L.Icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.3/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41]
+  const iconCustomer = L.divIcon({
+    className: '',
+    html: '<div class="customer-marker-dot"></div>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+    popupAnchor: [0, -12]
   });
+
+  const iconCustomerLos = L.divIcon({
+    className: '',
+    html: '<div class="customer-marker-dot los"></div>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+    popupAnchor: [0, -12]
+  });
+
+  function isLosFromOntResponse(html) {
+    if (!html) return false;
+
+    var root = $('<div>').html(String(html));
+    var btn = root.find('button').first();
+
+    // Prefer button class-based decision (most reliable)
+    if (btn.length) {
+      if (btn.hasClass('btn-success') || btn.hasClass('btn-primary')) return false;
+      if (btn.hasClass('btn-danger') || btn.hasClass('btn-warning')) return true;
+
+      // Fallback to button label only, not full modal text
+      var btnText = btn.text().toLowerCase().replace(/\s+/g, ' ').trim();
+      if (/\b(los|dying|daying|dying\s*gasp|offline|down|powerdown)\b/.test(btnText)) return true;
+      if (/\b(online|up|normal|active|rx:)\b/.test(btnText)) return false;
+    }
+
+    return false;
+  }
   // Ambil data dari server
   var center = @json($center);
   var locations = @json($locations);
@@ -659,6 +732,24 @@
   };
   googleMapsButton.addTo(map);
 
+  function addFlowArrow(fromCoords, toCoords, color) {
+    var midLat = (fromCoords[0] + toCoords[0]) / 2;
+    var midLng = (fromCoords[1] + toCoords[1]) / 2;
+    var dx = toCoords[1] - fromCoords[1];
+    var dy = toCoords[0] - fromCoords[0];
+    var angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+    return L.marker([midLat, midLng], {
+      interactive: false,
+      icon: L.divIcon({
+        className: '',
+        html: '<div class="flow-arrow" style="border-left-color:' + color + ';transform:rotate(' + angle + 'deg)"></div>',
+        iconSize: [12, 12],
+        iconAnchor: [6, 6]
+      })
+    }).addTo(map);
+  }
+
   // Marker utama + koneksi garis
   var mainMarker = null;
   var mainCoords = null;
@@ -666,13 +757,36 @@
 
     const coords = location.coordinate.split(',').map(Number);
 
-  let icon = iconBlue; // default untuk customer
+  let icon = iconCustomer; // default untuk customer
   if (location.type === 'distpoint') {
-    icon = iconRed;
+    icon = iconDistpoint;
+  } else if (location.is_los) {
+    icon = iconCustomerLos;
+  }
+
+  var popupHtml = location.name;
+  if (location.type === 'customer' && location.status_name) {
+    var statusColor = location.is_los ? '#ef4444' : '#10b981';
+    popupHtml += '<br><span style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:' + (location.is_los ? 'rgba(239,68,68,.12)' : 'rgba(16,185,129,.12)') + ';color:' + statusColor + ';border:1px solid ' + (location.is_los ? 'rgba(239,68,68,.25)' : 'rgba(16,185,129,.25)') + '">Status: ' + location.status_name + '</span>';
   }
 
   const marker = L.marker(coords, { icon }).addTo(map)
-  .bindPopup(`${location.name}`);
+  .bindPopup(popupHtml);
+
+  if (location.type === 'customer' && location.id_olt && location.id_onu) {
+    $.ajax({
+      url: '/olt/ont_status',
+      method: 'POST',
+      data: {
+        id_olt: location.id_olt,
+        id_onu: location.id_onu
+      }
+    }).done(function(res) {
+      if (isLosFromOntResponse(res)) {
+        marker.setIcon(iconCustomerLos);
+      }
+    });
+  }
 
   // Tambahkan label nama yang selalu tampil
   if (location.type === 'customer') {
@@ -703,13 +817,18 @@
 
     if (location.type === 'distpoint') {
       polylineOptions = {
-        color: 'orange',
-        weight: 2
-      // Tidak pakai dashArray → garis solid
+        color: '#60a5fa',
+        weight: 2.5,
+        dashArray: '12,8',
+        opacity: .9,
+        className: 'odp-flow-line'
       };
     }
 
     L.polyline([parentCoords, coords], polylineOptions).addTo(map);
+    if (location.type === 'distpoint') {
+      addFlowArrow(parentCoords, coords, '#60a5fa');
+    }
   }
 
 });

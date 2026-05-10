@@ -35,7 +35,7 @@
         </div>
         <div class="form-group mr-2 mb-1">
           <label class="mr-1 text-muted small">Sales</label>
-          <select name="id_sale" class="form-control form-control-sm">
+          <select name="id_sale" id="id_sale" class="form-control form-control-sm select2" style="min-width:220px;">
             <option value="">Semua Sales</option>
             @foreach($allSales as $sale)
               <option value="{{ $sale->id }}" {{ $filterSale == $sale->id ? 'selected' : '' }}>{{ $sale->name }}</option>

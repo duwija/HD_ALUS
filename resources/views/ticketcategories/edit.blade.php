@@ -163,7 +163,6 @@
 $(document).ready(function() {
     let workflowSteps = [];
     // Parse existing workflow dari database
-    let workflowSteps = [];
     try {
         let existingWorkflow = {!! json_encode($category->workflow ?? []) !!};
         workflowSteps = Array.isArray(existingWorkflow) ? existingWorkflow : [];
@@ -258,7 +257,7 @@ $(document).ready(function() {
 
         // Initialize sortable
         $('#sortable-workflow').sortable({
-            items: '.workflow-item',
+            items: '.wf-item',
             placeholder: 'ui-state-highlight',
             tolerance: 'pointer',
             cursor: 'move',

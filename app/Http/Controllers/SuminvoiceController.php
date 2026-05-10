@@ -39,6 +39,31 @@ use Illuminate\Support\Facades\Http;
 
 class SuminvoiceController extends Controller
 {
+    private function normalizePaymentPoint($rawPaymentPoint)
+    {
+        $paymentPoint = trim((string) $rawPaymentPoint);
+        if ($paymentPoint === '') {
+            return $paymentPoint;
+        }
+
+        // Already a valid akun_code.
+        $byCode = \App\Akun::where('akun_code', $paymentPoint)->value('akun_code');
+        if (!empty($byCode)) {
+            return $byCode;
+        }
+
+        // Fallback: try matching by account name variants.
+        $byName = \App\Akun::where('category', 'kas & bank')
+            ->where(function ($q) use ($paymentPoint) {
+                $q->where('name', $paymentPoint)
+                    ->orWhere('name', 'Kas ' . $paymentPoint)
+                    ->orWhere('name', 'like', '%' . $paymentPoint . '%');
+            })
+            ->value('akun_code');
+
+        return !empty($byName) ? $byName : $paymentPoint;
+    }
+
 
     private function getDuitkuConfig(string $provider = 'duitku'): array
     {
@@ -152,7 +177,7 @@ class SuminvoiceController extends Controller
    {
         //$this->middleware('auth');
     $this->middleware('auth', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]); 
-    $this->middleware('checkPrivilege:admin,accounting,payment,noc,marketing', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]);
+    $this->middleware('checkPrivilege:admin,accounting,payment,noc,marketing,merchant', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]);
 }
 
     /**
@@ -2095,16 +2120,22 @@ public function table_transaction_list(Request $request)
 
 
     /** ================= GROUP KASBANK ================= **/
+    $kasbankNameMap = DB::table('akuns')
+    ->select('akun_code', DB::raw('MAX(name) as akun_name'))
+    ->groupBy('akun_code');
+
     $groupedTransactionsKasbank = (clone $baseQuery)
-    ->leftJoin('akuns', 'suminvoices.payment_point', '=', 'akuns.akun_code')
+    ->leftJoinSub($kasbankNameMap, 'akuns_map', function ($join) {
+        $join->on('suminvoices.payment_point', '=', 'akuns_map.akun_code');
+    })
     ->select(
         'suminvoices.payment_point',
-        'akuns.name as akun_name',
+        'akuns_map.akun_name',
         DB::raw('COUNT(suminvoices.id) as total_transactions'),
         DB::raw('SUM(suminvoices.recieve_payment) as total_payment'),
         DB::raw('SUM(suminvoices.total_amount) as total_amount')
     )
-    ->groupBy('suminvoices.payment_point', 'akuns.name')
+    ->groupBy('suminvoices.payment_point', 'akuns_map.akun_name')
     ->get();
 
 
@@ -3004,9 +3035,11 @@ public function edit($id)
             throw new \Exception("Customer tidak ditemukan");
         }
 
+        $normalizedPaymentPoint = $this->normalizePaymentPoint($request->payment_point);
+
         $invoice->update([
             'recieve_payment' => $request->recieve_payment,
-            'payment_point' => $request->payment_point,
+            'payment_point' => $normalizedPaymentPoint,
             'note' => $request->note,
             'updated_by' => $request->updated_by,
             'payment_status' => 1,
@@ -3030,7 +3063,7 @@ public function edit($id)
             ];
 
 
-            $data['id_akun'] = $request->payment_point;
+            $data['id_akun'] = $normalizedPaymentPoint;
             $data['debet'] = $request->recieve_payment;
             \App\Jurnal::create($data);
             $invstatus="";
@@ -3423,7 +3456,17 @@ public function send_reminder_inv(Request $request, $id)
         $duedate = $suminvoice->due_date ?: 'N/A';
         $encryptedurl = '/invoice/cst/' . Crypt::encryptString($customer->id);
         $originalInvoiceUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . $encryptedurl;
-        $shortInvoiceUrl = \App\Services\WaService::maybeShortenUrlForGateway($originalInvoiceUrl);
+        // Jalur ini mengirim langsung via gateway helper, jadi pakai short URL secara eksplisit.
+        $shortInvoiceUrl = $originalInvoiceUrl;
+        try {
+            $shortInvoiceUrl = \App\ShortUrl::shorten($originalInvoiceUrl);
+        } catch (\Throwable $e) {
+            \Log::channel('notif')->warning('[ShortUrl] reminder fallback to original URL', [
+                'tenant' => tenant_config('domain_name', env('DOMAIN_NAME')),
+                'original_url' => $originalInvoiceUrl,
+                'error' => $e->getMessage(),
+            ]);
+        }
         $formattedDate = Carbon::parse($suminvoice->date)->translatedFormat('M Y');
 
         // if ($type == 'wa') {

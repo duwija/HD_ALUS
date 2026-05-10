@@ -18,7 +18,7 @@ class Customer extends Authenticatable
 
 	use SoftDeletes;
 
-    protected $fillable =['customer_id','pppoe','password','name','id_card', 'contact_name','id_olt','id_onu','date_of_birth', 'phone','id_plan','id_distpoint','id_status','id_distrouter','email','address','id_merchant','npwp','tax','billing_start','coordinate','note','id_sale','lead_source','lead_notes','expected_close_date','conversion_probability','converted_at','converted_by','lost_at','lost_reason','lost_notes','lost_by','created_by','updated_by','created_at','update_at','deleted_at','notification','ip','portal_password','remember_token','last_login_at','fcm_token','app_token'];
+    protected $fillable =['customer_id','pppoe','password','name','id_card', 'contact_name','id_olt','id_onu','date_of_birth', 'phone','id_plan','id_distpoint','id_status','id_distrouter','email','address','id_merchant','npwp','tax','billing_start','coordinate','note','id_sale','lead_source','lead_notes','expected_close_date','conversion_probability','converted_at','converted_by','lost_at','lost_reason','lost_notes','lost_by','deletion_type','deletion_reason','created_by','updated_by','created_at','update_at','deleted_at','notification','ip','portal_password','remember_token','last_login_at','fcm_token','app_token'];
 
     protected $hidden = [
         'password',

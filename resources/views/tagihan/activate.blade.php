@@ -162,8 +162,8 @@
                             </label>
                             <input type="text" class="form-control @error('phone') is-invalid @enderror" 
                                    id="phone" name="phone" value="{{ old('phone') }}" 
-                                   placeholder="08123456789" required>
-                            <small class="text-muted">Nomor telepon yang terdaftar di sistem</small>
+                                   placeholder="628123456789" required>
+                            <small class="text-muted">Bisa isi 08..., 62..., +62..., atau nomor luar negeri (+kode negara).</small>
                         </div>
 
                         <div class="form-group">
@@ -216,6 +216,45 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        function normalizePhoneInput(value) {
+            var raw = (value || '').trim();
+            var hasPlusPrefix = raw.indexOf('+') === 0;
+            var digits = raw.replace(/\D+/g, '');
+            if (!digits) return '';
+
+            // Konversi 00<country_code> menjadi +<country_code>
+            if (digits.indexOf('00') === 0 && digits.length > 2) {
+                return '+' + digits.substring(2);
+            }
+
+            if (digits.indexOf('0') === 0) {
+                return '62' + digits.substring(1);
+            }
+
+            if (digits.indexOf('62') === 0) {
+                return digits;
+            }
+
+            if (digits.indexOf('8') === 0) {
+                return '62' + digits;
+            }
+
+            // Untuk nomor luar negeri non-Indonesia, pertahankan format + jika user mengetik +
+            if (hasPlusPrefix) {
+                return '+' + digits;
+            }
+
+            return digits;
+        }
+
+        $('#phone').on('blur', function() {
+            $(this).val(normalizePhoneInput($(this).val()));
+        });
+
+        $('form').on('submit', function() {
+            $('#phone').val(normalizePhoneInput($('#phone').val()));
+        });
+
         // Password match validation
         $('#password_confirmation').on('keyup', function() {
             var password = $('#password').val();

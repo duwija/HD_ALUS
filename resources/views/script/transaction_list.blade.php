@@ -78,14 +78,15 @@
         if (rowindex < groupedTransactionsKasbank.length) {
         item.kasbank = groupedTransactionsKasbank[rowindex].payment_point; // Menambahkan payment_point ke item
         var paymentPoint = groupedTransactionsKasbank[rowindex].payment_point;
-        var akun = (json.kasbanks || []).find(a => a.akun_code === paymentPoint) || { name: (paymentPoint || 'No Account') + ' (akun belum terdaftar)' };
+        var akunName = groupedTransactionsKasbank[rowindex].akun_name;
+        var displayName = akunName ? akunName : (paymentPoint || 'No Account') + ' (akun belum terdaftar)';
         var totalPaymentKasbank = Number(groupedTransactionsKasbank[rowindex].total_payment) || 0;
         groupedTransactionsPaymentMerchant
         groupedTransactionsPaymentKasbank += totalPaymentKasbank;
 
         groupedTransactionsKasbankHTML += '<tr>' +
             '<td>' + (rowindex + 1) + '</td>' + // Nomor urut
-            '<td>' + akun.name + '</td>' + // Nama akun dari tabel `akuns`
+            '<td>' + displayName + '</td>' +
             '<td class="text-right"><strong>' + (new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.groupedTransactionsKasbank[rowindex].total_payment)) + '</strong></td>' + // Total amount
             '</tr>';
           }
@@ -123,11 +124,13 @@
       $('#groupedTransactionsKasbank').html(groupedTransactionsKasbankHTML);
       $('#groupedTransactionsUser').html(groupedTransactionsUserHTML);
 
+      var totalValue = Number(json.total) || 0;
+      var feeCounterValue = Number(json.fee_counter) || 0;
+      var totalPaymentValue = totalValue + feeCounterValue;
 
-
-      $('#total_paid').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.total));
-      $('#fee_counter').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.fee_counter));
-      $('#total_payment').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.fee_counter+json.total));
+      $('#total_paid').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(totalValue));
+      $('#fee_counter').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(feeCounterValue));
+      $('#total_payment').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(totalPaymentValue));
       $('#totalAmount').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsTotal));
       $('#totalPayment').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsPayment));
       $('#totalFee').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsFee));

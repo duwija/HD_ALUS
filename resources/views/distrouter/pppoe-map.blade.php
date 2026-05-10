@@ -31,6 +31,21 @@
     display: flex; align-items: center; justify-content: center;
     border-radius: 12px; z-index: 1000; color: #fff; font-size: 16px; gap: 10px;
   }
+  #mapViewport:fullscreen,
+  #mapViewport:-webkit-full-screen {
+    background: #0b1220;
+    padding: 10px;
+  }
+  #mapViewport:fullscreen #pppoe-offline-map,
+  #mapViewport:-webkit-full-screen #pppoe-offline-map {
+    height: calc(100vh - 20px);
+    min-height: calc(100vh - 20px);
+    border-radius: 0;
+  }
+  #mapViewport:fullscreen #loadingOverlay,
+  #mapViewport:-webkit-full-screen #loadingOverlay {
+    border-radius: 0;
+  }
   .leaflet-popup-content-wrapper {
     background: var(--bg-surface) !important;
     color: var(--text-primary) !important;
@@ -88,6 +103,11 @@
     animation: dashFlow 1.2s linear infinite;
     stroke-linecap: round;
   }
+    .pppoe-marker-dot:hover {
+      animation: pppoe-pulse 1.4s ease-out,pppoe-blink 1.4s ease-in-out;
+    }
+    .legend-flow-line:hover { animation: legendFlow 1.2s linear; }
+    path.odp-flow-line:hover { animation: dashFlow 1.2s linear; }
 </style>
 
 <div class="container-fluid">
@@ -107,8 +127,27 @@
       @endforeach
     </select>
 
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--border);border-radius:10px;background:var(--bg-surface)">
+      <span style="font-size:11px;color:var(--text-muted);font-weight:700">Status:</span>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);margin:0;cursor:pointer">
+        <input type="checkbox" class="statusFilter" value="2" checked> Active
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);margin:0;cursor:pointer">
+        <input type="checkbox" class="statusFilter" value="4" checked> Block
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);margin:0;cursor:pointer">
+        <input type="checkbox" class="statusFilter" value="5" checked> Company Properti
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);margin:0;cursor:pointer">
+        <input type="checkbox" class="statusFilter" value="3" checked> Inactive
+      </label>
+    </div>
+
     <button id="btnRefreshMap" class="btn btn-sm btn-outline-danger" style="border-radius:8px">
       <i class="fas fa-sync-alt mr-1"></i>Refresh
+    </button>
+    <button id="btnFullscreen" class="btn btn-sm btn-outline-secondary" style="border-radius:8px" title="Mode Full Screen">
+      <i class="fas fa-expand-arrows-alt mr-1"></i>Full Screen
     </button>
     <a href="{{ route('pppoe.monitor') }}" class="btn btn-sm btn-outline-secondary" style="border-radius:8px">
       <i class="fas fa-chart-line mr-1"></i>Monitor
@@ -119,12 +158,21 @@
       <i class="fas fa-layer-group" style="color:#8b5cf6"></i> Map Layers
     </label>
 
+    <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);cursor:pointer;margin:0">
+      <input type="checkbox" id="showOdpLayer" checked style="cursor:pointer">
+      <i class="fas fa-project-diagram" style="color:#f59e0b"></i> ODP
+    </label>
+
     <span id="statOffline" class="map-stat ms-offline" style="display:none;cursor:pointer" title="Klik untuk lihat daftar" onclick="openOfflineModal()">
       <i class="fas fa-circle" style="font-size:7px"></i><span id="countOffline">0</span> customer offline
     </span>
 
     <span id="statCountdown" class="map-stat" style="background:rgba(99,102,241,.1);color:#6366f1;border:1px solid rgba(99,102,241,.25)">
       <i class="fas fa-clock" style="font-size:10px"></i> <span id="countdownVal">3:00</span>
+    </span>
+
+    <span id="statSyncedAt" class="map-stat" style="display:none;background:rgba(16,185,129,.1);color:#10b981;border:1px solid rgba(16,185,129,.25)" title="Waktu sinkronisasi terakhir dari router">
+      <i class="fas fa-database" style="font-size:10px"></i> <span id="syncedAtVal">—</span>
     </span>
   </div>
 
@@ -144,7 +192,7 @@
     <span><span class="legend-sq"  style="background:#8b5cf6"></span>Layer Tersimpan</span>
   </div>
 
-  <div style="position:relative">
+  <div id="mapViewport" style="position:relative">
     <div id="pppoe-offline-map"></div>
     <div id="loadingOverlay">
       <i class="fas fa-spinner fa-spin"></i> Mengambil data dari router...
@@ -236,8 +284,8 @@ function initPppoeMap() {
     zoomToBoundsOnClick: true,
     disableClusteringAtZoom: 14,
     animate: false,
-    removeOutsideVisibleBounds: false,
-    chunkedLoading: false,
+     removeOutsideVisibleBounds: true,
+     chunkedLoading: true,
     iconCreateFunction: function(cluster) {
       return L.divIcon({
         html: '<div><span>' + cluster.getChildCount() + '</span></div>',
@@ -265,6 +313,10 @@ function initPppoeMap() {
     drawnPolylines.forEach(function(line) { map.removeLayer(line); });
     drawnPolylines.length = 0;
 
+    if (!document.getElementById('showOdpLayer').checked) {
+      return;
+    }
+
     // Customer → ODP lines (always draw)
     customerData.forEach(function(m) {
       if (m.odp_lat == null || m.odp_lng == null) return;
@@ -287,6 +339,67 @@ function initPppoeMap() {
 
   map.on('zoomend', drawPolylines);
   offlineCluster.on('animationend', drawPolylines);
+    // Throttle polyline rendering to avoid excessive redraws
+    var polylineRenderTimeout = null;
+    var polylineThrottleMs = 300; // throttle to 300ms
+    var isDrawingPolylines = false;
+
+    function throttledDrawPolylines() {
+      if (polylineRenderTimeout) clearTimeout(polylineRenderTimeout);
+      polylineRenderTimeout = setTimeout(function() {
+        if (!isDrawingPolylines) {
+          isDrawingPolylines = true;
+          requestAnimationFrame(drawPolylinesOptimized);
+        }
+      }, polylineThrottleMs);
+    }
+
+    function drawPolylinesOptimized() {
+      // Remove previous polylines
+      drawnPolylines.forEach(function(line) { map.removeLayer(line); });
+      drawnPolylines.length = 0;
+
+      if (!document.getElementById('showOdpLayer').checked) {
+        isDrawingPolylines = false;
+        return;
+      }
+
+      var bounds = map.getBounds();
+      var padding = 0.15; // 15% padding beyond visible bounds
+      var expandedBounds = bounds.pad(padding);
+
+      // Customer → ODP lines (render only if either endpoint visible)
+      customerData.forEach(function(m) {
+        if (m.odp_lat == null || m.odp_lng == null) return;
+        var custLl = L.latLng(m.lat, m.lng);
+        var odpLl = L.latLng(m.odp_lat, m.odp_lng);
+        if (expandedBounds.contains(custLl) || expandedBounds.contains(odpLl)) {
+          var line = L.polyline([custLl, odpLl], {
+            color:'#f59e0b', weight:2, dashArray:'6,5', opacity:.85
+          }).addTo(map);
+          drawnPolylines.push(line);
+        }
+      });
+
+      // ODP → Parent ODP lines (render only if either endpoint visible)
+      odpLinksData.forEach(function(link) {
+        var childLl = L.latLng(link.child_lat, link.child_lng);
+        var parentLl = L.latLng(link.parent_lat, link.parent_lng);
+        if (expandedBounds.contains(childLl) || expandedBounds.contains(parentLl)) {
+          var line = L.polyline([parentLl, childLl], {
+            color:'#60a5fa', weight:2.5, dashArray:'12,8', opacity:.9,
+            className: 'odp-flow-line'
+          }).addTo(map);
+          drawnPolylines.push(line);
+        }
+      });
+
+      isDrawingPolylines = false;
+    }
+
+    map.on('zoomend', throttledDrawPolylines);
+    map.on('moveend', throttledDrawPolylines);
+    offlineCluster.on('animationend', throttledDrawPolylines);
 
   // === Saved Map Layers ===
   function parseCoords(raw) {
@@ -360,6 +473,80 @@ function initPppoeMap() {
     }
   });
 
+  var showOdpLayerStorageKey = 'pppoe_map_show_odp_' + window.location.host;
+
+  function saveOdpLayerSelection() {
+    try {
+      localStorage.setItem(showOdpLayerStorageKey, document.getElementById('showOdpLayer').checked ? '1' : '0');
+    } catch (e) {
+      // Ignore storage errors (private mode/quota)
+    }
+  }
+
+  function restoreOdpLayerSelection() {
+    try {
+      var raw = localStorage.getItem(showOdpLayerStorageKey);
+      if (raw === null) return;
+      document.getElementById('showOdpLayer').checked = (raw === '1');
+    } catch (e) {
+      // Ignore malformed localStorage data
+    }
+  }
+
+  function applyOdpLayerVisibility() {
+    var showOdpLayer = document.getElementById('showOdpLayer').checked;
+    if (showOdpLayer) {
+      map.addLayer(odpGroup);
+      map.addLayer(parentGroup);
+    } else {
+      map.removeLayer(odpGroup);
+      map.removeLayer(parentGroup);
+    }
+    throttledDrawPolylines();
+  }
+
+  document.getElementById('showOdpLayer').addEventListener('change', function() {
+    saveOdpLayerSelection();
+    applyOdpLayerVisibility();
+  });
+
+  var isFirstLoad = true; // track whether map has ever received data
+  var statusFilterStorageKey = 'pppoe_map_status_filters_' + window.location.host;
+
+  function saveStatusFilterSelection() {
+    try {
+      localStorage.setItem(statusFilterStorageKey, JSON.stringify(getSelectedStatusIds()));
+    } catch (e) {
+      // Ignore storage errors (private mode/quota)
+    }
+  }
+
+  function restoreStatusFilterSelection() {
+    try {
+      var raw = localStorage.getItem(statusFilterStorageKey);
+      if (!raw) return;
+      var selected = JSON.parse(raw);
+      if (!Array.isArray(selected)) return;
+
+      var selectedMap = {};
+      selected.forEach(function(v) { selectedMap[String(v)] = true; });
+
+      document.querySelectorAll('.statusFilter').forEach(function(el) {
+        el.checked = !!selectedMap[String(el.value)];
+      });
+    } catch (e) {
+      // Ignore malformed localStorage data
+    }
+  }
+
+  function getSelectedStatusIds() {
+    var ids = [];
+    document.querySelectorAll('.statusFilter:checked').forEach(function(el) {
+      ids.push(el.value);
+    });
+    return ids;
+  }
+
   function loadData() {
     showLoading(true);
     offlineCluster.clearLayers();
@@ -373,30 +560,145 @@ function initPppoeMap() {
     map.invalidateSize();
 
     var rid = document.getElementById('routerFilter').value;
-    var url = '/pppoe-map/data' + (rid ? '?router_id=' + rid : '');
+    var statusIds = getSelectedStatusIds();
+    var params = [];
+    if (rid) params.push('router_id=' + encodeURIComponent(rid));
+    params.push('status_ids=' + encodeURIComponent(statusIds.join(',')));
+    var url = '/pppoe-map/data' + (params.length ? '?' + params.join('&') : '');
 
     $.getJSON(url, function(data) {
       showLoading(false);
       var pts     = data.markers   || [];
       var links   = data.odp_links || [];
       var odpInfo = data.odp_info  || {};  // keyed by odp id
+      var odpInfoRuntimeCache = window.__pppoeMapOdpInfoCache || {};
+      window.__pppoeMapOdpInfoCache = odpInfoRuntimeCache;
 
       // Build helper: build ODP popup HTML from odp_info
+      function buildOdpMetaHtml(info) {
+        var totalCount = Number(info.total_customer_count);
+        if (!Number.isFinite(totalCount)) totalCount = 0;
+        var capacityVal = Number(info.capacity);
+        var capacityText = Number.isFinite(capacityVal) && capacityVal > 0 ? capacityVal : '-';
+        var html = '';
+        html += '<div class="popup-row"><i class="fas fa-layer-group mr-1" style="width:14px"></i>Total pelanggan ODP: <strong>' + totalCount + '</strong></div>';
+        html += '<div class="popup-row"><i class="fas fa-database mr-1" style="width:14px"></i>Kapasitas ODP: <strong>' + capacityText + '</strong></div>';
+        if (info.description && info.description !== '-') {
+          html += '<div class="popup-row"><i class="fas fa-info-circle mr-1" style="width:14px"></i>' + info.description + '</div>';
+        }
+        return html;
+      }
+
+      function hydrateOdpInfo(odpId) {
+        if (!odpId) return;
+        var target = document.getElementById('odpMeta-' + odpId);
+        if (!target) return;
+
+        if (odpInfoRuntimeCache[odpId]) {
+          target.innerHTML = buildOdpMetaHtml(odpInfoRuntimeCache[odpId]);
+          return;
+        }
+
+        target.innerHTML = '<div class="popup-row" style="color:var(--text-muted)"><i class="fas fa-spinner fa-spin mr-1" style="width:14px"></i>Memuat data ODP...</div>';
+        $.getJSON('/pppoe-map/odp-info?id=' + encodeURIComponent(odpId), function(res) {
+          if (res && res.success && res.info) {
+            odpInfoRuntimeCache[odpId] = res.info;
+            var nowTarget = document.getElementById('odpMeta-' + odpId);
+            if (nowTarget) nowTarget.innerHTML = buildOdpMetaHtml(res.info);
+            return;
+          }
+          var failTarget = document.getElementById('odpMeta-' + odpId);
+          if (failTarget) failTarget.innerHTML = '<div class="popup-row" style="color:var(--text-muted)">Data ODP tidak tersedia.</div>';
+        }).fail(function() {
+          var failTarget = document.getElementById('odpMeta-' + odpId);
+          if (failTarget) failTarget.innerHTML = '<div class="popup-row" style="color:var(--text-muted)">Gagal mengambil data ODP.</div>';
+        });
+      }
+
       function buildOdpPopup(odpId, odpName, extraRow) {
-        var info   = odpInfo[odpId] || {};
+        var info   = odpInfoRuntimeCache[odpId] || odpInfo[odpId] || {};
         var title  = info.name || odpName || 'ODP';
-        var count  = (info.customer_count !== undefined) ? info.customer_count : '-';
-        var desc   = info.description && info.description !== '-' ? '<div class="popup-row"><i class="fas fa-info-circle mr-1" style="width:14px"></i>' + info.description + '</div>' : '';
+        var metaHtml = (info && Object.keys(info).length) ? buildOdpMetaHtml(info) : '<div class="popup-row" style="color:var(--text-muted)">Klik untuk memuat detail ODP...</div>';
         var btnLink = odpId ? '<a href="/distpoint/' + odpId + '" target="_blank" class="popup-badge-link" style="background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)"><i class="fas fa-external-link-alt mr-1"></i>Lihat ODP</a>' : '';
         return '<div class="popup-title"><i class="fas fa-map-marker-alt mr-1" style="color:#f59e0b"></i>' + title + '</div>'
-          + '<div class="popup-row"><i class="fas fa-users mr-1" style="width:14px"></i>Pelanggan terhubung: <strong>' + count + '</strong></div>'
-          + desc
+          + '<div id="odpMeta-' + odpId + '">' + metaHtml + '</div>'
           + (extraRow || '')
           + '<div style="margin-top:5px">' + btnLink + '</div>';
       }
 
+      function renderSecretStatusBadge(status) {
+        if (status === 'online') {
+          return '<span class="popup-badge-link" style="background:rgba(16,185,129,.15);color:#10b981;border-color:rgba(16,185,129,.3)"><i class="fas fa-check-circle mr-1"></i>Secret: Online</span>';
+        }
+        if (status === 'disabled') {
+          return '<span class="popup-badge-link" style="background:rgba(239,68,68,.15);color:#ef4444;border-color:rgba(239,68,68,.3)"><i class="fas fa-ban mr-1"></i>Secret: Disable</span>';
+        }
+        if (status === 'enable') {
+          return '<span class="popup-badge-link" style="background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)"><i class="fas fa-toggle-on mr-1"></i>Secret: Enable (Offline)</span>';
+        }
+        if (status === 'not-found') {
+          return '<span class="popup-badge-link" style="background:rgba(107,114,128,.2);color:#9ca3af;border-color:rgba(107,114,128,.35)"><i class="fas fa-question-circle mr-1"></i>Secret: Tidak ditemukan</span>';
+        }
+        return '<span class="popup-badge-link" style="background:rgba(107,114,128,.2);color:#9ca3af;border-color:rgba(107,114,128,.35)"><i class="fas fa-question-circle mr-1"></i>Secret: Unknown</span>';
+      }
+
+      function loadCustomerRealtimeStatus(m, key) {
+        var secretTarget = $('#secretStatus-' + key);
+        var ontTarget = $('#ontStatus-' + key);
+
+        // PPP secret status from Mikrotik (realtime, on-demand)
+        if (m.pppoe) {
+          secretTarget.html('<span style="color:var(--text-muted)">checking...</span>');
+          $.getJSON('/pppoe-map/secret-status', {
+            pppoe: m.pppoe,
+            router_id: (m.id_distrouter || '')
+          }).done(function(res) {
+            secretTarget.html(renderSecretStatusBadge(res.secret_status || 'unknown'));
+          }).fail(function() {
+            secretTarget.html(renderSecretStatusBadge('unknown'));
+          });
+        } else {
+          secretTarget.html(renderSecretStatusBadge('unknown'));
+        }
+
+        // ONT status (existing endpoint), only if OLT/ONU is available
+        if (m.id_olt && m.id_onu) {
+          ontTarget.html('<span style="color:var(--text-muted)">checking...</span>');
+          $.ajax({
+            url: '/olt/ont_status',
+            method: 'POST',
+            data: {
+              _token: '{{ csrf_token() }}',
+              id_olt: m.id_olt,
+              id_onu: m.id_onu
+            }
+          }).done(function(html) {
+            ontTarget.html(html || '<span class="popup-badge-link" style="background:rgba(107,114,128,.2);color:#9ca3af;border-color:rgba(107,114,128,.35)">ONT: N/A</span>');
+          }).fail(function() {
+            ontTarget.html('<span class="popup-badge-link" style="background:rgba(107,114,128,.2);color:#9ca3af;border-color:rgba(107,114,128,.35)">ONT: tidak tersedia</span>');
+          });
+        } else {
+          ontTarget.html('<span class="popup-badge-link" style="background:rgba(107,114,128,.2);color:#9ca3af;border-color:rgba(107,114,128,.35)">ONT: tidak tersedia</span>');
+        }
+      }
+
       document.getElementById('statOffline').style.display = pts.length ? 'inline-flex' : 'none';
       document.getElementById('countOffline').textContent  = pts.length;
+
+      // Show sync timestamp badge
+      if (data.synced_at) {
+        var syncEl = document.getElementById('statSyncedAt');
+        var syncValEl = document.getElementById('syncedAtVal');
+        var syncDate = new Date(data.synced_at.replace(' ', 'T'));
+        var now = new Date();
+        var diffMin = Math.round((now - syncDate) / 60000);
+        var label = diffMin <= 1 ? 'baru saja' : diffMin + ' mnt lalu';
+        syncValEl.textContent = 'Sync ' + label;
+        syncEl.title = 'Data sinkron terakhir: ' + data.synced_at;
+        syncEl.style.display = 'inline-flex';
+      } else {
+        document.getElementById('statSyncedAt').style.display = 'none';
+      }
 
       customerData = pts;
       odpLinksData = links;
@@ -408,6 +710,7 @@ function initPppoeMap() {
       pts.forEach(function(m, i) {
         var ll = [m.lat, m.lng];
         bounds.push(ll);
+        var statusKey = (m.id ? ('c' + m.id) : ('i' + i));
 
         var popup = '<div class="popup-title"><i class="fas fa-user mr-1"></i>' + m.name + '</div>'
           + '<div class="popup-row"><i class="fas fa-id-card mr-1" style="width:14px"></i>' + m.customer_id + '</div>'
@@ -415,11 +718,16 @@ function initPppoeMap() {
           + (m.phone   ? '<div class="popup-row"><i class="fas fa-phone mr-1" style="width:14px"></i>' + m.phone + '</div>' : '')
           + (m.address ? '<div class="popup-row"><i class="fas fa-map-pin mr-1" style="width:14px"></i>' + m.address + '</div>' : '')
           + '<div class="popup-row"><i class="fas fa-server mr-1" style="width:14px"></i>' + m.router + '</div>'
+          + '<div class="popup-row" id="secretStatus-' + statusKey + '">' + renderSecretStatusBadge(m.secret_status || 'unknown') + '</div>'
+          + '<div class="popup-row" id="ontStatus-' + statusKey + '"><span style="color:var(--text-muted)">ONT: klik marker untuk cek</span></div>'
           + (m.last_offline ? '<div class="popup-row" style="color:#f59e0b"><i class="fas fa-clock mr-1" style="width:14px"></i>Offline sejak: <b>' + m.last_offline + '</b></div>' : '')
           + '<span class="popup-badge"><i class="fas fa-exclamation-circle mr-1"></i>Offline</span>'
           + (m.id ? '<a href="/customer/' + m.id + '" target="_blank" class="popup-badge-link"><i class="fas fa-external-link-alt mr-1"></i>Lihat Pelanggan</a>' : '');
 
         var marker = L.marker(ll, { icon: redIcon }).bindPopup(popup, { maxWidth: 260 });
+        marker.on('popupopen', function() {
+          loadCustomerRealtimeStatus(m, statusKey);
+        });
         offlineCluster.addLayer(marker);
         customerMarkers[i] = marker;
 
@@ -428,6 +736,7 @@ function initPppoeMap() {
           bounds.push([m.odp_lat, m.odp_lng]);
           L.marker([m.odp_lat, m.odp_lng], { icon: odpIcon })
             .bindPopup(buildOdpPopup(m.odp_id, m.odp_name), { maxWidth: 240 })
+            .on('popupopen', function() { hydrateOdpInfo(m.odp_id); })
             .addTo(odpGroup);
         }
       });
@@ -440,28 +749,36 @@ function initPppoeMap() {
 
         if (!addedOdps[link.child_name]) {
           addedOdps[link.child_name] = true;
+          var childOdpId = link.child_id;
           L.marker(childll, { icon: odpIcon })
             .bindPopup(buildOdpPopup(link.child_id, link.child_name,
               '<div class="popup-row" style="font-size:11px"><i class="fas fa-sitemap mr-1" style="width:14px"></i>Child ODP &rarr; <b>' + link.parent_name + '</b></div>'), { maxWidth: 240 })
+            .on('popupopen', function() { hydrateOdpInfo(childOdpId); })
             .addTo(odpGroup);
         }
         if (!addedParents[link.parent_name]) {
           addedParents[link.parent_name] = true;
+          var parentOdpId = link.parent_id;
           L.marker(parentll, { icon: parentIcon })
             .bindPopup(buildOdpPopup(link.parent_id, link.parent_name,
               '<div class="popup-row" style="font-size:11px"><i class="fas fa-sitemap mr-1" style="width:14px"></i>Parent ODP</div>'), { maxWidth: 240 })
+            .on('popupopen', function() { hydrateOdpInfo(parentOdpId); })
             .addTo(parentGroup);
         }
       });
 
-      if (bounds.length === 1)    map.setView(bounds[0], 15);
-      else if (bounds.length > 1) {
-        var validBounds = bounds.filter(function(b) {
-          return b[0] != null && b[1] != null && b[0] !== 0 && b[1] !== 0
-            && b[0] >= -90 && b[0] <= 90 && b[1] >= -180 && b[1] <= 180;
-        });
-        if (validBounds.length > 0) map.fitBounds(validBounds, { padding: [40, 40], maxZoom: 15 });
+      if (bounds.length === 1) {
+        if (isFirstLoad) map.setView(bounds[0], 15);
+      } else if (bounds.length > 1) {
+        if (isFirstLoad) {
+          var validBounds = bounds.filter(function(b) {
+            return b[0] != null && b[1] != null && b[0] !== 0 && b[1] !== 0
+              && b[0] >= -90 && b[0] <= 90 && b[1] >= -180 && b[1] <= 180;
+          });
+          if (validBounds.length > 0) map.fitBounds(validBounds, { padding: [40, 40], maxZoom: 15 });
+        }
       }
+      isFirstLoad = false;
 
       // Redraw polylines after fitBounds animation settles
       setTimeout(drawPolylines, 500);
@@ -510,9 +827,59 @@ function initPppoeMap() {
     resetCountdown();
     loadData();
   });
+  var mapViewport = document.getElementById('mapViewport');
+  var btnFullscreen = document.getElementById('btnFullscreen');
+
+  function isMapFullscreen() {
+    return document.fullscreenElement === mapViewport || document.webkitFullscreenElement === mapViewport;
+  }
+
+  function updateFullscreenButton() {
+    var icon = btnFullscreen.querySelector('i');
+    if (isMapFullscreen()) {
+      icon.className = 'fas fa-compress-arrows-alt mr-1';
+      btnFullscreen.title = 'Keluar Full Screen';
+      btnFullscreen.innerHTML = '<i class="fas fa-compress-arrows-alt mr-1"></i>Exit Full Screen';
+    } else {
+      icon.className = 'fas fa-expand-arrows-alt mr-1';
+      btnFullscreen.title = 'Mode Full Screen';
+      btnFullscreen.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i>Full Screen';
+    }
+  }
+
+  btnFullscreen.addEventListener('click', function() {
+    if (isMapFullscreen()) {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      return;
+    }
+
+    if (mapViewport.requestFullscreen) mapViewport.requestFullscreen();
+    else if (mapViewport.webkitRequestFullscreen) mapViewport.webkitRequestFullscreen();
+  });
+
+  document.addEventListener('fullscreenchange', function() {
+    updateFullscreenButton();
+    setTimeout(function() { map.invalidateSize(); }, 120);
+  });
+  document.addEventListener('webkitfullscreenchange', function() {
+    updateFullscreenButton();
+    setTimeout(function() { map.invalidateSize(); }, 120);
+  });
+
   document.getElementById('routerFilter').addEventListener('change', function() {
     resetCountdown();
+    isFirstLoad = true; // reset so fitBounds runs for new router filter
     loadData();
+  });
+
+  document.querySelectorAll('.statusFilter').forEach(function(el) {
+    el.addEventListener('change', function() {
+      saveStatusFilterSelection();
+      resetCountdown();
+      isFirstLoad = true;
+      loadData();
+    });
   });
 
   // === Auto-reload every 3 minutes ===
@@ -548,9 +915,36 @@ function initPppoeMap() {
       resetCountdown();
     }, RELOAD_INTERVAL * 1000);
   }
+    // Optimized: update countdown only when display changes (every 10 seconds or less frequently)
+    var lastCountdownDisplay = '';
+    function startCountdownOptimized() {
+      countdownTimer = setInterval(function() {
+        countdownSec--;
+        var newDisplay = formatCountdown(countdownSec);
+        if (newDisplay !== lastCountdownDisplay) {
+          document.getElementById('countdownVal').textContent = newDisplay;
+          lastCountdownDisplay = newDisplay;
+        }
+        if (countdownSec <= 0) {
+          clearInterval(countdownTimer);
+        }
+      }, 5000); // Update every 5 seconds instead of 1 second
+
+      reloadTimer = setTimeout(function() {
+        loadData();
+        loadMapLayers();
+        resetCountdown();
+      }, RELOAD_INTERVAL * 1000);
+    }
+    // Replace startCountdown with optimized version
+    var startCountdown = startCountdownOptimized;
 
   // Invalidate size once layout has settled, then load data
   setTimeout(function() {
+    restoreStatusFilterSelection();
+    restoreOdpLayerSelection();
+    applyOdpLayerVisibility();
+    updateFullscreenButton();
     map.invalidateSize();
     loadData();
     loadMapLayers();

@@ -44,9 +44,15 @@ $progressPercent = $totalSteps > 1 ? round(($currentIndex / ($totalSteps - 1)) *
   <div class="ticket-footer mt-1 position-relative">
     <div class="fw-bold text-center" style="font-size:0.85rem;"><strong>{{ $t->tittle }}</strong></div>
     <div class="small d-flex align-items-center" style="gap:6px;margin-top:3px;">
-      <img class="assign-photo"
-           src="{{ $t->user && $t->user->photo ? asset('storage/users/'.$t->user->photo) : asset('storage/users/user.png') }}"
-           alt="{{ $t->user->name ?? '' }}">
+     @if($t->user && $t->user->photo)
+     <img class="assign-photo"
+       src="{{ asset('storage/users/'.$t->user->photo) }}"
+       alt="{{ $t->user->name ?? '' }}"
+       onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
+     <span class="assign-icon" style="display:none;"><i class="fas fa-user"></i></span>
+     @else
+     <span class="assign-icon"><i class="fas fa-user"></i></span>
+     @endif
       <span>{{ $t->user->name ?? '-' }}</span>
     </div>
     <div class="time-row">

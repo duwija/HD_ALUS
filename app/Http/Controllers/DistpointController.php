@@ -214,8 +214,9 @@ if ($distpoint->distpointgroup_id) {
 
         // $distpointgroup = \App\Distpointgroup::findOrFail($distpoint->distpointgroup_id);
 
-    // Mengatur koordinat pusat
-$coordinate = $distpoint->coordinate ?? tenant_config('COORDINATE_CENTER', env('COORDINATE_CENTER'));
+    // Mengatur koordinat pusat (fallback ke tenant center jika coordinate ODP invalid/kosong)
+    $defaultCenter = tenant_config('COORDINATE_CENTER', env('COORDINATE_CENTER'));
+    $coordinate = $this->isValidCoordinate($distpoint->coordinate) ? $distpoint->coordinate : $defaultCenter;
 
 
 $center = [
@@ -226,28 +227,37 @@ $locations = []; // Inisialisasi variabel locations
 
 // Tambahkan lokasi untuk titik distribusi
 
-$distpoints_in_group = \App\Distpoint::where('distpointgroup_id', $distpoint->distpointgroup_id)->get();
+if ($distpoint->distpointgroup_id) {
+    $distpoints_in_group = \App\Distpoint::where('distpointgroup_id', $distpoint->distpointgroup_id)->get();
+} else {
+    $distpoints_in_group = collect([$distpoint]);
+}
 
 
 foreach ($distpoints_in_group as $dist) {
-    if ($dist->coordinate) {
+    if ($this->isValidCoordinate($dist->coordinate)) {
+        $parentCoordinate = optional($dist->parentDistPoint)->coordinate;
         $locations[] = [
             'coordinate' => $dist->coordinate,
             'name' => $dist->name,
             'type' => 'distpoint',
-            'parent_coordinate' => optional($dist->parentDistPoint)->coordinate // relasi `parrentDistpoint`
+            'parent_coordinate' => $this->isValidCoordinate($parentCoordinate) ? $parentCoordinate : null
         ];
     }
 }
 
 
 // Ambil semua pelanggan yang terkait dengan titik distribusi
-$customers = \App\Customer::where('id_distpoint', $id)->get();
+$customers = \App\Customer::with(['distpoint_name:id,coordinate', 'status_name:id,name'])
+    ->where('id_distpoint', $id)
+    ->get(['id', 'name', 'coordinate', 'id_distpoint', 'id_status', 'id_olt', 'id_onu']);
 
 // Customers
 foreach ($customers as $customer) {
     $coordinate = $customer->coordinate;
-    $parentCoordinate = optional($customer->distpoint)->coordinate;
+    $parentCoordinate = optional($customer->distpoint_name)->coordinate;
+    $statusName = strtolower((string) optional($customer->status_name)->name);
+    $isLos = strpos($statusName, 'los') !== false;
 
     // Validasi format koordinat: harus ada dan terdiri dari dua angka float
     if ($this->isValidCoordinate($coordinate)) {
@@ -257,6 +267,10 @@ foreach ($customers as $customer) {
             'name' => $customer->name,
             'type' => 'customer',
             'parent_coordinate' => $this->isValidCoordinate($parentCoordinate) ? $parentCoordinate : null,
+            'status_name' => optional($customer->status_name)->name,
+            'is_los' => $isLos,
+            'id_olt' => $customer->id_olt,
+            'id_onu' => $customer->id_onu,
 
         ];
     }

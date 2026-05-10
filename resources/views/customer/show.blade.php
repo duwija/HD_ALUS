@@ -133,9 +133,6 @@
                   @empty
                     <span class="text-muted">-</span>
                   @endforelse
-                  <a href="/customer/{{ $customer->id }}/edit" class="btn btn-xs btn-outline-secondary ml-2 py-0 px-2" title="Edit Tags di halaman Edit Customer">
-                    <i class="fas fa-pencil-alt"></i>
-                  </a>
                 </td>
               </tr>
             </tr>
@@ -1921,6 +1918,18 @@ function confirmDeleteCustomer(customerId) {
   } else {
     modalBody.innerHTML =
       '<p>Apakah Anda yakin ingin menghapus customer <strong>{{ addslashes($customer->name) }}</strong>?</p>'+
+      '<div class="form-group">'+
+      '  <label for="deletion_type" class="mb-1">Pilihan Status <span class="text-danger">*</span></label>'+
+      '  <select id="deletion_type" name="deletion_type" class="form-control" form="form-delete-customer" required>'+
+      '    <option value="">-- Pilih --</option>'+
+      '    <option value="terminate">Berhenti Berlangganan</option>'+
+      '    <option value="cancel">Tidak Jadi Berlangganan</option>'+
+      '  </select>'+
+      '</div>'+
+      '<div class="form-group mb-2">'+
+      '  <label for="deletion_reason" class="mb-1">Alasan Hapus <span class="text-danger">*</span></label>'+
+      '  <textarea id="deletion_reason" name="deletion_reason" class="form-control" rows="3" minlength="5" maxlength="1000" form="form-delete-customer" required placeholder="Contoh: customer pindah lokasi, tidak jadi pasang, dll"></textarea>'+
+      '</div>'+
       '<p class="text-muted mb-0"><small>Tindakan ini tidak dapat dibatalkan.</small></p>';
     document.getElementById('btn-confirm-delete').disabled = false;
     document.getElementById('btn-confirm-delete').classList.remove('disabled');

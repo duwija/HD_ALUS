@@ -341,9 +341,15 @@ class CustomerAuthController extends Controller
             'password' => 'required|min:6|confirmed',
         ]);
 
+        $phoneVariants = $this->buildPhoneVariants((string) $request->phone);
+
+        if (empty($phoneVariants)) {
+            return back()->withErrors(['phone' => 'Format nomor telepon tidak valid.'])->withInput();
+        }
+
         $customers = Customer::with(['plan', 'addons'])
                     ->where('email', $request->email)
-                    ->where('phone', $request->phone)
+                    ->whereIn('phone', $phoneVariants)
                     ->get();
 
         if ($customers->isEmpty()) {
@@ -358,5 +364,54 @@ class CustomerAuthController extends Controller
         }
 
         return redirect('/tagihan/login')->with('success', 'Akun berhasil diaktifkan. Silakan login.');
+    }
+
+    /**
+     * Bangun varian nomor untuk menangani data campuran lokal/internasional
+     * (0..., 62..., +62..., +44..., 0044...).
+     */
+    private function buildPhoneVariants(string $rawPhone): array
+    {
+        $digits = preg_replace('/\D+/', '', trim($rawPhone));
+        if ($digits === '') {
+            return [];
+        }
+
+        $variants = [];
+        $add = function (string $value) use (&$variants) {
+            $value = trim($value);
+            if ($value !== '') {
+                $variants[] = $value;
+            }
+        };
+
+        // Bentuk dasar (dengan dan tanpa +)
+        $add($digits);
+        $add('+' . $digits);
+
+        // Format internasional yang ditulis 00<country_code><number>
+        if (strpos($digits, '00') === 0 && strlen($digits) > 2) {
+            $intl = substr($digits, 2);
+            $add($intl);
+            $add('+' . $intl);
+        }
+
+        if (strpos($digits, '0') === 0) {
+            $idIntl = '62' . substr($digits, 1);
+            $add($idIntl);
+            $add('+' . $idIntl);
+        } elseif (strpos($digits, '62') === 0) {
+            $add('0' . substr($digits, 2));
+        } elseif (strpos($digits, '8') === 0) {
+            $add('0' . $digits);
+            $add('62' . $digits);
+            $add('+62' . $digits);
+        }
+
+        $variants = array_values(array_unique(array_filter($variants, function ($v) {
+            return $v !== '';
+        })));
+
+        return $variants;
     }
 }

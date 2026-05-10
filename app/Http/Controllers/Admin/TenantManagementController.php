@@ -1860,6 +1860,8 @@ class TenantManagementController extends Controller
             ->whereBetween('suminvoices.payment_date', [$dateStart, $dateEnd])
             ->select([
                 'suminvoices.*',
+                'suminvoices.date as invoice_date',
+                'suminvoices.number as invoice_no',
                 'customers.customer_id',
                 'customers.name as customer_name',
                 'customers.address',
@@ -1870,7 +1872,7 @@ class TenantManagementController extends Controller
         // Apply filters
         if (!empty($parameter)) {
             $query->where(function ($q) use ($parameter) {
-                $q->where('suminvoices.invoice_no', 'LIKE', "%{$parameter}%")
+                $q->where('suminvoices.number', 'LIKE', "%{$parameter}%")
                   ->orWhere('customers.customer_id', 'LIKE', "%{$parameter}%")
                   ->orWhere('customers.name', 'LIKE', "%{$parameter}%");
             });

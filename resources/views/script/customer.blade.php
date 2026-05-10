@@ -17,6 +17,14 @@
     }
   });
 
+  if ($.fn.select2) {
+    $('#id_plan').select2({
+      width: '100%',
+      allowClear: true,
+      placeholder: $('#id_plan').data('placeholder') || 'All'
+    });
+  }
+
 
   $('#customer_filter').click(function() 
   {

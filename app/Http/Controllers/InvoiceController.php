@@ -26,7 +26,7 @@ class InvoiceController extends Controller
  {
   //  $this->middleware('auth');
   $this->middleware('auth', ['except' => ['custinv']]); 
-  $this->middleware('checkPrivilege:admin,accounting,payment,noc', ['except' => ['custinv']]);
+    $this->middleware('checkPrivilege:admin,accounting,payment,noc,marketing', ['except' => ['custinv']]);
 
 }
 
@@ -354,7 +354,8 @@ class InvoiceController extends Controller
         'suminvoices.*',
         'customers.name',
         'customers.customer_id',
-        'customers.id_merchant'
+        'customers.id_merchant',
+        'customers.billing_start'
     )
     ->with([
         'customer.merchant_name',
@@ -424,7 +425,7 @@ class InvoiceController extends Controller
         $unpaid_payment   = $summary->where('status',0)->sum('amount');
         $cancel_payment  = $summary->where('status',2)->sum('amount');
         $recieve_payment = $paid_payment;
-        $fee_counter     = '*Exclude Payment point fee : '.number_format(0,0,',','.');
+        $fee_counter     = '*Exclude Payment point fee : '.number_format(0,2,'.',',');
 
     } else {
 
@@ -442,7 +443,7 @@ class InvoiceController extends Controller
         $unpaid_payment   = $summary->unpaid ?? 0;
         $cancel_payment  = $summary->cancel ?? 0;
         $recieve_payment = $summary->receive ?? 0;
-        $fee_counter     = '*Exclude Payment point fee : '.number_format($recieve_payment - $paid_payment,0,',','.');
+        $fee_counter     = '*Exclude Payment point fee : '.number_format($recieve_payment - $paid_payment,2,'.',',');
     }
 
 
@@ -462,6 +463,8 @@ class InvoiceController extends Controller
     })
 
     ->addColumn('name', fn($s)=> $s->customer->name ?? '-')
+
+    ->addColumn('billing_start', fn($s)=> $s->billing_start ?? '-')
 
     ->addColumn('plan', fn($s)=> optional(optional($s->customer)->plan_name)->name ?? '-')
 
@@ -485,9 +488,9 @@ class InvoiceController extends Controller
             foreach($invoiceMap[$s->tempcode] as $inv){
                 $sum += (($s->tax * $inv->amount)/100) + $inv->amount;
             }
-            return number_format($sum,2,',','.');
+            return number_format($sum,2,'.',',');
         }
-        return number_format($s->total_amount,2,',','.');
+        return number_format($s->total_amount,2,'.',',');
     })
 
     ->addColumn('status', function($s){

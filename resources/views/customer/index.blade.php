@@ -17,6 +17,7 @@
         <select name="filter" id="filter" class="form-control">
           <option value="name">Name</option>
           <option value="customer_id">Customer ID</option>
+          <option value="email">Email</option>
           <option value="address">Address</option>
           <option value="phone">Phone</option>
           <option value="id_card">ID Card</option>
@@ -58,7 +59,7 @@
 
       <div class="form-group col-md-2">
         <label for="id_plan">Plan</label>
-        <select name="id_plan" id="id_plan" class="form-control">
+        <select name="id_plan" id="id_plan" class="form-control select2" data-placeholder="All">
           <option value="">All</option>
           @foreach ($plan as $id => $name)
           <option value="{{ $id }}">{{ $name }}</option>
@@ -185,18 +186,28 @@
   // Gabungkan data harian new & deleted untuk chart
   const dailyNewCustomers = @json($dailyNewCustomers);
   const dailyDeletedCustomers = @json($dailyDeletedCustomers);
+  const dailyTerminateCustomers = @json($dailyTerminateCustomers);
+  const dailyCancelCustomers = @json($dailyCancelCustomers);
   // Buat map tanggal ke count
   const newMap = {};
   dailyNewCustomers.forEach(i => newMap[i.date] = i.new_count);
   const deletedMap = {};
   dailyDeletedCustomers.forEach(i => deletedMap[i.date] = i.deleted_count);
+  const terminateMap = {};
+  dailyTerminateCustomers.forEach(i => terminateMap[i.date] = i.terminate_count);
+  const cancelMap = {};
+  dailyCancelCustomers.forEach(i => cancelMap[i.date] = i.cancel_count);
   // Gabungkan semua tanggal unik
   const allDates = Array.from(new Set([
     ...dailyNewCustomers.map(i => i.date),
-    ...dailyDeletedCustomers.map(i => i.date)
+    ...dailyDeletedCustomers.map(i => i.date),
+    ...dailyTerminateCustomers.map(i => i.date),
+    ...dailyCancelCustomers.map(i => i.date)
   ])).sort();
   const ncCount = allDates.map(date => newMap[date] || 0);
   const delCount = allDates.map(date => deletedMap[date] || 0);
+  const terminateCount = allDates.map(date => terminateMap[date] || 0);
+  const cancelCount = allDates.map(date => cancelMap[date] || 0);
 
   const ctxNc = document.getElementById('dailyNewCustomersChart').getContext('2d');
   new Chart(ctxNc, {
@@ -218,6 +229,22 @@
           fill: false,
           borderColor: '#dc3545',
           backgroundColor: '#dc3545',
+          tension: 0.1
+        },
+        {
+          label: 'Terminate',
+          data: terminateCount,
+          fill: false,
+          borderColor: '#fd7e14',
+          backgroundColor: '#fd7e14',
+          tension: 0.1
+        },
+        {
+          label: 'Cancel',
+          data: cancelCount,
+          fill: false,
+          borderColor: '#ffc107',
+          backgroundColor: '#ffc107',
           tension: 0.1
         }
       ]

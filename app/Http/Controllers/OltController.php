@@ -22,7 +22,8 @@ class OltController extends Controller
 
         // Read-only ONT info + reboot bisa diakses accounting dari halaman customer.
         $this->middleware('checkPrivilege:admin,noc')->except(['ont_status', 'onu_detail', 'onureboot']);
-        $this->middleware('checkPrivilege:admin,noc,accounting')->only(['ont_status', 'onu_detail', 'onureboot']);
+        $this->middleware('checkPrivilege:admin,noc,accounting,marketing,user')->only(['ont_status']);
+        $this->middleware('checkPrivilege:admin,noc,accounting')->only(['onu_detail', 'onureboot']);
     }
 
 

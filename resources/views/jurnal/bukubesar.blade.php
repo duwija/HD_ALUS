@@ -391,9 +391,24 @@ $(document).ready(function() {
   buttons: [
     'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
     ],
-  "lengthMenu": [[10,50, 100, 200, 500, 1000], [10,50, 100, 200, 1000]],
+  "lengthMenu": [[1, 5, 10, 25, 50, 100, 200], [1, 5, 10, 25, 50, 100, 200]],
+  "pageLength": 1,
+  pagingType: 'simple',
+  drawCallback: function(settings) {
+    var info = this.api().page.info();
+    var totalPages = info.pages;
+    var currentPage = info.page + 1;
+    var paginate = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+    // Remove old page info badge if exists
+    paginate.find('.page-info-badge').remove();
+    // Add page info between prev/next buttons
+    paginate.find('.paginate_button.previous').after(
+      '<span class="page-info-badge" style="display:inline-block;padding:6px 12px;margin:0 4px;font-size:13px;color:#495057;font-weight:600;">Halaman ' + currentPage + '</span>'
+    );
+  },
   processing: true,
   serverSide: true,
+  deferRender: true,
   ajax: {
 
     url: '/jurnal/getbukubesardata',
@@ -466,19 +481,12 @@ columns: [
 ],
 rowCallback: function (row, data) {
   if (data.is_group) {
-    index++;
     $(row).addClass('bg-light text-bold');
-    $('td', row).eq(0).html(data.index); // Nomor dan description
-    $('td', row).eq(1).html(`<strong>${data.description}</strong>`);
-    $('td', row).eq(2).html('');
+    $('td', row).eq(0).html(data.index); // Nomor
+    $('td', row).eq(1).html(`<strong>${data.description}</strong>`).attr('colspan', '3');
+    $('td', row).eq(2).remove();
+    $('td', row).eq(2).remove();
     $('td', row).eq(3).html(`Saldo Awal`);
-    // Apply amount styling to Saldo Awal
-    if (data.debet && data.debet !== '-' && data.debet !== '0') {
-      $('td', row).eq(4).html(`<span class="amount-debet">${data.debet}</span>`);
-    }
-    if (data.kredit && data.kredit !== '-' && data.kredit !== '0') {
-      $('td', row).eq(5).html(`<span class="amount-kredit">${data.kredit}</span>`);
-    }
     if (data.saldo && data.saldo !== '-') {
       var saldoClass = (data.saldo.includes('(') || data.saldo.startsWith('-')) ? 'amount-kredit' : 'amount-debet';
       $('td', row).eq(6).html(`<span class="${saldoClass}">${data.saldo}</span>`);
@@ -490,11 +498,10 @@ rowCallback: function (row, data) {
     $('td', row).eq(3).html('<strong>Saldo Akhir</strong>');
     $('td', row).eq(4).html(`<strong class="amount-debet">${data.debet}</strong>`);
     $('td', row).eq(5).html(`<strong class="amount-kredit">${data.kredit}</strong>`);
-    // Determine saldo color
     var saldoClass = (data.saldo.includes('(') || data.saldo.startsWith('-')) ? 'amount-kredit' : 'amount-debet';
     $('td', row).eq(6).html(`<strong class="${saldoClass}">${data.saldo}</strong>`);
   } else {
-    $('td', row).eq(0).html(''); // Kosongkan nomor untuk baris biasa
+    $('td', row).eq(0).html('');
   }
 }
       // drawCallback: function (settings) {

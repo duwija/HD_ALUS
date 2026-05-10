@@ -245,12 +245,15 @@
 
           <div class="adm-card">
             <div class="adm-card-hd">
-              <span class="adm-card-title"><i class="fas fa-user-plus text-primary"></i> New &amp; Terminated Customers</span>
+              <span class="adm-card-title"><i class="fas fa-user-plus text-primary"></i> New, Terminate &amp; Cancel Customers</span>
               @if(isset($custNewMonthly))
               <span class="badge badge-pill badge-info" style="font-size:10px">New: {{ array_sum($custNewMonthly) }}</span>
               @endif
-              @if(isset($custBlockMonthly))
-              <span class="badge badge-pill badge-danger" style="font-size:10px">Term: {{ array_sum($custBlockMonthly) }}</span>
+              @if(isset($custTerminateMonthly))
+              <span class="badge badge-pill badge-danger" style="font-size:10px">Terminate: {{ array_sum($custTerminateMonthly) }}</span>
+              @endif
+              @if(isset($custCancelMonthly))
+              <span class="badge badge-pill badge-warning" style="font-size:10px">Cancel: {{ array_sum($custCancelMonthly) }}</span>
               @endif
             </div>
             <div class="adm-card-body" style="padding-bottom:8px">
@@ -795,11 +798,19 @@ $(function() {
           },
           {
             label: 'Terminated',
-            data: {!! json_encode($custBlockMonthly ?? array_fill(0, count($custMonthLabels), 0)) !!},
+            data: {!! json_encode($custTerminateMonthly ?? array_fill(0, count($custMonthLabels), 0)) !!},
             borderColor: '#e53935',
             backgroundColor: 'rgba(229,57,53,.10)',
             fill: true, tension: .35, pointRadius: 4, borderWidth: 2,
             borderDash: [5, 4]
+          },
+          {
+            label: 'Cancel',
+            data: {!! json_encode($custCancelMonthly ?? array_fill(0, count($custMonthLabels), 0)) !!},
+            borderColor: '#fb8c00',
+            backgroundColor: 'rgba(251,140,0,.12)',
+            fill: true, tension: .35, pointRadius: 4, borderWidth: 2,
+            borderDash: [2, 3]
           }
         ]
       },
@@ -810,7 +821,9 @@ $(function() {
           tooltip: {
             callbacks: {
               label: function(ctx) {
-                var suffix = ctx.dataset.label === 'Terminated' ? ' terminate' : ' pelanggan baru';
+                var suffix = ' pelanggan baru';
+                if (ctx.dataset.label === 'Terminated') suffix = ' terminate';
+                if (ctx.dataset.label === 'Cancel') suffix = ' cancel';
                 return ctx.dataset.label + ': ' + ctx.parsed.y + suffix;
               }
             }

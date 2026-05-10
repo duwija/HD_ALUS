@@ -117,6 +117,9 @@
             max-width: 68px;
             word-break: break-word;
         }
+        .file-table td, .file-table th {
+            vertical-align: middle;
+        }
     </style>
 </head>
 <body>
@@ -135,6 +138,17 @@
     </nav>
 
     <div class="container-fluid px-4">
+        @if(session('success'))
+        <div class="alert alert-success mt-3 mb-0">
+            {{ session('success') }}
+        </div>
+        @endif
+        @if($errors->any())
+        <div class="alert alert-danger mt-3 mb-0">
+            {{ $errors->first() }}
+        </div>
+        @endif
+
         <div class="mt-4 d-flex align-items-center" style="gap:8px">
             <a href="{{ url('/sales') }}" class="btn btn-back">
                 <i class="fas fa-arrow-left"></i> Kembali ke Dashboard
@@ -143,6 +157,18 @@
                 <i class="fas fa-edit"></i> Edit Customer
             </a>
         </div>
+
+        @php
+            $wfTotalStages = $workflowStages->count();
+            $wfCurrentStage = $workflowStages->firstWhere('id', $customer->workflow_stage_id);
+            $wfCurrentOrder = $wfCurrentStage ? (int) $wfCurrentStage->order : 0;
+            $wfMaxOrder = (int) ($workflowStages->max('order') ?? 0);
+            $wfProgressPct = ($wfTotalStages > 0 && $wfMaxOrder > 0 && $wfCurrentOrder > 0)
+                ? min(100, (int) round(($wfCurrentOrder / $wfMaxOrder) * 100))
+                : 0;
+            $wfStatusLabel = $wfProgressPct === 0 ? 'Belum Dimulai' : ($wfProgressPct >= 100 ? 'Selesai' : 'Berjalan');
+            $wfStatusClass = $wfProgressPct === 0 ? 'secondary' : ($wfProgressPct >= 100 ? 'success' : 'primary');
+        @endphp
 
         <div class="detail-card">
             <h4><i class="fas fa-user-circle"></i> Detail Pelanggan</h4>
@@ -196,11 +222,44 @@
             <div class="row">
                 <div class="col-md-6">
                     <div class="info-group">
+                        <div class="info-label">Status Workflow Progress</div>
+                        <div class="info-value">
+                            <span class="badge badge-{{ $wfStatusClass }}">{{ $wfStatusLabel }}</span>
+                            <small class="text-muted ml-1">{{ $wfProgressPct }}%</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="info-group">
+                        <div class="info-label">Tahap Workflow Saat Ini</div>
+                        <div class="info-value">
+                            {{ $wfCurrentStage ? $wfCurrentStage->name : '-' }}
+                        </div>
+                        <div class="progress mt-2" style="height:8px; max-width:320px;">
+                            <div class="progress-bar bg-{{ $wfStatusClass }}" role="progressbar" style="width: {{ $wfProgressPct }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="info-group">
                         <div class="info-label">Nomor Telepon</div>
                         <div class="info-value">{{ $customer->phone ?? '-' }}</div>
                     </div>
                 </div>
 
+                <div class="col-md-6">
+                    <div class="info-group">
+                        <div class="info-label">ID Card / KTP</div>
+                        <div class="info-value">{{ $customer->id_card ?? '-' }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
                 <div class="col-md-6">
                     <div class="info-group">
                         <div class="info-label">Paket Internet</div>
@@ -257,6 +316,62 @@
                 <div id="customerMap"></div>
             </div>
             @endif
+        </div>
+
+        <div class="detail-card mt-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap" style="gap:10px;">
+                <h4 class="mb-0"><i class="fas fa-folder-open"></i> File List</h4>
+                <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modal-upload-file">
+                    <i class="fas fa-upload"></i> Upload File
+                </button>
+            </div>
+
+            <div class="table-responsive mt-3">
+                <table class="table table-bordered table-striped table-sm file-table mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th style="width:60px;">#</th>
+                            <th>Nama File</th>
+                            <th style="width:180px;">Preview</th>
+                            <th style="width:180px;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($customer->file->sortByDesc('id') as $file)
+                        @php
+                            $fileUrl = url($file->path);
+                            $ext = strtolower(pathinfo($file->path, PATHINFO_EXTENSION));
+                            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+                            $isPdf = $ext === 'pdf';
+                        @endphp
+                        <tr>
+                            <td>{{ $loop->iteration }}</td>
+                            <td>{{ $file->name }}</td>
+                            <td>
+                                @if($isImage)
+                                <a href="{{ $fileUrl }}" target="_blank" title="Preview image">
+                                    <img src="{{ $fileUrl }}" alt="{{ $file->name }}" style="width:120px;height:78px;object-fit:cover;border:1px solid #ddd;border-radius:6px;">
+                                </a>
+                                @elseif($isPdf)
+                                <iframe src="{{ $fileUrl }}#toolbar=0&navpanes=0&scrollbar=0" style="width:120px;height:78px;border:1px solid #ddd;border-radius:6px;background:#fff;"></iframe>
+                                @else
+                                <span class="badge badge-secondary">No preview</span>
+                                @endif
+                            </td>
+                            <td>
+                                <a href="{{ $fileUrl }}" target="_blank" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-download"></i> Download
+                                </a>
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">Belum ada file.</td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         {{-- Lead Info Card --}}
@@ -440,5 +555,36 @@
         });
     </script>
     @endif
+
+    <div class="modal fade" id="modal-upload-file" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <form action="{{ route('sales.customer.file.upload', $customer->id) }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="fas fa-upload"></i> Upload File Customer</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Nama File (Opsional)</label>
+                            <input type="text" name="file_name" class="form-control" placeholder="Default: nama asli file">
+                        </div>
+                        <div class="form-group mb-0">
+                            <label>Pilih File</label>
+                            <input type="file" name="file" class="form-control-file" required>
+                            <small class="form-text text-muted">Maksimal 10 MB per file.</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Upload</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
