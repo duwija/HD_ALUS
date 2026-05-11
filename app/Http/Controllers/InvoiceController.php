@@ -10,6 +10,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Encryption\Encrypter;
 use Illuminate\Support\Facades\File;
 use DataTables;
 use App\Helpers\WaGatewayHelper;
@@ -847,9 +848,14 @@ public function custinv($encrypted)
   $companyAddress1 = tenant_config('company_address1', env('COMPANY_ADDRESS1'));
   $companyAddress2 = tenant_config('company_address2', env('COMPANY_ADDRESS2'));
   $invNote = tenant_config('inv_note', env('INV_NOTE')) ?? '';
-  try {
-    $id = Crypt::decryptString($encrypted);
+  
+  // Try decrypt with current key, fallback to old key if available
+  $id = $this->decryptInvoiceId($encrypted);
+  if (!$id) {
+    abort(403, ' Customer Bill not found !!');
+  }
 
+  try {
     $suminvoice = \App\Suminvoice::where('id_customer', $id)
     ->limit(10)
     ->orderBy('id', 'DESC')
@@ -903,16 +909,39 @@ public function custinv($encrypted)
         'pendingBundleByInvoice' => $pendingBundleByInvoice,
     ]);
 
-} catch (DecryptException $e) {
-
+  } catch (\Exception $e) {
     abort(403, ' Customer Bill not found !!');
-
-    //
+  }
 }
 
-
-
+/**
+ * Decrypt invoice ID with fallback to old key if available
+ */
+private function decryptInvoiceId($encrypted)
+{
+  try {
+    // Try with current key
+    return Crypt::decryptString($encrypted);
+  } catch (DecryptException $e) {
+    // Try with old key if configured
+    $oldKey = env('APP_KEY_OLD');
+    if ($oldKey) {
+      try {
+        // Use the encryption service directly with old key
+        $cipher = config('app.cipher');
+        $oldEncrypter = new Encrypter(
+          base64_decode(str_replace('base64:', '', $oldKey)),
+          $cipher
+        );
+        return $oldEncrypter->decryptString($encrypted);
+      } catch (DecryptException $oldKeyError) {
+        return null;
+      }
+    }
+    return null;
+  }
 }
+
 public function edit($tempcode)
 {
     $suminvoice = \App\Suminvoice::with('invoice')->where('tempcode', $tempcode)->firstOrFail();
