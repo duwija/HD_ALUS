@@ -317,6 +317,28 @@
       border: 2px solid var(--border);
       transition: border-color 0.2s;
     }
+    .navbar-avatar-wrap {
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .navbar-avatar-fallback {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: var(--bg-muted);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .navbar-avatar-wrap:hover .navbar-avatar-fallback,
     .navbar-avatar:hover { border-color: var(--brand); }
 
     /* Dropdown menu */
@@ -815,7 +837,18 @@
 
 
           <a id="navbarDropdown" href="#" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" v-pre>
-            <img src="/storage/users/{{Auth::user()->photo}}" alt="User Avatar" class="navbar-avatar">
+            <span class="navbar-avatar-wrap">
+              @if(!empty(Auth::user()->photo))
+                <img src="/storage/users/{{ Auth::user()->photo }}" alt="User Avatar" class="navbar-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
+                <span class="navbar-avatar-fallback" style="display:none;" aria-label="User Icon">
+                  <i class="fas fa-user"></i>
+                </span>
+              @else
+                <span class="navbar-avatar-fallback" aria-label="User Icon">
+                  <i class="fas fa-user"></i>
+                </span>
+              @endif
+            </span>
           </a>
 
 

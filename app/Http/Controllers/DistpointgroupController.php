@@ -31,6 +31,20 @@ class DistpointgroupController extends Controller
 
      $distpointgroup = \App\Distpointgroup::all();
 
+      $customerByGroup = DB::table('distpointgroups as dg')
+      ->leftJoin('distpoints as dp', function ($join) {
+          $join->on('dp.distpointgroup_id', '=', 'dg.id')
+          ->whereNull('dp.deleted_at');
+     })
+      ->leftJoin('customers as c', function ($join) {
+          $join->on('c.id_distpoint', '=', 'dp.id')
+          ->whereNull('c.deleted_at');
+     })
+      ->whereNull('dg.deleted_at')
+      ->groupBy('dg.id')
+      ->select('dg.id', DB::raw('COUNT(c.id) as total_customers'))
+      ->pluck('total_customers', 'dg.id');
+
      return DataTables::of($distpointgroup)
      ->addIndexColumn()
      ->editColumn('name',function($distpointgroup)
@@ -38,9 +52,24 @@ class DistpointgroupController extends Controller
 
         return ' <a href="/distpointgroup/'.$distpointgroup->id.'" title="distpointgroup" class="badge badge-primary text-center  "> '.$distpointgroup->name. '</a>';
     })
+     ->addColumn('utilization', function ($distpointgroup) use ($customerByGroup) {
+        $customerCount = (int) ($customerByGroup[$distpointgroup->id] ?? 0);
+        $capacity = (float) ($distpointgroup->capacity ?? 0);
+        $percentage = $capacity > 0 ? round(($customerCount / $capacity) * 100, 1) : 0;
+
+        if ($percentage >= 90) {
+            $badgeClass = 'badge-danger';
+        } elseif ($percentage >= 70) {
+            $badgeClass = 'badge-warning';
+        } else {
+            $badgeClass = 'badge-success';
+        }
+
+        return '<span class="badge '.$badgeClass.'">'.$percentage.'%</span> <small class="text-muted">('.number_format($customerCount).'/'.number_format($capacity).')</small>';
+    })
 
 
-     ->rawColumns(['DT_RowIndex','name','capacity','description'])
+     ->rawColumns(['DT_RowIndex','name','capacity','description','utilization'])
 
      ->make(true);
  }

@@ -18,6 +18,7 @@
             <th scope="col">#</th>
             <th scope="col">Name</th>
             <th scope="col">Capacity</th>
+            <th scope="col">Utilization</th>
             <th scope="col">Description</th>
             <!-- <th scope="col">Action</th> -->
           </tr>
@@ -88,6 +89,11 @@
       "className": "text-center",
 
     },
+    {
+      "targets": 4,
+      "className": "text-center",
+
+    },
  
     
 
@@ -96,6 +102,7 @@
     { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
     {data: 'name', name: 'name'},
     {data: 'capacity', name: 'capacity'},
+    {data: 'utilization', name: 'utilization', orderable: false, searchable: false},
     {data: 'description', name: 'description'},
  
 

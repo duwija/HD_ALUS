@@ -49,13 +49,24 @@
 </style>
 
 @php
-  $totalDp       = \App\Distpoint::whereNotIn('id',[1])->count();
-  $totalGroups   = \App\Distpointgroup::count();
-  $totalCapacity = \App\Distpointgroup::sum('capacity');
-  $totalPort     = \App\Distpoint::whereNotIn('id',[1])->sum('ip');
-  $totalCust     = \App\Customer::whereNotNull('id_distpoint')->where('id_distpoint','!=',0)->count();
+  $activeDistpoint = \App\Distpoint::whereNotIn('id', [1])->whereNull('deleted_at');
+  $activeGroup     = \App\Distpointgroup::whereNull('deleted_at');
+
+  $totalDp       = (clone $activeDistpoint)->count();
+  $totalGroups   = (clone $activeGroup)->count();
+  $totalCapacity = (clone $activeGroup)->sum('capacity');
+  $totalPort     = (clone $activeDistpoint)->sum('ip');
+  $totalCust     = \App\Customer::whereNull('deleted_at')
+                    ->whereHas('distpoint', function ($q) {
+                      $q->whereNotIn('id', [1])->whereNull('deleted_at');
+                    })
+                    ->count();
   $utilPct       = $totalCapacity > 0 ? round($totalCust / $totalCapacity * 100, 1) : 0;
-  $groupStats    = \App\Distpointgroup::withCount('customers')->orderByDesc('customers_count')->take(8)->get();
+  $groupStats    = \App\Distpointgroup::whereNull('deleted_at')
+                    ->withCount('customers')
+                    ->orderByDesc('customers_count')
+                    ->take(8)
+                    ->get();
 @endphp
 
 <div class="container-fluid">
@@ -65,15 +76,15 @@
     <div class="col-6 col-md-3 col-xl mb-2">
       <div class="dp-stat dp-stat-al">
         <i class="fas fa-network-wired dp-stat-icon"></i>
-        <div class="dp-stat-num">{{ $totalDp }}</div>
+        <div class="dp-stat-num">{{ number_format($totalDp) }}</div>
         <div class="dp-stat-label">Distribution Point</div>
-         <div class="dp-stat-sub">count</div>
+         <div class="dp-stat-sub">aktif (deleted_at null)</div>
       </div>
     </div>
     <div class="col-6 col-md-3 col-xl mb-2">
       <div class="dp-stat dp-stat-blue">
         <i class="fas fa-layer-group dp-stat-icon"></i>
-        <div class="dp-stat-num">{{ $totalGroups }}</div>
+        <div class="dp-stat-num">{{ number_format($totalGroups) }}</div>
         <div class="dp-stat-label">Distribution Group</div>
          <div class="dp-stat-sub">Count</div>
       </div>
@@ -81,7 +92,7 @@
     <div class="col-6 col-md-3 col-xl mb-2">
       <div class="dp-stat dp-stat-purple">
         <i class="fas fa-plug dp-stat-icon"></i>
-        <div class="dp-stat-num">{{ $totalCapacity }}</div>
+        <div class="dp-stat-num">{{ number_format($totalCapacity) }}</div>
         <div class="dp-stat-label">Total Kapasitas</div>
         <div class="dp-stat-sub">Port tersedia (group)</div>
       </div>
@@ -97,7 +108,7 @@
     <div class="col-6 col-md-3 col-xl mb-2">
       <div class="dp-stat dp-stat-green">
         <i class="fas fa-users dp-stat-icon"></i>
-        <div class="dp-stat-num">{{ $totalCust }}</div>
+        <div class="dp-stat-num">{{ number_format($totalCust) }}</div>
         <div class="dp-stat-label">Customer Terpasang</div>
         <div class="dp-stat-sub">di semua distpoint</div>
       </div>
@@ -110,7 +121,7 @@
         <div class="util-bar-track">
           <div class="util-bar-fill" style="width:{{ min($utilPct,100) }}%"></div>
         </div>
-        <div class="dp-stat-sub" style="margin-top:4px">{{ $totalCust }} / {{ $totalCapacity }} port terpakai</div>
+        <div class="dp-stat-sub" style="margin-top:4px">{{ number_format($totalCust) }} / {{ number_format($totalCapacity) }} port terpakai</div>
       </div>
     </div>
   </div>
