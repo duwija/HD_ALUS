@@ -49,39 +49,55 @@ return [
 	'oidOnuLastOfflineReason' => '.1.3.6.1.4.1.3902.1082.500.10.2.3.8.1.7', // INTEGER: 1=unknown, 2=LOS, etc ✓ (index: encoded.onuid)
 	'oidOnuUptime' => '.1.3.6.1.4.1.3902.1082.500.20.2.1.2.1.18', // Uptime ✓ NEW! (TimeTicks: "3 days, 2:01:28.00")
 	
-	// Optical Power OIDs (VERIFIED on C620 @ 103.156.74.17)
-	// Index format varies by metric:
-	// - OLT RX: encoded.{onuid} (e.g., 285278721.3)
-	// - ONU TX: encoded.{onuid}.1 (e.g., 285278721.3.1)
+	// Optical Power OIDs (C600 V1.2.1 MIB: ZTE-AN-GPON-REMOTE-ONU-MIB)
+	// zxAnGponRmAniRxOptLevel .1.3.6.1.4.1.3902.1082.500.20.2.2.2.1.10
+	// zxAnGponRmAniTxOptLevel .1.3.6.1.4.1.3902.1082.500.20.2.2.2.1.14
+	// Returned unit: dBuW, 2's complement, 0.002 dB resolution.
+	// Conversion to dBm: (raw * 0.002) - 30
+	// Invalid/offline value: 0xFFFF (65535)
+	// Index used by this code path: {encoded}.{onuid}.1
 	
 	'oidOltRxFromOnu' => '.1.3.6.1.4.1.3902.1082.500.1.2.4.2.1.2', // OLT RX Power ✓
 	// Formula: value / 1000 = dBm (e.g., -21662 → -21.662 dBm)
 	// Index: {encoded}.{onuid}
 	// Invalid: -80000 (offline)
 	
-	'oidOnuTxPower' => '.1.3.6.1.4.1.3902.1082.500.20.2.2.2.1.14', // ONU TX Power ✓ NEW!
-	// Formula: (value - 13000) / 1000 = dBm (e.g., 16179 → 3.179 dBm)
+	'oidOnuRxPower' => '.1.3.6.1.4.1.3902.1082.500.20.2.2.2.1.10', // ONU RX Power on GPON ONU side
+	// Formula: (value * 0.002) - 30 = dBm
 	// Index: {encoded}.{onuid}.1
-	// Invalid: 65535 (offline)
+	// Invalid: 65535 (offline / unknown)
+
+	'oidOnuTxPower' => '.1.3.6.1.4.1.3902.1082.500.20.2.2.2.1.14', // ONU TX Power on GPON ONU side
+	// Formula: (value * 0.002) - 30 = dBm
+	// Index: {encoded}.{onuid}.1
+	// Invalid: 65535 (offline / unknown)
 	
 	// Not available via SNMP (requires CLI parsing):
-	'oidOnuRxPower' => null, // ONU RX Power - CLI only
 	'oidOltTxPower' => null, // OLT TX Power - CLI only
 	
 	// Note: All ONU details (Model, SN, Name, Uptime, etc.) are defined above in branch .500
 	
 	// Unconfigured ONU Detection
-	// Note: OID .1082.10.1.2.3.1.5 returns stale/historical data, not actual unconfigured ONUs
-	// CLI 'show pon onu uncfg' is the accurate source. Disable SNMP query for C620.
-	'oidOnuUncfgSn'=> null, // Disabled - returns historical data
-	'oidOnuUncfgSnG'=> null, // Disabled - returns historical data
-	'oidOnuUncfgType' => null, // Disabled
+	// OID Base: .1.3.6.1.4.1.3902.1082.500.2.2.11.2
+	// Index format: .1.{ponIndex}
+	'oidOnuUncfgSn'=> '.1.3.6.1.4.1.3902.1082.500.2.2.11.2.1.2', // Unconfigured ONU SN (Hex-STRING)
+	'oidOnuUncfgType' => '.1.3.6.1.4.1.3902.1082.500.2.2.11.2.1.8', // Unconfigured ONU Type (STRING)
+	'oidOnuUncfgLoid' => '.1.3.6.1.4.1.3902.1082.500.2.2.11.2.1.4', // Unconfigured ONU LOID
+	'oidOnuUncfgMacAddr' => '.1.3.6.1.4.1.3902.1082.500.2.2.11.2.1.6', // Unconfigured ONU Mac Address
+	'oidOnuUncfgRegId' => '.1.3.6.1.4.1.3902.1082.500.2.2.11.2.1.7', // Unconfigured ONU Registration ID
 
-	// VLAN & Profile Configuration
-	'oidOltVlanId' => '.1.3.6.1.4.1.3902.1015.20.2.1.2',
-	'oidOltVlanName'  => '.1.3.6.1.4.1.3902.1082.10.1.2.2.1.2',
-	'oidOltGmportProfile' => '.1.3.6.1.4.1.3902.1082.10.1.2.2.1.2',
-	'oidOltTconProfile' => '.1.3.6.1.4.1.3902.1082.10.1.2.1.1.2',
+	// VLAN & Profile Configuration (ZTE C600)
+	// VLAN list: gunakan dot1qVlanStaticName (standard Q-BRIDGE-MIB),
+	// index OID terakhir = VLAN ID. Pada C600 OID ZTE .1015.20.* tidak tersedia.
+	'oidOltVlanId' => '.1.3.6.1.2.1.17.7.1.4.3.1.1',
+	'oidOltVlanName'  => '.1.3.6.1.2.1.17.7.1.4.3.1.1',
+	// C600 tidak expose global profile list lewat SNMP. Kita walk
+	// per-ONU table lalu dedupe untuk dapatkan daftar nama profil yang
+	// benar-benar dipakai (cukup untuk populate dropdown).
+	// Gemport US Traffic Profile name (kolom .10 dari per-ONU gemport table)
+	'oidOltGmportProfile' => '.1.3.6.1.4.1.3902.1082.500.10.2.3.5.1.10',
+	// TCONT Bandwidth Profile name (kolom .3 dari per-ONU tcont table)
+	'oidOltTconProfile' => '.1.3.6.1.4.1.3902.1082.500.10.2.3.4.1.3',
 	
 	// Helper functions
 	'encodeIndex' => function($frame, $slot, $port, $onuid = 0) {
@@ -97,13 +113,12 @@ return [
 		// Different formulas for different power types
 		
 		// Check for invalid/offline values first
-		if ($type === 'onu_tx') {
+		if ($type === 'onu_rx' || $type === 'onu_tx') {
 			if ($snmpValue >= 65535 || $snmpValue <= 0) {
 				return null; // Invalid or offline
 			}
-			// Formula: (value - 13000) / 1000
-			// Example: 16179 → (16179 - 13000) / 1000 = 3.179 dBm
-			return ($snmpValue - 13000) / 1000;
+			// MIB reports dBuW with 0.002 dB resolution.
+			return ($snmpValue * 0.002) - 30;
 		}
 		
 		// Default: OLT RX Power

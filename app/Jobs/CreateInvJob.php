@@ -194,9 +194,9 @@ class CreateInvJob implements ShouldQueue
                 $duedate = $due_date ?: 'N/A';
                 if ($customer->notification == 1) {
                     // WhatsApp Notification
-                    
-                    // Check WA Provider from tenant config
-                    $waProvider = tenant_config('wa_provider', 'gateway'); // default: gateway
+                    // Prioritaskan Qontak jika ACCESS_TOKEN + WA_CHANNEL_INTEGRATION_ID + template lengkap,
+                    // jika tidak fallback ke WA gateway.
+                    $waProvider = \App\Services\WaService::hasQontakConfig('WA_TAMPLATE_ID_1') ? 'qontak' : 'gateway';
 
                     if ($waProvider === 'qontak') {
                         // Use Qontak WhatsApp API

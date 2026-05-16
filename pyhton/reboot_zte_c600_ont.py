@@ -1,126 +1,174 @@
-#!/usr/bin/env python3
+import datetime
+import os
 import sys
 import telnetlib
-import time
-import datetime
-import socket
-import os
 
-# ==========================================================
-# Usage:
-# python3 reboot_zte_c600_ont.py <ip> <username> <password> <port> <timeout> <shelf> <slot> <port> <onu>
-# Example:
-# python3 reboot_zte_c600_ont.py 103.156.74.17 zte zte 23 20 1 1 1 1
-# ==========================================================
 
-ip = sys.argv[1]
-login = sys.argv[2]
-password = sys.argv[3]
-port = int(sys.argv[4])
-timeout = int(sys.argv[5])
-shelf = sys.argv[6]      # Shelf/Rack (biasanya 1)
-slot = sys.argv[7]       # Slot/Card
-pon_port = sys.argv[8]   # PON Port
-onu_id = sys.argv[9]     # ONU ID
+def usage_and_exit() -> None:
+    print(
+        "error:usage python reboot_zte_c600_ont.py "
+        "<ip> <user> <password> <port> <timeout> <shelf> <slot> <pon_port> <onu_id>"
+    )
+    sys.exit(1)
 
-log_path = os.path.dirname(os.path.abspath(__file__)) + "/logs"
-os.makedirs(log_path, exist_ok=True)
 
-# ---------- Helpers ----------
+def build_log_file_path() -> str:
+    log_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "storage", "logs")
+    )
+    os.makedirs(log_path, exist_ok=True)
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    return os.path.join(log_path, f"olt_log_{today}.log")
 
-def read_until_prompt(tn, prompt, timeout=5):
-    if isinstance(prompt, str):
-        prompt = prompt.encode()
-    return tn.read_until(prompt, timeout).decode('ascii', errors='ignore')
 
-def log(msg, logfile):
-    line = f"{datetime.datetime.now()} {msg}"
-    print(line)
-    logfile.write(line + "\n")
-    logfile.flush()
+def read_prompt(tn: telnetlib.Telnet, timeout: int = 15) -> str:
+    return tn.read_until(b"#", timeout=timeout).decode("ascii", errors="ignore")
 
-# ---------- Main Function ----------
 
-def telnet_zte_c600(host, port, username, password, shelf, slot, pon_port, onu_id, log_path):
-    try:
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
-        log_file_path = f"{log_path}/zte_c600_olt_log_{today}.log"
+def write_and_read_prompt(tn: telnetlib.Telnet, command: str, timeout: int = 15) -> str:
+    tn.write(command.encode("ascii") + b"\n")
+    return read_prompt(tn, timeout=timeout)
 
-        with open(log_file_path, 'a') as log_file:
 
-            log("CONNECTING TO ZTE C600 OLT ...", log_file)
-            tn = telnetlib.Telnet(host, port, timeout=timeout)
+def try_enter_onu_mng_mode(
+    tn: telnetlib.Telnet,
+    shelf: str,
+    slot: str,
+    pon_port: str,
+    onu_id: str,
+) -> tuple[bool, str, str]:
+    candidates = [
+        f"gpon_onu-{shelf}/{slot}/{pon_port}:{onu_id}",
+        f"gpon_onu_{shelf}/{slot}/{pon_port}:{onu_id}",
+        f"gpon-onu-{shelf}/{slot}/{pon_port}:{onu_id}",
+        f"gpon-onu_{shelf}/{slot}/{pon_port}:{onu_id}",
+    ]
 
-            # ---- LOGIN ----
-            read_until_prompt(tn, "Username:", timeout=10)
-            tn.write(username.encode() + b"\n")
+    last_output = ""
+    for iface in candidates:
+        command = f"pon-onu-mng {iface}"
+        output = write_and_read_prompt(tn, command, timeout=20)
+        last_output = output
 
-            read_until_prompt(tn, "Password:", timeout=10)
-            tn.write(password.encode() + b"\n")
+        lowered = output.lower()
+        if "%error" in lowered or "invalid" in lowered or "incomplete" in lowered:
+            continue
 
-            read_until_prompt(tn, "#", timeout=10)
-            log("LOGIN SUCCESS", log_file)
+        if "config-gpon-onu-mng" in lowered:
+            return True, iface, output
 
-            # ---- CONFIG MODE ----
-            tn.write(b"configure terminal\n")
-            read_until_prompt(tn, "#", timeout=5)
-            log("ENTER CONFIG MODE", log_file)
+    return False, "", last_output
 
-            # ---- ENTER INTERFACE GPON-ONU ----
-            # Format ZTE C600/C620: interface gpon_onu-1/2/1:3
-            # gpon_onu-{shelf}/{slot}/{port}:{onu_id}
-            interface_cmd = f"interface gpon_onu-{shelf}/{slot}/{pon_port}:{onu_id}"
-            log(f"ENTER INTERFACE: {interface_cmd}", log_file)
-            tn.write(interface_cmd.encode() + b"\n")
-            
-            output = read_until_prompt(tn, "#", timeout=5)
-            log("INTERFACE RESPONSE:", log_file)
-            for l in output.splitlines():
-                if l.strip():
-                    log("  " + l, log_file)
-            
-            # Check if interface not exist
-            if "does not exist" in output.lower() or "invalid" in output.lower() or "error" in output.lower():
-                log(f"ERROR: ONU {shelf}/{slot}/{pon_port}:{onu_id} NOT EXIST", log_file)
-                print(f"error:ONU {shelf}/{slot}/{pon_port}:{onu_id} not exist or invalid")
-                tn.close()
-                return
 
-            # ---- SEND RESET COMMAND ----
-            log("SEND RESET COMMAND", log_file)
-            tn.write(b"reset\n")
-            time.sleep(2)
-            
-            # Read response
-            reset_out = tn.read_very_eager().decode('ascii', errors='ignore')
-            log("RESET RESPONSE:", log_file)
-            for l in reset_out.splitlines():
-                if l.strip():
-                    log("  " + l, log_file)
+def do_reboot(
+    ip: str,
+    username: str,
+    password: str,
+    port: int,
+    timeout: int,
+    shelf: str,
+    slot: str,
+    pon_port: str,
+    onu_id: str,
+) -> tuple[bool, str]:
+    log_file = build_log_file_path()
 
-            # ---- CHECK RESULT ----
-            if "error" in reset_out.lower() or "invalid" in reset_out.lower() or "fail" in reset_out.lower():
-                log("RESET COMMAND FAILED", log_file)
-                print(f"error:Failed to reset ONU {shelf}/{slot}/{pon_port}:{onu_id}")
-            else:
-                log("RESET COMMAND SENT SUCCESSFULLY", log_file)
-                print(f"success:ONU {shelf}/{slot}/{pon_port}:{onu_id} reset successfully!")
+    with open(log_file, "a", encoding="utf-8") as log:
+        def log_line(title: str, text: str) -> None:
+            now = datetime.datetime.now().isoformat(sep=" ", timespec="seconds")
+            log.write(f"{now} {title}\n{text}\n")
 
-            # ---- EXIT ----
-            tn.write(b"exit\n")
-            time.sleep(1)
-            tn.write(b"exit\n")
+        tn = telnetlib.Telnet(ip, port, timeout=10)
+        try:
+            tn.read_until(b"Username:", timeout=15)
+            tn.write(username.encode("ascii") + b"\n")
+            tn.read_until(b"Password:", timeout=15)
+            tn.write(password.encode("ascii") + b"\n")
+
+            output = read_prompt(tn, timeout=20)
+            log_line("LOGIN", output)
+
+            output = write_and_read_prompt(tn, "configure terminal", timeout=20)
+            log_line("CMD configure terminal", output)
+
+            entered, iface, output = try_enter_onu_mng_mode(
+                tn, shelf, slot, pon_port, onu_id
+            )
+            log_line("CMD pon-onu-mng", output)
+
+            if not entered:
+                return False, "failed to enter pon-onu-mng mode"
+
+            tn.write(b"reboot\n")
+            idx, _, reboot_output = tn.expect(
+                [b"\\[yes/no\\]:", b"#", b"%Error", b"Invalid"],
+                timeout=timeout,
+            )
+            decoded_reboot = reboot_output.decode("ascii", errors="ignore")
+            log_line(f"CMD reboot ({iface})", decoded_reboot)
+
+            if idx in (2, 3):
+                return False, "reboot command rejected by OLT"
+
+            if idx == 0:
+                tn.write(b"yes\n")
+                confirm_output = read_prompt(tn, timeout=timeout)
+                log_line("CMD yes", confirm_output)
+
+                lowered_confirm = confirm_output.lower()
+                if "%error" in lowered_confirm or "invalid" in lowered_confirm:
+                    return False, "confirmation failed on OLT"
+
+            elif idx == -1:
+                return False, "no response after reboot command"
+
+            # Exit config mode cleanly
+            output = write_and_read_prompt(tn, "end", timeout=15)
+            log_line("CMD end", output)
+
+            return True, f"ONU {shelf}/{slot}/{pon_port}:{onu_id} reboot sent"
+        finally:
             tn.close()
-            log("SESSION CLOSED", log_file)
 
-    except socket.timeout:
-        print("error:Connection timeout")
-    except ConnectionRefusedError:
-        print("error:Telnet refused by host")
-    except EOFError:
-        print("error:Connection closed by OLT")
-    except Exception as e:
-        print(f"error:Unexpected - {e}")
 
-# ---------- RUN ----------
-telnet_zte_c600(ip, port, login, password, shelf, slot, pon_port, onu_id, log_path)
+if __name__ == "__main__":
+    if len(sys.argv) < 10:
+        usage_and_exit()
+
+    ip_arg = sys.argv[1]
+    user_arg = sys.argv[2]
+    pass_arg = sys.argv[3]
+
+    try:
+        port_arg = int(sys.argv[4])
+        timeout_arg = int(sys.argv[5])
+    except ValueError:
+        print("error:port and timeout must be integer")
+        sys.exit(1)
+
+    shelf_arg = sys.argv[6]
+    slot_arg = sys.argv[7]
+    pon_port_arg = sys.argv[8]
+    onu_id_arg = sys.argv[9]
+
+    try:
+        ok, message = do_reboot(
+            ip_arg,
+            user_arg,
+            pass_arg,
+            port_arg,
+            timeout_arg,
+            shelf_arg,
+            slot_arg,
+            pon_port_arg,
+            onu_id_arg,
+        )
+        if ok:
+            print(f"success:{message}")
+            sys.exit(0)
+
+        print(f"error:{message}")
+        sys.exit(1)
+    except Exception as exc:
+        print(f"error:{exc}")
+        sys.exit(1)

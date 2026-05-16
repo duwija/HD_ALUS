@@ -13,3 +13,9 @@ Homestead.yaml
 npm-debug.log
 yarn-error.log
 telegram/session_telegram.session
+
+# Python build artifacts & runtime logs
+pyhton/__pycache__/
+pyhton/logs/
+pyhton/*.pyc
+pyhton/*.bax_.py

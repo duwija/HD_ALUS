@@ -74,8 +74,8 @@ trait SendsCustomerNotification
     public function messageDelay(int $index, int $longPauseEvery = 20): int
     {
         // Batas delay dibaca dari tenant ENV agar bisa dikonfigurasi per-tenant
-        $delayMin  = max(10,              (int) tenant_config('NOTIF_DELAY_MIN',        180));
-        $delayMax  = max($delayMin + 10,  (int) tenant_config('NOTIF_DELAY_MAX',        360));
+        $delayMin  = max(5,              (int) tenant_config('NOTIF_DELAY_MIN',        180));
+        $delayMax  = max($delayMin + 5,  (int) tenant_config('NOTIF_DELAY_MAX',        360));
         $longExtra = max(60,              (int) tenant_config('NOTIF_LONG_PAUSE_EXTRA', 600));
 
         // 1. Base delay acak dalam range konfigurasi

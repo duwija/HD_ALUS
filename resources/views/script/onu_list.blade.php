@@ -503,6 +503,7 @@ var table = $('#table-onu-unconfig').DataTable({
     method: 'POST',
     data: function ( d ) {
      return $.extend( {}, d, {
+      "olt_id" : $("#olt_id_uncfg").val(),
       "olt" : $("#olt").val(),
       "community": $("#community").val(),
 

@@ -403,7 +403,7 @@ class OltController extends Controller
             $ontStatuses = get_olt_status_config($olt);
             $frameslotportid = get_olt_frameslotport_config($olt);
 
-            $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+            $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
 
         // Inisialisasi data awal
             $logging = 0;
@@ -691,8 +691,21 @@ public function configure(Request $request)
     $timeout = 10;
     $parts_int = explode(':', $request->onu_sn);
 
-    $pon_int = 'gpon-olt_'.$parts_int[0];
-    $onu_int = 'gpon-onu_'.$parts_int[0];
+    // Detect C600 / C620 / C650 family (CLI interface naming differs from C300).
+    $oltType = strtolower((string) ($olt->type ?? ''));
+    $oltName = strtolower((string) ($olt->name ?? ''));
+    $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
+                    str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+    if ($isC600Series) {
+        // C600 CLI: gpon_olt-F/S/P  &  gpon_onu-F/S/P
+        $pon_int = 'gpon_olt-' . $parts_int[0];
+        $onu_int = 'gpon_onu-' . $parts_int[0];
+    } else {
+        // C300 CLI: gpon-olt_F/S/P  &  gpon-onu_F/S/P
+        $pon_int = 'gpon-olt_' . $parts_int[0];
+        $onu_int = 'gpon-onu_' . $parts_int[0];
+    }
     $name = $request->customer_id.' '.$request->customer_name;
     $onu_num = $request->onu_id;
     $sn = $parts_int[1];
@@ -713,7 +726,8 @@ public function configure(Request $request)
 
 
 
-    $process = new Process(["python3", env("PHYTON_DIR")."addontconf.py", 
+    $scriptName = $isC600Series ? 'addontconf_c600.py' : 'addontconf.py';
+    $process = new Process(["python3", env("PHYTON_DIR") . $scriptName,
         $ip, $login, $password, $port, $timeout, 
         $pon_int, $onu_int, $onu_num, $sn, $onutype, 
         $vlan, $username_pppoe, $password_pppoe, $description, 
@@ -906,18 +920,34 @@ public function onudelete($oltId, $oltPonIndex, $onuId)
     $port = $olt->port;
     $timeout = 10;
 
-    $frameslotportid = config('zteframeslotportid');
-    $pon_int = array_search($oltPonIndex, $frameslotportid);
+    // Detect C600 / C620 / C650 — uses gpon_olt-F/S/P naming and slash-format PON path.
+    $oltType = strtolower((string) ($olt->type ?? ''));
+    $oltName = strtolower((string) ($olt->name ?? ''));
+    $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
+                    str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+    // C600 PON index sent with underscores via URL (to avoid Laravel route slash splitting).
+    if ($isC600Series && str_contains($oltPonIndex, '_') && !str_contains($oltPonIndex, '/')) {
+        $oltPonIndex = str_replace('_', '/', $oltPonIndex);
+    }
 
     $onu_num = $onuId;
 
+    if ($isC600Series) {
+        // For C600 the PON path is already "frame/slot/port"; pass as-is to script.
+        $pon_int = $oltPonIndex;
+        $script = 'delontconf_c600.py';
+    } else {
+        // C300: map numeric oltPonIndex -> "frame/slot/port" via config.
+        $frameslotportid = config('zteframeslotportid');
+        $pon_int = array_search($oltPonIndex, $frameslotportid);
+        $script = 'delontconf.py';
+    }
 
-    //dd($ip, $login, $password, $port, $pon_int, $onu_num, $command );
 
 
 
-
-    $process = new Process(["python3", env("PHYTON_DIR")."delontconf.py", 
+    $process = new Process(["python3", env("PHYTON_DIR") . $script,
         $ip, $login, $password, $port, $timeout, 
         $pon_int, $onu_num]);
     try {
@@ -961,6 +991,13 @@ public function onureboot($oltId, $oltPonIndex, $onuId)
     $oltName = strtolower($olt->name ?? '');
     
     $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+    $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
+                    str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+    // C600/C620/C650 PON index may be sent with underscores to avoid route slash splitting.
+    if ($isC600Series && str_contains($oltPonIndex, '_') && !str_contains($oltPonIndex, '/')) {
+        $oltPonIndex = str_replace('_', '/', $oltPonIndex);
+    }
 
     if ($isHSGQ) {
         // HSGQ: Use CLI/Telnet method for reboot
@@ -1027,8 +1064,68 @@ public function onureboot($oltId, $oltPonIndex, $onuId)
     $ip = $olt->ip;
     $login = $olt->user;
     $password = $olt->password;
-    $port = $olt->port;
+    $port = (string)($olt->port ?? 23);
     $timeout = 10;
+
+    if ($isC600Series) {
+        try {
+            $ponParts = explode('/', $oltPonIndex);
+            if (count($ponParts) !== 3) {
+                return redirect()->back()->with('error', 'Invalid C600 PON format: ' . $oltPonIndex);
+            }
+
+            [$shelf, $slot, $ponPort] = $ponParts;
+
+            $processRebootC600 = new Process([
+                "python3",
+                env("PHYTON_DIR") . "reboot_zte_c600_ont.py",
+                $ip,
+                $login,
+                $password,
+                $port,
+                (string)$timeout,
+                (string)$shelf,
+                (string)$slot,
+                (string)$ponPort,
+                (string)$onuId,
+            ]);
+
+            $processRebootC600->setTimeout(90);
+            $processRebootC600->run();
+
+            if (!$processRebootC600->isSuccessful()) {
+                throw new ProcessFailedException($processRebootC600);
+            }
+
+            $output = trim((string)$processRebootC600->getOutput());
+            $lines = array_values(array_filter(array_map('trim', explode("\n", $output))));
+
+            $resultLine = '';
+            foreach ($lines as $line) {
+                if (stripos($line, 'success:') === 0 || stripos($line, 'error:') === 0) {
+                    $resultLine = $line;
+                }
+            }
+
+            if ($resultLine === '' && !empty($lines)) {
+                $resultLine = end($lines);
+            }
+
+            $parts = explode(":", $resultLine, 2);
+            if (count($parts) < 2) {
+                return redirect()->back()->with('warning', 'Reboot command sent: ' . ($resultLine ?: 'No response from script'));
+            }
+
+            return redirect()->back()->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            $stderr = trim($e->getProcess()->getErrorOutput());
+            $stdout = trim($e->getProcess()->getOutput());
+            $detail = $stderr ?: ($stdout ?: $e->getMessage());
+            return redirect()->back()->with('error', 'Reboot C600 error: ' . $detail);
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Reboot C600 error: ' . $e->getMessage());
+        }
+    }
 
     $frameslotportid = config('zteframeslotportid');
     $pon_int = array_search($oltPonIndex, $frameslotportid);
@@ -1098,7 +1195,7 @@ public function onu_detail(Request $request)
         // HSGQ: Use SNMP to get ONU detail (no CLI command available for detail)
         try {
             $zteoid = get_olt_oid_config($olt);
-            $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+            $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
             
             // Parse id_onu format "PON:ONU" (e.g., "2:1")
             list($ponNum, $onuIdNum) = explode(':', $id_onu);
@@ -1198,9 +1295,14 @@ public function onu_detail(Request $request)
         }
     }
 
+    // Detect if C600 or C300
+    $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
+            str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+    $oltTypeParam = $isC600Series ? 'c600' : 'c300';
+
     $processreboot = new Process(["python3", env("PHYTON_DIR")."onudetail.py", 
         $ip, $login, $password, $port, $timeout, 
-        $id_onu]);
+        $id_onu, $oltTypeParam]);
     try {
     // Start the process and wait for it to finish
         $processreboot->run();
@@ -1423,7 +1525,7 @@ public function getOltOnuPower($id)
         $zteoid = get_olt_oid_config($olt);
 
             // Inisialisasi koneksi SNMP
-        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro,$olt->snmp_port);
+        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
 
             // OID untuk mendapatkan informasi
         $oidOltName = $zteoid['oidOltName'];
@@ -1466,7 +1568,7 @@ public function getOltPon($id)
         $frameslotportid = get_olt_frameslotport_config($olt);
 
         // Inisialisasi koneksi SNMP
-                                        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+                                        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
 
         // Detect vendor type
         $oltVendor = strtolower($olt->vendor ?? '');
@@ -1534,10 +1636,9 @@ public function getOltPon($id)
                                                         // Build frame/slot/port format
                                                         $portKey = $frame . '/' . $slot . '/' . $port;
                                                         
-                                                        // Get shelf.slot from config
-                                                        $suffix = $frameslotportid[$portKey] ?? null;
-                                                        
-                                                        if (!$suffix) continue;
+                                                        // Use full frame/slot/port so each PON port appears
+                                                        // as a distinct combobox option.
+                                                        $suffix = $portKey;
                                                     } else {
                                                         continue;
                                                     }
@@ -1590,7 +1691,7 @@ public function getOltPon($id)
                                 try {
                                     $olt = \App\Olt::findOrFail($request->input('olt_id'));
                                     $customers = \App\Customer::where('id_olt', $olt->id)->get();
-                                                $oltPonIndex = $request->input('olt_pon'); // Diterima dari request (shelf.slot untuk C620)
+                                                $oltPonIndex = $request->input('olt_pon'); // Diterima dari request (frame/slot/port untuk C620)
 
                                 $zteoid = get_olt_oid_config($olt);
                                 $ontStatuses = get_olt_status_config($olt);
@@ -1603,7 +1704,13 @@ public function getOltPon($id)
                                 $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
                                 $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                                                 str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
-                                
+
+                                // For C600/C620/C650 the PON index is "frame/slot/port" which contains slashes
+                                // and breaks Laravel route segments. We convert it to underscores for URL building
+                                // (delete/reboot/reset). Controllers convert it back to slashes.
+                                $oltPonIndexUrl = ($isC600Series && str_contains((string) $oltPonIndex, '/'))
+                                    ? str_replace('/', '_', (string) $oltPonIndex)
+                                    : $oltPonIndex;
                                 if ($isHSGQ) {
                                     // For HSGQ: Walk IF-MIB ifDescr to discover ONUs
                                     // ifDescr shows "ONU{PON}/{ID}" format (e.g., "ONU2/1")
@@ -1622,7 +1729,7 @@ public function getOltPon($id)
                                                 ini_set('max_execution_time', 300);
 
         // Mengambil data SNMP walk
-                                                $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+                                                $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
                                                 $result = $snmp->walk($oidOnuName);
 
                                                 $data = [];
@@ -1670,10 +1777,10 @@ public function getOltPon($id)
                                                          $cardIndex = ($encodedIndex >> 8) & 0xFF;
                                                          $frame = ($encodedIndex >> 16) & 0xFF;
                                                          $slot = $cardIndex; // FIX: slot = cardIndex (not cardIndex-1)
-                                                         $shelfSlot = $frame . '.' . $slot;
-                                                         
-                                                         // Filter: only process ONUs on selected port
-                                                         if ($shelfSlot !== $oltPonIndex) {
+                                                         $decodedPortKey = $frame . '/' . $slot . '/' . $port;
+
+                                                         // Filter: only process ONUs on selected PON port
+                                                         if ($decodedPortKey !== $oltPonIndex) {
                                                              continue; // Skip ONUs not on selected port
                                                          }
                                                          
@@ -1745,7 +1852,7 @@ public function getOltPon($id)
                                                      }
                                                      $result_status = $ontStatuses[$hasilStatus] ?? 'Unknown';
 
-                                                     $modalId=$oltPonIndex."-".$onuId;
+                                                     $modalId = preg_replace('/[^A-Za-z0-9_-]/', '_', $oltPonIndex."-".$onuId);
 
                                                      // Build OIDs based on OLT type
                                                      if ($isHSGQ) {
@@ -1809,15 +1916,31 @@ public function getOltPon($id)
                                                      
                                                      // Convert Last Offline/Online from Hex-STRING to DateTime
                                                      if ($onuLastOffline) {
-                                                         $onuLastOfflineRaw = str_replace(['Hex-STRING: ', '"'], "", $this->safeSnmpGet($snmp,$onuLastOffline));
-                                                         $onuLastOfflineValue = $this->convertSnmpDateTime($onuLastOfflineRaw);
+                                                         $onuLastOfflineRaw = $this->safeSnmpGet($snmp,$onuLastOffline);
+                                                         // Handle both STRING: (already formatted) and Hex-STRING: (needs conversion)
+                                                         if (strpos($onuLastOfflineRaw, 'STRING:') !== false && strpos($onuLastOfflineRaw, 'Hex-STRING:') === false) {
+                                                             // Already formatted: STRING: 2026-05-04 12:04:10
+                                                             $onuLastOfflineValue = trim(str_replace(['STRING: ', '"'], "", $onuLastOfflineRaw));
+                                                         } else {
+                                                             // Hex format: Hex-STRING: 07 EA 01 1B 12 15 06 00
+                                                             $onuLastOfflineRaw = str_replace(['Hex-STRING: ', '"'], "", $onuLastOfflineRaw);
+                                                             $onuLastOfflineValue = $this->convertSnmpDateTime($onuLastOfflineRaw);
+                                                         }
                                                      } else {
                                                          $onuLastOfflineValue = 'N/A';
                                                      }
                                                      
                                                      if ($onuLastOnline) {
-                                                         $onuLastOnlineRaw = str_replace(['Hex-STRING: ', '"'], "", $this->safeSnmpGet($snmp,$onuLastOnline));
-                                                         $onuLastOnlineValue = $this->convertSnmpDateTime($onuLastOnlineRaw);
+                                                         $onuLastOnlineRaw = $this->safeSnmpGet($snmp,$onuLastOnline);
+                                                         // Handle both STRING: (already formatted) and Hex-STRING: (needs conversion)
+                                                         if (strpos($onuLastOnlineRaw, 'STRING:') !== false && strpos($onuLastOnlineRaw, 'Hex-STRING:') === false) {
+                                                             // Already formatted: STRING: 2026-05-04 12:05:06
+                                                             $onuLastOnlineValue = trim(str_replace(['STRING: ', '"'], "", $onuLastOnlineRaw));
+                                                         } else {
+                                                             // Hex format: Hex-STRING: 07 EA 01 1B 12 15 06 00
+                                                             $onuLastOnlineRaw = str_replace(['Hex-STRING: ', '"'], "", $onuLastOnlineRaw);
+                                                             $onuLastOnlineValue = $this->convertSnmpDateTime($onuLastOnlineRaw);
+                                                         }
                                                      } else {
                                                          $onuLastOnlineValue = 'N/A';
                                                      }
@@ -1869,8 +1992,24 @@ public function getOltPon($id)
                                                                 $onUptimeValue = 'Offline';
                                                             }
                                                         } else {
-                                                            // ZTE C300/C320: Same Timeticks format
-                                                         }
+                                                            // ZTE C300/C320/C600: parse standard Timeticks output.
+                                                            $onUptimeValue = trim((string)preg_replace('/Timeticks:\s*\(\d+\)\s*/i', '', (string)$uptimeRaw));
+                                                            if (empty($onUptimeValue)) {
+                                                                if (preg_match('/\((\d+)\)/', (string)$uptimeRaw, $m)) {
+                                                                    $ticks = (int)$m[1]; // hundredths of seconds
+                                                                    $totalSeconds = intdiv($ticks, 100);
+                                                                    $days = intdiv($totalSeconds, 86400);
+                                                                    $hours = intdiv($totalSeconds % 86400, 3600);
+                                                                    $minutes = intdiv($totalSeconds % 3600, 60);
+                                                                    $seconds = $totalSeconds % 60;
+                                                                    $onUptimeValue = $days > 0
+                                                                        ? sprintf('%d day%s, %d:%02d:%02d.00', $days, $days > 1 ? 's' : '', $hours, $minutes, $seconds)
+                                                                        : sprintf('%d:%02d:%02d.00', $hours, $minutes, $seconds);
+                                                                } else {
+                                                                    $onUptimeValue = 'Unknown';
+                                                                }
+                                                            }
+                                                        }
                                                      } else {
                                                          $onUptimeValue = 'Unknown';
                                                      }
@@ -1907,8 +2046,39 @@ public function getOltPon($id)
                                                   }
                                                   elseif ($result_status == "los")
                                                   {
-                                                    $onu_ststus= '<a class="badge-danger badge btn-sm p-2 ml-2 mr-2 text-white" title="Laser Out - No Signal">LOS</a>';
-                                                    $onu_delete =  ' <form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">
+                                                                                                        $modalBody = '<p id="rxPower">Onu Name : '.str_replace('"', '', $this->cleanSnmpValue($onuNameValue)).'</p>
+                                                                                                        <p id="rxPower">Onu Model : '.$onuModelValue.' </p>
+                                                                                                        <p id="rxPower">Onu Sn : '.$onuSnAscii.' </p>
+                                                                                                        <p id="rxPower">Onu Rx Power : N/A dBm</p>
+                                                                                                        <p id="txPower">Onu Tx Power : N/A dBm</p>
+                                                                                                        <p id="txPower">Onu Cable Length  : '. $this->cleanSnmpValue($onuDistanceValue).' </p>';
+
+                                                                                                        if (!$isHSGQ) {
+                                                                                                                $modalBody .= '<p id="txPower">Olt Rx Power : N/A dBm</p>
+                                                                                                                <p id="rxPower">Onu Last Offline : '.$onuLastOfflineValue.' </p>
+                                                                                                                <p id="txPower">Onu Last Online : '.$onuLastOnlineValue.' </p>
+                                                                                                                <p id="txPower">Onu Uptime : '.$onUptimeValue.' </p>';
+                                                                                                        } else {
+                                                                                                                $modalBody .= '<p id="rxPower">Interface Status : LOS</p>';
+                                                                                                        }
+
+                                                                                                        $onu_ststus= '<button id="powerButton" class="btn badge-danger btn-sm pb-1" data-toggle="modal" data-target="#powerModal'.$modalId.'">LOS</button>
+                                                                                                        <div class="modal fade" id="powerModal'.$modalId.'">
+                                                                                                        <div class="modal-dialog">
+                                                                                                        <div class="modal-content">
+                                                                                                        <div class="modal-header">
+                                                                                                        <h5 class="modal-title" id="powerModalLabel"><strong>Detail ONU '.$olt->name .'</strong></h5>
+                                                                                                        </div>
+                                                                                                        <div class="modal-body">
+                                                                                                        '.$modalBody.'
+                                                                                                        </div>
+                                                                                                        <div class="modal-footer">
+                                                                                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                                                                                        </div>
+                                                                                                        </div>
+                                                                                                        </div>
+                                                                                                        </div>';
+                                                    $onu_delete =  ' <form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndexUrl . '/' . $onuId . '" method="POST">
                                                     <input type="hidden" name="_method" value="DELETE">
                                                     <input type="hidden" name="_token" value="' . csrf_token() . '">
                                                     <button type="submit" class="btn btn-danger btn-sm m-1" title="Delete">
@@ -1918,8 +2088,39 @@ public function getOltPon($id)
                                                 }
                                                 elseif ($result_status == "powerdown")
                                                 {
-                                                    $onu_ststus= '<a class="badge-warning badge btn-sm p-2 ml-2 mr-2 text-dark" title="Power Down - ONU Off">PWR DOWN</a>';
-                                                    $onu_delete =  ' <form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">
+                                                    $modalBody = '<p id="rxPower">Onu Name : '.str_replace('"', '', $this->cleanSnmpValue($onuNameValue)).'</p>
+                                                    <p id="rxPower">Onu Model : '.$onuModelValue.' </p>
+                                                    <p id="rxPower">Onu Sn : '.$onuSnAscii.' </p>
+                                                    <p id="rxPower">Onu Rx Power : N/A dBm</p>
+                                                    <p id="txPower">Onu Tx Power : N/A dBm</p>
+                                                    <p id="txPower">Onu Cable Length  : '. $this->cleanSnmpValue($onuDistanceValue).' </p>';
+
+                                                    if (!$isHSGQ) {
+                                                        $modalBody .= '<p id="txPower">Olt Rx Power : N/A dBm</p>
+                                                        <p id="rxPower">Onu Last Offline : '.$onuLastOfflineValue.' </p>
+                                                        <p id="txPower">Onu Last Online : '.$onuLastOnlineValue.' </p>
+                                                        <p id="txPower">Onu Uptime : '.$onUptimeValue.' </p>';
+                                                    } else {
+                                                        $modalBody .= '<p id="rxPower">Interface Status : Power Down</p>';
+                                                    }
+
+                                                    $onu_ststus= '<button id="powerButton" class="btn badge-warning btn-sm pb-1" data-toggle="modal" data-target="#powerModal'.$modalId.'">PWR DOWN</button>
+                                                    <div class="modal fade" id="powerModal'.$modalId.'">
+                                                    <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                    <div class="modal-header">
+                                                    <h5 class="modal-title" id="powerModalLabel"><strong>Detail ONU '.$olt->name .'</strong></h5>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                    '.$modalBody.'
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                                    </div>
+                                                    </div>
+                                                    </div>
+                                                    </div>';
+                                                    $onu_delete =  ' <form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndexUrl . '/' . $onuId . '" method="POST">
                                                     <input type="hidden" name="_method" value="DELETE">
                                                     <input type="hidden" name="_token" value="' . csrf_token() . '">
                                                     <button type="submit" class="btn btn-danger btn-sm m-1" title="Delete">
@@ -2060,7 +2261,7 @@ public function getOltPon($id)
                                                 </div>';
                                                 $onu_delete =  '
                                                 <div class="row flex">
-                                                <form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">
+                                                <form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndexUrl . '/' . $onuId . '" method="POST">
                                                 <input type="hidden" name="_method" value="DELETE">
                                                 <input type="hidden" name="_token" value="' . csrf_token() . '">
                                                 <button type="submit" class="btn btn-danger btn-sm m-1" title="Delete">
@@ -2068,7 +2269,7 @@ public function getOltPon($id)
                                                 </button>
                                                 </form>
 
-                                                <form onsubmit="confirmSubmit(event, \'Reboot This ONU!\')" action="/olt/reboot/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">
+                                                <form onsubmit="confirmSubmit(event, \'Reboot This ONU!\')" action="/olt/reboot/' . $olt->id . '/' . $oltPonIndexUrl . '/' . $onuId . '" method="POST">
                                                 <input type="hidden" name="_method" value="POST"> <!-- Gunakan POST untuk reboot -->
                                                 <input type="hidden" name="_token" value="' . csrf_token() . '">
                                                 <button type="submit" class="btn btn-warning btn-sm m-1" title="Reboot">
@@ -2076,7 +2277,7 @@ public function getOltPon($id)
                                                 </button>
                                                 </form>
 
-                                                <form onsubmit="confirmSubmit(event, \'Factory Reset This ONU!\')" action="/olt/reset/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">
+                                                <form onsubmit="confirmSubmit(event, \'Factory Reset This ONU!\')" action="/olt/reset/' . $olt->id . '/' . $oltPonIndexUrl . '/' . $onuId . '" method="POST">
                                                 <input type="hidden" name="_method" value="POST"> <!-- Gunakan POST untuk factory reset -->
                                                 <input type="hidden" name="_token" value="' . csrf_token() . '">
                                                 <button type="submit" class="btn btn-info btn-sm m-1" title="Factory Reset">
@@ -2090,8 +2291,39 @@ public function getOltPon($id)
                                             } 
                                             elseif ($result_status == "dyinggasp")
                                             {
-                                                $onu_ststus= '<a class="badge-warning badge btn-sm p-2 ml-2 mr-2 text-white  ">'.$result_status.'</a>';
-                                                $onu_delete = '<form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">
+                                                $modalBody = '<p id="rxPower">Onu Name : '.str_replace('"', '', $this->cleanSnmpValue($onuNameValue)).'</p>
+                                                <p id="rxPower">Onu Model : '.$onuModelValue.' </p>
+                                                <p id="rxPower">Onu Sn : '.$onuSnAscii.' </p>
+                                                <p id="rxPower">Onu Rx Power : N/A dBm</p>
+                                                <p id="txPower">Onu Tx Power : N/A dBm</p>
+                                                <p id="txPower">Onu Cable Length  : '. $this->cleanSnmpValue($onuDistanceValue).' </p>';
+
+                                                if (!$isHSGQ) {
+                                                    $modalBody .= '<p id="txPower">Olt Rx Power : N/A dBm</p>
+                                                    <p id="rxPower">Onu Last Offline : '.$onuLastOfflineValue.' </p>
+                                                    <p id="txPower">Onu Last Online : '.$onuLastOnlineValue.' </p>
+                                                    <p id="txPower">Onu Uptime : '.$onUptimeValue.' </p>';
+                                                } else {
+                                                    $modalBody .= '<p id="rxPower">Interface Status : '.$result_status.'</p>';
+                                                }
+
+                                                $onu_ststus= '<button id="powerButton" class="btn badge-warning btn-sm pb-1" data-toggle="modal" data-target="#powerModal'.$modalId.'">'.$result_status.'</button>
+                                                <div class="modal fade" id="powerModal'.$modalId.'">
+                                                <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                <div class="modal-header">
+                                                <h5 class="modal-title" id="powerModalLabel"><strong>Detail ONU '.$olt->name .'</strong></h5>
+                                                </div>
+                                                <div class="modal-body">
+                                                '.$modalBody.'
+                                                </div>
+                                                <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                                </div>
+                                                </div>
+                                                </div>
+                                                </div>';
+                                                $onu_delete = '<form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndexUrl . '/' . $onuId . '" method="POST">
                                                 <input type="hidden" name="_method" value="DELETE">
                                                 <input type="hidden" name="_token" value="' . csrf_token() . '">
                                                 <button type="submit" class="btn btn-danger btn-sm m-1" title="Delete">
@@ -2101,8 +2333,39 @@ public function getOltPon($id)
                                             }
                                             else
                                             {
-                                                $onu_ststus= '<a class="badge-warning btn btn-sm  ml-2 mr-2 text-white  ">'.$result_status.'</a>';
-                                                $onu_delete =  '<form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">
+                                                $modalBody = '<p id="rxPower">Onu Name : '.str_replace('"', '', $this->cleanSnmpValue($onuNameValue)).'</p>
+                                                <p id="rxPower">Onu Model : '.$onuModelValue.' </p>
+                                                <p id="rxPower">Onu Sn : '.$onuSnAscii.' </p>
+                                                <p id="rxPower">Onu Rx Power : N/A dBm</p>
+                                                <p id="txPower">Onu Tx Power : N/A dBm</p>
+                                                <p id="txPower">Onu Cable Length  : '. $this->cleanSnmpValue($onuDistanceValue).' </p>';
+
+                                                if (!$isHSGQ) {
+                                                    $modalBody .= '<p id="txPower">Olt Rx Power : N/A dBm</p>
+                                                    <p id="rxPower">Onu Last Offline : '.$onuLastOfflineValue.' </p>
+                                                    <p id="txPower">Onu Last Online : '.$onuLastOnlineValue.' </p>
+                                                    <p id="txPower">Onu Uptime : '.$onUptimeValue.' </p>';
+                                                } else {
+                                                    $modalBody .= '<p id="rxPower">Interface Status : '.$result_status.'</p>';
+                                                }
+
+                                                $onu_ststus= '<button id="powerButton" class="btn badge-warning btn-sm pb-1" data-toggle="modal" data-target="#powerModal'.$modalId.'">'.$result_status.'</button>
+                                                <div class="modal fade" id="powerModal'.$modalId.'">
+                                                <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                <div class="modal-header">
+                                                <h5 class="modal-title" id="powerModalLabel"><strong>Detail ONU '.$olt->name .'</strong></h5>
+                                                </div>
+                                                <div class="modal-body">
+                                                '.$modalBody.'
+                                                </div>
+                                                <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                                </div>
+                                                </div>
+                                                </div>
+                                                </div>';
+                                                $onu_delete =  '<form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndexUrl . '/' . $onuId . '" method="POST">
                                                 <input type="hidden" name="_method" value="DELETE">
                                                 <input type="hidden" name="_token" value="' . csrf_token() . '">
                                                 <button type="submit" class="btn btn-danger btn-sm m-1" title="Delete">
@@ -2184,6 +2447,34 @@ public function getOltPon($id)
                                 return trim(str_replace(['STRING: ', 'INTEGER: ', 'Gauge32: '], '', $value));
                             }
 
+                            /**
+                             * Hapus prefiks SNMP standar ("STRING: ", "Hex-STRING: ", "INTEGER: ", dll.)
+                             * dan tanda kutip pembungkus, lalu trim. Cocok untuk normalisasi value walk/get.
+                             */
+                            private function stripSnmpPrefix($value): string
+                            {
+                                $value = (string) $value;
+                                // urutkan dari yang paling spesifik dulu agar substring "STRING: " tidak menggigit lebih dulu
+                                $prefixes = [
+                                    'Hex-STRING: ',
+                                    'OCTET STRING: ',
+                                    'STRING: ',
+                                    'INTEGER: ',
+                                    'Gauge32: ',
+                                    'Counter32: ',
+                                    'Counter64: ',
+                                    'Timeticks: ',
+                                    'IpAddress: ',
+                                ];
+                                foreach ($prefixes as $p) {
+                                    if (stripos($value, $p) === 0) {
+                                        $value = substr($value, strlen($p));
+                                        break;
+                                    }
+                                }
+                                return trim($value, " \t\n\r\0\x0B\"");
+                            }
+
 
 
                             public function addonu($id_customer, $id_olt)
@@ -2197,116 +2488,150 @@ public function getOltPon($id)
                                 ->get(['name', 'id', 'vlan']);
 
                                 $zteoid = get_olt_oid_config($olt);
-                                $onuUncfgSn = $zteoid['oidOnuUncfgSn'];
-                                $onuUncfgtype = $zteoid['oidOnuUncfgType'];
-                                $oidOltName = $zteoid['oidOltName'];
-                                try{
+                                $onuUncfgSn = $zteoid['oidOnuUncfgSn'] ?? null;
+                                $onuUncfgtype = $zteoid['oidOnuUncfgType'] ?? null;
+                                $oidOltName = $zteoid['oidOltName'] ?? null;
 
-                                    $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+                                // Deteksi seri C600/C620/C650 (encoded index berbeda dari C300/C320).
+                                $oltType = strtolower($olt->type ?? '');
+                                $oltName = strtolower($olt->name ?? '');
+                                $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
+                                    str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+                                // Inisialisasi data view agar tidak undefined ketika SNMP error / kosong.
+                                $onu = [];
+                                $vlanList = [];
+                                $oidOltGmportProfile = [];
+                                $oidOltTconProfile = [];
+
+                                if (empty($onuUncfgSn)) {
+                                    return redirect('/customer/' . $customer->id . '/edit')
+                                        ->with('warning', 'Vendor OLT belum didukung untuk listing Unconfigure ONU.');
+                                }
+
+                                try {
+                                    $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
                                     $result = $snmp->walk($onuUncfgSn);
 
-
-
                                     if (empty($result)) {
-                                        \Log::info('SNMP Walk returned no results for OID ' . $onuUncfgSn);
-                                        return response()->json(['message' => 'No data found for the specified OID'], 404);
+                                        \Log::info('SNMP Walk uncfg returned no results for OID ' . $onuUncfgSn);
+                                        return redirect('/customer/' . $customer->id . '/edit')
+                                            ->with('warning', 'Tidak ada ONU unconfigure terdeteksi pada OLT ini.');
                                     }
-                                    else
-                                    {
 
-        // Iterasi melalui hasil SNMP walk
-                                        $processedResults = [];
-                                        foreach ($result as $key => $onuUconfg) {
-            // Pisahkan OID berdasarkan titik
-                                            $oidParts = explode('.', $key);
+                                    $oltNameValue = $olt->name ?: $this->stripSnmpPrefix((string) $snmp->get($oidOltName));
 
-            // Ambil dua nilai terakhir dari OID
-                                            $lastTwoParts = array_slice($oidParts, -2);
+                                    foreach ($result as $key => $onuUconfg) {
+                                        $oidParts = explode('.', $key);
+                                        // Index terakhir = {ponIndex}.{discoveryOrder} (atau {encoded}.{order} untuk C600)
+                                        $identifier = implode('.', array_slice($oidParts, -2));
+                                        $desiredValue = (int) $oidParts[count($oidParts) - 2];
 
-            // Gabungkan dua nilai terakhir dengan titik
-                                            $identifier = implode('.', $lastTwoParts);
-                                            $desiredValue = $oidParts[count($oidParts) - 2];
+                                        $onuTypeRaw = $snmp->get($onuUncfgtype . '.' . $identifier);
+                                        $onuType = $this->stripSnmpPrefix((string) $onuTypeRaw);
+                                        $onuMac = $this->stripSnmpPrefix((string) $onuUconfg);
 
-                                            $onuType = str_replace(['STRING: ', '"'], "", $snmp->get($onuUncfgtype . '.' . $identifier));
-                                            $onuMac = str_replace(['STRING: ', '"'], "", $onuUconfg);
+                                        if ($isC600Series) {
+                                            // C600: encoded = frame*16777216 + slot*65536 + port*256 (+ onuid)
+                                            $decodedFrame = ($desiredValue >> 16) & 0xFF;
+                                            $decodedSlot  = ($desiredValue >> 8)  & 0xFF;
+                                            $decodedPort  = $desiredValue & 0xFF;
+                                            $ponPath = $decodedFrame . '/' . $decodedSlot . '/' . $decodedPort;
+                                        } else {
+                                            // C300/C320: pakai mapping baseIndex/slotGaps via getPonCode().
+                                            $ponPath = $this->getPonCode($desiredValue);
+                                            if (is_object($ponPath)) {
+                                                $ponPath = '';
+                                            }
+                                        }
 
-            // Simpan hasil ke array
-                                            $onu[] = [
-                                                'oltName' => str_replace(['STRING: ', '"'], "", $snmp->get($oidOltName)),
-                                                'oid' => $this->getPonCode($desiredValue),
-                'identifier' => $this->cleanSnmpValue($onuType), // Menyimpan dua bagian terakhir
-                'value' => $this->convertMacToAscii($onuMac),
-                'ponid' => $zteoid['oidOnuName'].'.'.$desiredValue,
-            ];
-        }
+                                        // SN ZTE format Hex-STRING "5A 54 45 47 ..." → "ZTEG..." (decode untuk semua seri).
+                                        $snDecoded = (strpos($onuMac, ' ') !== false)
+                                            ? $this->convertMacToAscii($onuMac)
+                                            : $onuMac;
 
+                                        $onu[] = [
+                                            'oltName'    => $oltNameValue,
+                                            'oid'        => $ponPath,
+                                            'identifier' => $this->cleanSnmpValue($onuType),
+                                            'value'      => $snDecoded,
+                                            'ponid'      => ($zteoid['oidOnuName'] ?? '') . '.' . $desiredValue,
+                                        ];
+                                    }
 
+                                    // VLAN & Profile dropdowns (best-effort, jangan gagal kalau OID tidak ada).
+                                    try {
+                                        $oidGm = $zteoid['oidOltGmportProfile'] ?? null;
+                                        if ($oidGm) {
+                                            $walkGm = $snmp->walk($oidGm);
+                                            if (is_array($walkGm)) {
+                                                $vals = array_map(fn($v) => trim($this->stripSnmpPrefix((string) $v), " \t\n\r\0\x0B\""), $walkGm);
+                                                $vals = array_values(array_unique(array_filter($vals, fn($v) => $v !== '')));
+                                                $oidOltGmportProfile = $vals;
+                                            }
+                                        }
+                                    } catch (\Throwable $e) {
+                                        \Log::warning('Walk GmportProfile failed: ' . $e->getMessage());
+                                    }
 
+                                    try {
+                                        $oidTcon = $zteoid['oidOltTconProfile'] ?? null;
+                                        if ($oidTcon) {
+                                            $walkTcon = $snmp->walk($oidTcon);
+                                            if (is_array($walkTcon)) {
+                                                $vals = array_map(fn($v) => trim($this->stripSnmpPrefix((string) $v), " \t\n\r\0\x0B\""), $walkTcon);
+                                                $vals = array_values(array_unique(array_filter($vals, fn($v) => $v !== '')));
+                                                $oidOltTconProfile = $vals;
+                                            }
+                                        }
+                                    } catch (\Throwable $e) {
+                                        \Log::warning('Walk TconProfile failed: ' . $e->getMessage());
+                                    }
 
-//         $oidOnuName = $zteoid['oidOnuName'].'.'.$desiredValue;
-//         $result_getonuid = $snmp->walk($oidOnuName);
+                                    try {
+                                        $oidVlan = $zteoid['oidOltVlanId'] ?? null;
+                                        if ($oidVlan) {
+                                            $walkVlan = $snmp->walk($oidVlan);
+                                            if (is_array($walkVlan)) {
+                                                foreach ($walkVlan as $oid => $vlanName) {
+                                                    $parts = explode('.', $oid);
+                                                    $vid = end($parts);
+                                                    if ($vid !== false && $vid !== '' && ctype_digit((string) $vid)) {
+                                                        $vlanList[] = $vid;
+                                                    }
+                                                }
+                                                $vlanList = array_values(array_unique($vlanList));
+                                            }
+                                        }
+                                    } catch (\Throwable $e) {
+                                        \Log::warning('Walk VlanId failed: ' . $e->getMessage());
+                                    }
 
-// // Ambil hanya bagian ID terakhir dari array OID
-//         $used_ids = [];
-//         foreach ($result_getonuid as $key => $value) {
-//     // Ambil ID terakhir dari OID
-//             $oid_parts = explode('.', $key);
-//             $id = end($oid_parts);
-//     $used_ids[] = (int)$id; // Ubah ke integer agar bisa dibandingkan
-// }
+                                    $snmp->close();
+                                } catch (\Exception $e) {
+                                    \Log::warning('SNMP addonu failed for ' . $olt->ip . ': ' . $e->getMessage());
+                                    return redirect('/customer/' . $customer->id . '/edit')
+                                        ->with('warning', 'Unconfigure Onu Not Found');
+                                }
 
-// // Cek ID yang tidak terpakai dari 1 sampai 128
-// $max_id = 128;
-// $all_ids = range(1, $max_id);
-// $empty_ids = array_diff($all_ids, $used_ids);
+                                // Fallback: pada ZTE C600 kolom Gemport US/DS Traffic Profile name
+                                // sering kosong via SNMP. Pakai daftar TCont sebagai opsi agar
+                                // dropdown tidak kosong (operator masih bisa pilih atau ganti manual).
+                                if (empty($oidOltGmportProfile) && !empty($oidOltTconProfile)) {
+                                    $oidOltGmportProfile = $oidOltTconProfile;
+                                }
 
-
-        $oidOltGmportProfile = $zteoid['oidOltGmportProfile'];
-        $result_oidOltGmportProfile = $snmp->walk($oidOltGmportProfile);
-        $oidOltGmportProfile = str_replace(['STRING: ', '"'], "", $result_oidOltGmportProfile);
-
-        $oidOltTconProfile = $zteoid['oidOltTconProfile'];
-        $result_oidOltTconProfile = $snmp->walk($oidOltTconProfile);
-        $oidOltTconProfile = str_replace(['STRING: ', '"'], "", $result_oidOltTconProfile);
-
-        $oidOltVlanId = $zteoid['oidOltVlanId'];
-        $result_oidOltVlanId = $snmp->walk($oidOltVlanId);
-        $oidOltVlanId = str_replace(['STRING: ', '"'], "", $result_oidOltVlanId);
-
-//dd($oidOltVlanId);
-
-
-
-
-        foreach ($oidOltVlanId as $oid => $vlanName) {
-            $parts = explode('.', $oid);
-    $lastNumber = end($parts); // Get the last part
-
-    $vlanList[] =$lastNumber;
-    
-}
-
-
-
-}
-
-        // Tutup sesi SNMP
-$snmp->close();
-
-
-}
-catch (\Exception $e) {
-        // Tangani kesalahan jika terjadi
-   // \Log::error('SNMP Walk failed for OID ' . $onuUncfgSn . ': ' . $e->getMessage());
-    //return response()->json(['error' => 'SNMP Walk failed', 'details' => $e->getMessage()], 500);
-    $messege =" Unconfigure Onu Not Found";
-    return redirect ('/customer/'.$customer->id.'/edit')->with('warning',$messege);
-}
-// return view ('olt/addonu',['customer' =>$customer,'olt' =>$olt, 'onutype' => $onutype,'vlanList' =>$vlanList, 'onuprofile' =>$onuprofile,  'onu' =>$onu, 'empty_ids'=> $empty_ids, 'oidOltGmportProfile' => $oidOltGmportProfile, 'oidOltTconProfile' => $oidOltTconProfile]);
-return view ('olt/addonu',['customer' =>$customer,'olt' =>$olt, 'onutype' => $onutype,'vlanList' =>$vlanList, 'onuprofile' =>$onuprofile,  'onu' =>$onu, 'oidOltGmportProfile' => $oidOltGmportProfile, 'oidOltTconProfile' => $oidOltTconProfile]);
-
-
-}
+                                return view('olt/addonu', [
+                                    'customer' => $customer,
+                                    'olt' => $olt,
+                                    'onutype' => $onutype,
+                                    'vlanList' => $vlanList,
+                                    'onuprofile' => $onuprofile,
+                                    'onu' => $onu,
+                                    'oidOltGmportProfile' => $oidOltGmportProfile,
+                                    'oidOltTconProfile' => $oidOltTconProfile,
+                                ]);
+                            }
 
 public function getemptyonuid(Request $request)
 {
@@ -2345,7 +2670,7 @@ public function getemptyonuid(Request $request)
 
     // Pastikan Anda mendapatkan objek OLT berdasarkan ID
   $olt = \App\Olt::findOrFail($olt_id);
-  $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+    $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
 
     // Melakukan query SNMP berdasarkan OID dari onu_sn
   $used_ids = [];
@@ -2403,7 +2728,7 @@ public function addonucustome($id_olt)
    // dd($oidOltVlanId);
     try{
 
-        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
         $result = $snmp->walk($onuUncfgSn);
 
      //   dd($result);
@@ -2513,24 +2838,57 @@ return redirect ('/olt/'.$olt->id)->with('warning',$messege);
 
 public function table_onu_unconfig(Request $request)
 {
-    $host = $request->olt;  // Ganti dengan alamat host SNMP Anda
+    $host = $request->olt;
     $community = $request->community;
-    
-    // Note: This method doesn't have $olt object, using default config
-    // Should be updated to get OLT from database using IP
-    $zteoid = config('zteoid'); // Keep default for now
+    $oltId = $request->input('olt_id');
+
+    // Get OLT from database to detect type (C600 vs C300)
+    // Prioritaskan lookup by ID karena akurat dan punya snmp_port.
+    $olt = null;
+    if (!empty($oltId)) {
+        $olt = \App\Olt::find($oltId);
+    }
+    if (!$olt && !empty($host)) {
+        $olt = \App\Olt::where('ip', $host)->first();
+    }
+
+    if (!$olt) {
+        // Fallback to default config if OLT not found in DB
+        $zteoid = config('zteoid');
+        $isC600Series = false;
+        $snmpHostWithPort = $host;
+        $snmpCommunity = $community;
+    } else {
+        $zteoid = get_olt_oid_config($olt);
+        $oltType = strtolower($olt->type ?? '');
+        $oltName = strtolower($olt->name ?? '');
+        $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
+                str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+        // Pakai IP + snmp_port dari DB agar OLT dengan port non-default (mis. 1612) tetap reachable.
+        $snmpHostWithPort = $olt->ip . ':' . ($olt->snmp_port ?? 161);
+        $snmpCommunity = $olt->community_ro ?: $community;
+    }
+
     $onuUncfgSn = $zteoid['oidOnuUncfgSn'];
     $onuUncfgtype = $zteoid['oidOnuUncfgType'];
     $oidOltName = $zteoid['oidOltName'];
 
     // Validasi input request
-    if (empty($host) || empty($community)) {
+    if (empty($snmpHostWithPort) || empty($snmpCommunity)) {
         return response()->json(['error' => 'Invalid OLT or community'], 400);
     }
 
+    // C600+ tidak punya OID uncfg yang reliable via SNMP — fallback ke CLI / tidak didukung.
+    if (empty($onuUncfgSn)) {
+        return DataTables::of([])->addIndexColumn()->make(true);
+    }
+
+    $processedResults = [];
+
     try {
         // Inisialisasi SNMP
-        $snmp = new \SNMP(\SNMP::VERSION_2c, $host, $community);
+        $snmp = new \SNMP(\SNMP::VERSION_2c, $snmpHostWithPort, $snmpCommunity);
 
         // Panggil fungsi SNMP Walk
         $result = $snmp->walk($onuUncfgSn);
@@ -2547,27 +2905,45 @@ public function table_onu_unconfig(Request $request)
         }
 
         // Iterasi melalui hasil SNMP walk
-        $processedResults = [];
         foreach ($result as $key => $onuUconfg) {
-            // Pisahkan OID berdasarkan titik
             $oidParts = explode('.', $key);
+            // Untuk C600 (.500.2.2.11.2.1.2.{ponIndex}.{discoveryOrder}) ambil 2 segmen terakhir.
+            $identifier = implode('.', array_slice($oidParts, -2));
+            $desiredValue = (int)$oidParts[count($oidParts) - 2];
 
-            // Ambil dua nilai terakhir dari OID
-            $lastTwoParts = array_slice($oidParts, -2);
+            $onuTypeRaw = $snmp->get($onuUncfgtype . '.' . $identifier);
+            $onuType = $this->stripSnmpPrefix((string)$onuTypeRaw);
+            $onuSn = $this->stripSnmpPrefix((string)$onuUconfg);
 
-            // Gabungkan dua nilai terakhir dengan titik
-            $identifier = implode('.', $lastTwoParts);
-            $desiredValue = $oidParts[count($oidParts) - 2];
+            if ($isC600Series) {
+                $decodedFrame = ($desiredValue >> 16) & 0xFF;
+                $decodedSlot = ($desiredValue >> 8) & 0xFF;
+                $decodedPort = $desiredValue & 0xFF;
+                $slotLabel = $decodedFrame . '/' . $decodedSlot . '/' . $decodedPort;
+            } else {
+                $slotLabel = $this->getPonCode($desiredValue);
+                if (is_object($slotLabel)) {
+                    $slotLabel = '';
+                }
+            }
 
-            $onuType = str_replace(['STRING: ', '"'], "", $snmp->get($onuUncfgtype . '.' . $identifier));
-            $onuMac = str_replace(['STRING: ', '"'], "", $onuUconfg);
+            $oltNameValue = $olt ? $olt->name : $this->stripSnmpPrefix((string)$snmp->get($oidOltName));
+            $snValue = $onuSn !== '' ? $onuSn : '-';
+            $modelValue = $this->cleanSnmpValue($onuType);
+            if ($modelValue === '') {
+                $modelValue = '-';
+            }
+            // Decode SN hex ("5A 54 45 47 D3 8F FE 67") → "ZTEGD38FFE67" untuk semua vendor ZTE.
+            if ($snValue !== '-' && strpos($snValue, ' ') !== false) {
+                $snValue = $this->convertMacToAscii($snValue);
+            }
 
             // Simpan hasil ke array
             $processedResults[] = [
-                'oltName' => str_replace(['STRING: ', '"'], "", $snmp->get($oidOltName)),
-                'oid' => $this->getPonCode($desiredValue),
-                'identifier' => $this->cleanSnmpValue($onuType), // Menyimpan dua bagian terakhir
-                'value' => $this->convertMacToAscii($onuMac),
+                'oltName' => $oltNameValue,
+                'oid' => $slotLabel,
+                'identifier' => $snValue,
+                'value' => $modelValue,
             ];
         }
 
@@ -2578,15 +2954,9 @@ public function table_onu_unconfig(Request $request)
         
 
     } catch (\Exception $e) {
-        // Tangani kesalahan jika terjadi
-        // \Log::error('SNMP Walk failed for OID ' . $onuUncfgSn . ': ' . $e->getMessage());
-        // return response()->json(['error' => 'SNMP Walk failed', 'details' => $e->getMessage()], 500);
-        $processedResults[] = [
-            'oltName' => '',
-            'oid' => '',
-            'identifier' => '',
-            'value' => '',
-        ];
+        \Log::warning('SNMP Walk uncfg failed for ' . $snmpHostWithPort . ' OID ' . $onuUncfgSn . ': ' . $e->getMessage());
+        // Jangan push baris kosong — biarkan tabel kosong saja agar UI tahu "tidak ada data".
+        $processedResults = [];
     }
     return DataTables::of($processedResults)
     ->addIndexColumn()
@@ -2864,7 +3234,7 @@ public function coba($host, $community)
         $ontStatuses = get_olt_status_config($olt);
 
             // Inisialisasi koneksi SNMP
-        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip, $olt->community_ro);
+        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
  // Validasi id_onu format
         if (!strpos($request->id_onu, ':')) {
             return response()->json(['error' => 'Invalid ONT ID format'], 400);
@@ -2877,6 +3247,8 @@ public function coba($host, $community)
         $oltType = strtolower($olt->type ?? '');
         $oltName = strtolower($olt->name ?? '');
         $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+        $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
+                str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
 
         if ($isHSGQ) {
             // HSGQ: id_onu format is "PON:ONU_ID" (e.g., "2:1")
@@ -3049,6 +3421,183 @@ public function coba($host, $community)
             }
 
             return; // HSGQ handled, exit early
+        }
+
+        if ($isC600Series) {
+            $fspParts = explode('/', $frameSlotPort);
+            if (count($fspParts) !== 3) {
+                echo '<a class="badge-warning btn btn-sm ml-2 mr-2 text-white">Unknown</a>';
+                return;
+            }
+
+            [$shelf, $slot, $ponPort] = $fspParts;
+            $shelf = (int)$shelf;
+            $slot = (int)$slot;
+            $ponPort = (int)$ponPort;
+            $onuIdNum = (int)$ontId;
+
+            $statusRaw = null;
+            $encodedIndex = null;
+            // Samakan dengan alur ONU list: walk branch status .500 lalu decode index.
+            $statusWalk = @$snmp->walk($zteoid['oidOnuStatus']);
+            if (is_array($statusWalk)) {
+                foreach ($statusWalk as $oid => $val) {
+                    $parts = explode('.', $oid);
+                    if (count($parts) < 2) {
+                        continue;
+                    }
+
+                    $encoded = (int)$parts[count($parts) - 2];
+                    $onuSuffix = (int)$parts[count($parts) - 1];
+
+                    $decodedShelf = ($encoded >> 16) & 0xFF;
+                    $decodedSlot = ($encoded >> 8) & 0xFF;
+                    $decodedPort = $encoded & 0xFF;
+                    $decodedPortKey = $decodedShelf . '/' . $decodedSlot . '/' . $decodedPort;
+
+                    if ($decodedPortKey === $frameSlotPort && $onuSuffix === $onuIdNum) {
+                        $rawStr = trim((string)$val);
+                        if ($rawStr !== '' && stripos($rawStr, 'No Such') === false && strtoupper($rawStr) !== 'N/A') {
+                            $statusRaw = $rawStr;
+                            $encodedIndex = $encoded;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if ($statusRaw === null) {
+                echo '<a class="badge-warning btn btn-sm ml-2 mr-2 text-white">Unknown</a>';
+                return;
+            }
+
+            $statusInt = null;
+            if (preg_match('/(-?\d+)/', $statusRaw, $m)) {
+                $statusInt = (int)$m[1];
+            }
+
+            $result_status = $ontStatuses[$statusRaw]
+                ?? ($statusInt !== null ? ($ontStatuses['INTEGER: ' . $statusInt] ?? 'Unknown') : 'Unknown');
+
+            $onuNameValue = str_replace(['STRING: ', '"'], '', (string)$this->safeSnmpGet($snmp, $zteoid['oidOnuName'] . ".{$encodedIndex}.{$onuIdNum}"));
+            $onuModelValue = str_replace(['STRING: ', '"'], '', (string)$this->safeSnmpGet($snmp, $zteoid['oidOnuModel'] . ".{$encodedIndex}.{$onuIdNum}"));
+            $onuSnRaw = str_replace(['Hex-STRING: ', 'STRING: ', '"'], '', (string)$this->safeSnmpGet($snmp, $zteoid['oidOnuSn'] . ".{$encodedIndex}.{$onuIdNum}"));
+            $onuSnAscii = $this->convertMacToAscii($onuSnRaw);
+
+            $onuDistanceRaw = $this->safeSnmpGet($snmp, $zteoid['oidOnuDistance'] . ".{$encodedIndex}.{$onuIdNum}");
+            $onuDistanceValue = str_replace(['INTEGER: ', '"'], '', (string)$onuDistanceRaw);
+            if ($onuDistanceValue === '' || strtoupper($onuDistanceValue) === 'N/A') {
+                $onuDistanceValue = '-';
+            }
+
+            $onuLastOfflineRaw = (string)$this->safeSnmpGet($snmp, $zteoid['oidOnuLastOffline'] . ".{$encodedIndex}.{$onuIdNum}");
+            if (strpos($onuLastOfflineRaw, 'STRING:') !== false && strpos($onuLastOfflineRaw, 'Hex-STRING:') === false) {
+                $onuLastOfflineValue = trim(str_replace(['STRING: ', '"'], '', $onuLastOfflineRaw));
+            } else {
+                $onuLastOfflineValue = $this->convertSnmpDateTime(str_replace(['Hex-STRING: ', '"'], '', $onuLastOfflineRaw));
+            }
+            if (empty($onuLastOfflineValue)) {
+                $onuLastOfflineValue = '-';
+            }
+
+            $onuLastOnlineRaw = (string)$this->safeSnmpGet($snmp, $zteoid['oidOnuLastOnline'] . ".{$encodedIndex}.{$onuIdNum}");
+            if (strpos($onuLastOnlineRaw, 'STRING:') !== false && strpos($onuLastOnlineRaw, 'Hex-STRING:') === false) {
+                $onuLastOnlineValue = trim(str_replace(['STRING: ', '"'], '', $onuLastOnlineRaw));
+            } else {
+                $onuLastOnlineValue = $this->convertSnmpDateTime(str_replace(['Hex-STRING: ', '"'], '', $onuLastOnlineRaw));
+            }
+            if (empty($onuLastOnlineValue)) {
+                $onuLastOnlineValue = '-';
+            }
+
+            $onuUptimeRaw = (string)$this->safeSnmpGet($snmp, $zteoid['oidOnuUptime'] . ".{$encodedIndex}.{$onuIdNum}");
+            $onUptimeValue = trim((string)preg_replace('/Timeticks:\s*\(\d+\)\s*/i', '', $onuUptimeRaw));
+            if ($onUptimeValue === '') {
+                $onUptimeValue = '-';
+            }
+
+            $rxRaw = $this->safeSnmpGet($snmp, $zteoid['oidOnuRxPower'] . ".{$encodedIndex}.{$onuIdNum}.1");
+            $txRaw = $this->safeSnmpGet($snmp, $zteoid['oidOnuTxPower'] . ".{$encodedIndex}.{$onuIdNum}.1");
+
+            $rxInt = null;
+            $txInt = null;
+            if (preg_match('/(-?\d+)/', (string)$rxRaw, $rxM)) {
+                $rxInt = (int)$rxM[1];
+            }
+            if (preg_match('/(-?\d+)/', (string)$txRaw, $txM)) {
+                $txInt = (int)$txM[1];
+            }
+
+            $convertPowerFn = $zteoid['convertOpticalPower'] ?? null;
+            if (is_callable($convertPowerFn)) {
+                $rxDbm = $rxInt !== null ? $convertPowerFn($rxInt, 'onu_rx') : null;
+                $txDbm = $txInt !== null ? $convertPowerFn($txInt, 'onu_tx') : null;
+            } else {
+                $rxDbm = $rxInt !== null ? (($rxInt * 0.002) - 30) : null;
+                $txDbm = $txInt !== null ? (($txInt * 0.002) - 30) : null;
+            }
+
+            $rxLabel = $rxDbm !== null ? round($rxDbm, 2) : '-';
+            $txLabel = $txDbm !== null ? round($txDbm, 2) : '-';
+
+            // Fetch OLT Rx Power using same encoded index method as getOltOnu
+            $OltRxPowerOid = $zteoid['oidOltRxPower'] . ".{$encodedIndex}.{$onuIdNum}";
+            $OltRxPowerRaw = $this->safeSnmpGet($snmp, $OltRxPowerOid);
+            $OltRxInt = null;
+            if (preg_match('/(-?\d+)/', (string)$OltRxPowerRaw, $oltRxM)) {
+                $OltRxInt = (int)$oltRxM[1];
+            }
+            $convertPowerFn = $zteoid['convertOpticalPower'] ?? null;
+            if ($OltRxInt !== null) {
+                if (is_callable($convertPowerFn)) {
+                    $OltRxDbm = $convertPowerFn($OltRxInt, 'olt_rx');
+                } else {
+                    $OltRxDbm = $OltRxInt / 1000;
+                }
+            } else {
+                $OltRxDbm = null;
+            }
+            $oltRxLabel = $OltRxDbm !== null ? round($OltRxDbm, 2) : '-';
+
+            $modalId = preg_replace('/[^A-Za-z0-9_-]/', '_', $frameSlotPort . '-' . $ontId . '-c600');
+            $buttonText = $result_status === 'working' ? ('Rx: ' . $rxLabel . ' | Tx: ' . $txLabel) : $result_status;
+            $buttonClass = 'bg-warning';
+            if ($result_status === 'working') {
+                $buttonClass = 'bg-success';
+            } elseif ($result_status === 'los') {
+                $buttonClass = 'badge-danger';
+            } elseif ($result_status === 'offline') {
+                $buttonClass = 'badge-secondary';
+            } elseif ($result_status === 'syncMib') {
+                $buttonClass = 'badge-info';
+            }
+
+            echo '<button id="powerButton" class="btn ' . $buttonClass . ' btn-sm pb-1 ml-2 mr-2 text-white" data-toggle="modal" data-target="#powerModal' . $modalId . '">' . $buttonText . '</button>
+            <div class="modal fade" id="powerModal' . $modalId . '">
+            <div class="modal-dialog">
+            <div class="modal-content">
+            <div class="modal-header">
+            <h5 class="modal-title"><strong>Status ONU ' . $olt->name . ' ' . $frameSlotPort . ':' . $ontId . '</strong></h5>
+            </div>
+            <div class="modal-body">
+            <p>Onu Name : ' . ($onuNameValue !== '' ? $onuNameValue : '-') . '</p>
+            <p>Onu Model : ' . ($onuModelValue !== '' ? $onuModelValue : '-') . '</p>
+            <p>Onu Sn : ' . ($onuSnAscii !== '' ? $onuSnAscii : '-') . '</p>
+            <p>Onu Rx Power : ' . $rxLabel . ' dBm</p>
+            <p>Onu Tx Power : ' . $txLabel . ' dBm</p>
+            <p>Onu Cable Length : ' . $onuDistanceValue . ' m</p>
+            <p>Olt Rx Power : ' . $oltRxLabel . ' dBm</p>
+            <p>Onu Last Offline : ' . $onuLastOfflineValue . '</p>
+            <p>Onu Last Online : ' . $onuLastOnlineValue . '</p>
+            <p>Onu Uptime : ' . $onUptimeValue . '</p>
+            </div>
+            <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+            </div>
+            </div>
+            </div>';
+            return;
         }
 
     // Validasi frame-slot-port ID

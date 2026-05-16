@@ -918,7 +918,9 @@ return("ACCEPTED");
 
             if ($customers->notification == 1) {
                 // ── WhatsApp ──────────────────────────────────────────────
-                $waProvider = tenant_config('wa_provider', 'gateway');
+                // Prioritaskan Qontak jika ACCESS_TOKEN + WA_CHANNEL_INTEGRATION_ID + template tersedia.
+                $useQontak = \App\Services\WaService::hasQontakConfig('WA_TAMPLATE_ID_3');
+                $waProvider = $useQontak ? 'qontak' : 'gateway';
 
                 if ($waProvider === 'gateway') {
                     $shortPaymentUrl = \App\Services\WaService::maybeShortenUrlForGateway($originalPaymentUrl);

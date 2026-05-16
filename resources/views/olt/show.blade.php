@@ -149,6 +149,7 @@
                 
               </div>
               <div class="modal-body">
+                <input type="hidden" id="olt_id_uncfg" name="olt_id_uncfg" value="{{ $olt->id }}">
                 <input type="hidden" id="olt" name="olt" value="{{ $olt->ip }}">
                 <input type="hidden" id="community" name="community" value="{{ $olt->community_ro }}">
 

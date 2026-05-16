@@ -117,6 +117,73 @@ class WaService
     }
 
     /**
+     * Cek apakah konfigurasi Qontak (ACCESS_TOKEN + WA_CHANNEL_INTEGRATION_ID + template) lengkap.
+     * Dipakai caller untuk memilih route Qontak vs WA gateway tanpa harus duplikasi logic.
+     */
+    public static function hasQontakConfig(string $templateKey = 'WA_TAMPLATE_ID_3'): bool
+    {
+        return static::getQontakToken() !== ''
+            && static::getQontakChannelId() !== ''
+            && static::getQontakApiUrl() !== ''
+            && static::getQontakTemplateId($templateKey) !== '';
+    }
+
+    /**
+     * Kirim konfirmasi pembayaran dengan fallback ke pesan gateway custom.
+     * - Jika Qontak config lengkap → kirim via template Qontak.
+     * - Jika tidak → kirim $gatewayMessage apa adanya via WA gateway.
+     *
+     * Return value mirip WaGatewayHelper::wa_payment: array ['status'=>..,'message'=>..] untuk gateway,
+     * atau string status untuk Qontak (dibungkus ke array agar konsisten).
+     *
+     * @return array{status:string,message:string}
+     */
+    public static function sendPaymentConfirmationOrGateway(
+        string $phone,
+        string $name,
+        string $invoiceNo,
+        string $cid,
+        $amount,
+        string $openUrl,
+        string $gatewayMessage,
+        string $templateKey = 'WA_TAMPLATE_ID_3'
+    ): array
+    {
+        if (static::hasQontakConfig($templateKey)) {
+            try {
+                $result = static::sendViaQontakPaymentConfirmation(
+                    $phone,
+                    $name,
+                    $invoiceNo,
+                    $cid,
+                    (string) $amount,
+                    $openUrl
+                );
+
+                $status = (is_string($result) && stripos($result, 'error') === false && $result !== '')
+                    ? 'success'
+                    : 'failed';
+
+                return ['status' => $status, 'message' => is_string($result) ? $result : json_encode($result)];
+            } catch (\Throwable $e) {
+                Log::channel('notif')->error("[WA:qontak] Payment confirmation error CID {$cid}: " . $e->getMessage());
+                // Fallback ke gateway jika Qontak error
+            }
+        }
+
+        $result = WaGatewayHelper::wa_payment($phone, $gatewayMessage);
+
+        if (is_array($result)) {
+            return [
+                'status'  => $result['status']  ?? 'failed',
+                'message' => $result['message'] ?? '',
+            ];
+        }
+
+        return ['status' => 'failed', 'message' => (string) $result];
+    }
+
+    /**
      * Gunakan short URL hanya untuk provider WA gateway.
      */
     public static function maybeShortenUrlForGateway(string $url): string
@@ -339,14 +406,6 @@ class WaService
         }
 
         return $configuredProvider;
-    }
-
-    protected static function hasQontakConfig(string $templateKey): bool
-    {
-        return static::getQontakToken() !== ''
-            && static::getQontakChannelId() !== ''
-            && static::getQontakApiUrl() !== ''
-            && static::getQontakTemplateId($templateKey) !== '';
     }
 
     protected static function getQontakApiUrl(): string

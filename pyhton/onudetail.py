@@ -11,8 +11,8 @@ login = sys.argv[2]
 password = sys.argv[3]
 port = sys.argv[4]
 timeout = sys.argv[5]
-#pon_int = sys.argv[6]
 onu_num = sys.argv[6]
+olt_type = sys.argv[7] if len(sys.argv) > 7 else 'c300'  # Default to c300 if not provided
 # Set up logging
 #logging.basicConfig(filename='olt_log.log', level=logging.INFO)
 def telnet_olt(host, port, username, password, commands, log_path):
@@ -93,12 +93,29 @@ def telnet_olt(host, port, username, password, commands, log_path):
 
 commands = [
 "terminal length 0",
-f"show run interface gpon-onu_{onu_num}",
-f"show onu running config gpon-onu_{onu_num}",
-f"show gpon onu detail-info gpon-onu_{onu_num}",
-f"show gpon remote-onu interface eth gpon-onu_{onu_num}",
-"end"
 ]
+
+# Add appropriate command based on OLT type
+if olt_type.lower() == 'c600':
+    # ZXAN C600 command format
+    # onu_num format: "frame/slot/port:onuId" -> need vport-frame/slot/port.onuId:1
+    fsp, onuId = onu_num.rsplit(':', 1)
+    commands.extend([
+       
+        f"show pon onu information gpon_onu-{onu_num}",
+        f"show running-config-interface gpon_onu-{onu_num}",
+        f"show running-config-interfac vport-{fsp}.{onuId}:1",
+    ])
+else:
+    # C300/C320 command formats (using underscores in gpon-onu_xx/xx/xx:xx)
+    commands.extend([
+        f"show run interface gpon-onu_{onu_num}",
+        f"show onu running config gpon-onu_{onu_num}",
+        f"show gpon onu detail-info gpon-onu_{onu_num}",
+        f"show gpon remote-onu interface eth gpon-onu_{onu_num}",
+    ])
+
+commands.append("end")
 
 # Define the log path
 log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'storage', 'logs'))

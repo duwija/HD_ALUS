@@ -2403,7 +2403,16 @@ if($customers->notification == 1)
  $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
  $message .= "\n\n";
  $message .= "".config("app.signature")."";
- $msgresult = WaGatewayHelper::wa_payment($customers->phone, $message);
+ $msgresult = \App\Services\WaService::sendPaymentConfirmationOrGateway(
+     $customers->phone,
+     $customers->name,
+     (string) ($latest_number ?? ''),
+     (string) $customers->customer_id,
+     $sumamount,
+     '/invoice/cst/' . $encryptedurl,
+     $message,
+     'WA_TAMPLATE_ID_1'
+ );
 
 } elseif ($customers->notification == 2) {
 
@@ -3233,7 +3242,16 @@ if($customers->notification == 1)
     $message .= "\n\n";
     $message .= "".config("app.signature")."";
 
-    $msgresult = WaGatewayHelper::wa_payment($customers->phone, $message);
+    $msgresult = \App\Services\WaService::sendPaymentConfirmationOrGateway(
+        $customers->phone,
+        $customers->name,
+        (string) $request->number,
+        (string) $customers->customer_id,
+        $jumlah,
+        '/invoice/cst/' . $encryptedurl,
+        $message,
+        'WA_TAMPLATE_ID_3'
+    );
 
 
 } elseif ($customers->notification == 2) {
@@ -3531,7 +3549,16 @@ public function send_reminder_inv(Request $request, $id)
             }
 
             // $msgresult = \App\Suminvoice::wa_payment($customer->phone, $message);
-            $msgresult = WaGatewayHelper::wa_payment($customer->phone, $message);
+            $msgresult = \App\Services\WaService::sendPaymentConfirmationOrGateway(
+                $customer->phone,
+                $customer->name,
+                (string) $suminvoice->number,
+                (string) $customer->customer_id,
+                $suminvoice->total_amount,
+                $encryptedurl,
+                $message,
+                $suminvoice->payment_status == 1 ? 'WA_TAMPLATE_ID_3' : 'WA_TAMPLATE_ID_1'
+            );
 
             if (isset($msgresult['status']) && $msgresult['status'] === 'success') {
                 return response()->json([

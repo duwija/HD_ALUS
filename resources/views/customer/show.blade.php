@@ -881,6 +881,7 @@
         $portId = null;
         $value = null;
         $isHsgqOlt = false;
+        $isC600Olt = false;
 
         if (isset($customer->id_onu) && strpos($customer->id_onu, ':') !== false) {
           list($key, $value) = explode(":", $customer->id_onu, 2);
@@ -890,11 +891,15 @@
           if ($oltData) {
             $oltVendorCheck = strtolower(($oltData->vendor ?? '') . ' ' . ($oltData->type ?? '') . ' ' . ($oltData->name ?? ''));
             $isHsgqOlt = str_contains($oltVendorCheck, 'hsgq');
+            $isC600Olt = str_contains($oltVendorCheck, 'c600') || str_contains($oltVendorCheck, 'c620') || str_contains($oltVendorCheck, 'c650');
           }
           
           if ($isHsgqOlt) {
             // HSGQ: pass PON number directly as portId
             $portId = $key;
+          } elseif ($isC600Olt) {
+            // C600: keep frame/slot/port and encode slash for route safety
+            $portId = str_replace('/', '_', $key);
           } else {
             $portId = config('zteframeslotportid')[$key] ?? null;
           }
