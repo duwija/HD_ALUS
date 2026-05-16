@@ -1686,6 +1686,355 @@ public function getOltPon($id)
 
 
 
+    /**
+     * Search ONU by Name/SN across all PONs of a single OLT.
+     * Walk SNMP oidOnuName + oidOnuSn once, decode, filter, return matches.
+     *
+     * Supported vendors: ZTE C300/C320 dan C600/C620/C650 series.
+     * Untuk HSGQ akan return notice "belum didukung".
+     *
+     * POST params:
+     *   - olt_id : OLT primary key
+     *   - q      : search keyword (matched against SN, Name, ONU ID, PON)
+     *
+     * Response: JSON { success, data: [{pon, onu_id, sn, name, status}], total, message }
+     */
+    public function searchOnu(Request $request)
+    {
+        $oltId = $request->input('olt_id');
+        $q     = trim((string) $request->input('q', ''));
+
+        if ($oltId === null || $q === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'olt_id dan q (keyword) wajib diisi.',
+                'data'    => [],
+                'total'   => 0,
+            ], 422);
+        }
+
+        if (mb_strlen($q) < 2) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Keyword minimal 2 karakter.',
+                'data'    => [],
+                'total'   => 0,
+            ], 422);
+        }
+
+        try {
+            $olt    = \App\Olt::findOrFail($oltId);
+            $zteoid = get_olt_oid_config($olt);
+            $ontStatuses = get_olt_status_config($olt);
+
+            $oltVendor = strtolower($olt->vendor ?? '');
+            $oltType   = strtolower($olt->type ?? '');
+            $oltName   = strtolower($olt->name ?? '');
+
+            $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+            $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650')
+                         || str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+            $isC300Series = !$isC600Series && !$isHSGQ
+                         && (str_contains($oltType, 'c300') || str_contains($oltType, 'c320')
+                          || str_contains($oltName, 'c300') || str_contains($oltName, 'c320')
+                          || $oltVendor === 'zte');
+
+            if (!$isC600Series && !$isC300Series) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Search by Name/SN saat ini hanya didukung untuk OLT seri ZTE C300/C320/C600/C620/C650.',
+                    'data'    => [],
+                    'total'   => 0,
+                ], 200);
+            }
+
+            @ini_set('max_execution_time', 120);
+
+            $host = $olt->ip . ':' . ($olt->snmp_port ?? 161);
+            $snmp = new \SNMP(\SNMP::VERSION_2c, $host, $olt->community_ro);
+            // NOTE: do NOT use SNMP_VALUE_PLAIN — we need Hex-STRING format for SN decoding.
+            $snmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+
+            $names = @$snmp->walk($zteoid['oidOnuName']) ?: [];
+            $sns   = @$snmp->walk($zteoid['oidOnuSn']) ?: [];
+
+            // For C300, build reverse lookup encoded → frame/slot/port
+            $frameslotportid    = $isC300Series ? (get_olt_frameslotport_config($olt) ?: []) : [];
+            $encodedToPon       = $isC300Series ? array_flip($frameslotportid) : [];
+
+            $qLower      = mb_strtolower($q);
+            $qUpperHex   = strtoupper(preg_replace('/[^a-fA-F0-9]/', '', $q));
+            $customers   = \App\Customer::where('id_olt', $olt->id)->get();
+
+            $rows = [];
+
+            // Iterate names (each key ends with ".<encodedIndex>.<onuId>")
+            foreach ($names as $oidKey => $rawName) {
+                $parts = explode('.', $oidKey);
+                if (count($parts) < 2) continue;
+
+                $onuId         = end($parts);
+                $encodedIndex  = (string) prev($parts);
+                $tail          = $encodedIndex . '.' . $onuId;
+
+                // Strip SNMP prefix + quotes from name
+                $nameVal = preg_replace('/^(STRING|OCTET STRING):\s*/i', '', (string) $rawName);
+                $nameVal = trim($nameVal, " \t\"'");
+
+                // Decode SN hex → ascii prefix + hex serial (e.g. ZTEG + 4-byte hex)
+                $snRaw = $sns[$zteoid['oidOnuSn'] . '.' . $tail] ?? '';
+                $snRaw = preg_replace('/^(Hex-STRING|STRING|OCTET STRING):\s*/i', '', (string) $snRaw);
+                $snDisplay = $this->decodeOnuSnHex($snRaw);
+
+                // Decode PON
+                if ($isC600Series) {
+                    $idx   = (int) $encodedIndex;
+                    $port  = ($idx >> 0)  & 0xFF;
+                    $slot  = ($idx >> 8)  & 0xFF;
+                    $frame = ($idx >> 16) & 0xFF;
+                    $pon   = $frame . '/' . $slot . '/' . $port;
+                } else {
+                    // C300: use lookup table
+                    $pon = $encodedToPon[$encodedIndex] ?? null;
+                    if (!$pon) continue; // unknown port encoding
+                }
+
+                // Match filter
+                $hay = mb_strtolower(implode(' ', [
+                    $nameVal,
+                    $snDisplay,
+                    $snRaw,
+                    $pon,
+                    (string) $onuId,
+                ]));
+
+                $matched = (mb_strpos($hay, $qLower) !== false);
+                if (!$matched && $qUpperHex !== '' && strlen($qUpperHex) >= 4) {
+                    $matched = (strpos(strtoupper($snDisplay), $qUpperHex) !== false);
+                }
+                if (!$matched) continue;
+
+                // Status (best-effort, no fail).
+                // ontStatuses keys may be "INTEGER: 4" (full prefix) or plain "4" depending on OLT type.
+                // For C300, status OID indexing is .{encoded}.{onuId}; for C600 same pattern.
+                $statusRaw  = (string) @$snmp->get($zteoid['oidOnuStatus'] . '.' . $tail);
+                $statusText = 'Unknown';
+                if ($statusRaw !== '') {
+                    if (isset($ontStatuses[$statusRaw])) {
+                        $statusText = $ontStatuses[$statusRaw];
+                    } elseif (preg_match('/(\d+)/', $statusRaw, $m)) {
+                        $statusText = $ontStatuses[$m[1]]
+                            ?? $ontStatuses[(int) $m[1]]
+                            ?? $ontStatuses['INTEGER: ' . $m[1]]
+                            ?? 'Unknown';
+                    }
+                }
+
+                $customer = $customers->firstWhere('id_onu', "$pon:$onuId");
+
+                $rows[] = [
+                    'pon'         => $pon,
+                    'onu_id'      => $onuId,
+                    'sn'          => $snDisplay,
+                    'name'        => $nameVal,
+                    'status'      => $statusText,
+                    'customer'    => $customer ? ($customer->name ?? '') : '',
+                    'customer_id' => $customer ? ($customer->id ?? null) : null,
+                ];
+
+                if (count($rows) >= 200) break; // hard cap
+            }
+
+            $snmp->close();
+
+            return response()->json([
+                'success' => true,
+                'message' => count($rows) . ' ONU ditemukan.',
+                'data'    => $rows,
+                'total'   => count($rows),
+            ]);
+
+        } catch (\Throwable $e) {
+            \Log::error('[OLT searchOnu] ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage(),
+                'data'    => [],
+                'total'   => 0,
+            ], 500);
+        }
+    }
+
+    /**
+     * Decode SN ZTE dari hex bytes → display string.
+     * Input contoh: "5A 54 45 47 D7 75 4B F7" atau "5A:54:45:47:D7:75:4B:F7" atau raw 8 bytes.
+     * Output contoh: "ZTEGD7754BF7" (4 char ASCII vendor + 8 char hex serial).
+     * Jika tidak dapat di-parse, kembalikan input apa adanya (uppercase, no spasi).
+     */
+    private function decodeOnuSnHex(string $hex): string
+    {
+        $clean = strtoupper(preg_replace('/[^a-fA-F0-9]/', '', $hex));
+        if (strlen($clean) !== 16) {
+            return $clean !== '' ? $clean : $hex;
+        }
+
+        $bytes = str_split($clean, 2);
+        // First 4 bytes: ASCII vendor (e.g., 5A 54 45 47 = "ZTEG")
+        $vendor = '';
+        for ($i = 0; $i < 4; $i++) {
+            $byte = hexdec($bytes[$i]);
+            $vendor .= ($byte >= 0x20 && $byte <= 0x7E) ? chr($byte) : '';
+        }
+        // Last 4 bytes: hex serial
+        $serial = $bytes[4] . $bytes[5] . $bytes[6] . $bytes[7];
+
+        return $vendor !== '' ? ($vendor . $serial) : $clean;
+    }
+
+    /**
+     * Health Dashboard: Top-N ONU dengan RX Power terburuk (paling kecil dBm).
+     * Vendor: ZTE C300/C320 dan C600/C620/C650.
+     *
+     * GET /olt/health/top-rx/{id}?limit=10
+     *
+     * Response: JSON {
+     *   success, generated_at, total_scanned, threshold_warn,
+     *   data: [{ pon, onu_id, name, sn, rx_dbm, customer, customer_id }],
+     * }
+     */
+    public function oltTopWorstRx($id, Request $request)
+    {
+        try {
+            $olt    = \App\Olt::findOrFail($id);
+            $zteoid = get_olt_oid_config($olt);
+            $limit  = max(1, min(50, (int) $request->input('limit', 10)));
+
+            $oltVendor = strtolower($olt->vendor ?? '');
+            $oltType   = strtolower($olt->type ?? '');
+            $oltName   = strtolower($olt->name ?? '');
+
+            $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+            $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650')
+                         || str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+            $isC300Series = !$isC600Series && !$isHSGQ
+                         && (str_contains($oltType, 'c300') || str_contains($oltType, 'c320')
+                          || str_contains($oltName, 'c300') || str_contains($oltName, 'c320')
+                          || $oltVendor === 'zte');
+
+            if (!$isC600Series && !$isC300Series) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Top RX dashboard saat ini hanya didukung untuk OLT seri ZTE C300/C320/C600/C620/C650.',
+                    'data'    => [],
+                ], 200);
+            }
+
+            @ini_set('max_execution_time', 120);
+
+            $host = $olt->ip . ':' . ($olt->snmp_port ?? 161);
+            // 5s per request, 2 retries — needed for C300 with many ONUs.
+            $snmp = new \SNMP(\SNMP::VERSION_2c, $host, $olt->community_ro, 5000000, 2);
+            $snmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+
+            $rxWalk    = @$snmp->walk($zteoid['oidOnuRxPower']) ?: [];
+            $names     = @$snmp->walk($zteoid['oidOnuName']) ?: [];
+            $sns       = @$snmp->walk($zteoid['oidOnuSn']) ?: [];
+
+            // For C300, build reverse lookup encoded → frame/slot/port
+            $frameslotportid = $isC300Series ? (get_olt_frameslotport_config($olt) ?: []) : [];
+            $encodedToPon    = $isC300Series ? array_flip($frameslotportid) : [];
+
+            $customers = \App\Customer::where('id_olt', $olt->id)->get();
+
+            $rows         = [];
+            $totalScanned = 0;
+
+            foreach ($rxWalk as $oidKey => $rawRx) {
+                // RX OID tail format: "{...}.{encodedIndex}.{onuId}.1"
+                $parts = explode('.', $oidKey);
+                if (count($parts) < 3) continue;
+
+                // Strip trailing ".1" subindex if present
+                $tailParts = array_slice($parts, -3);
+                if ((string) end($tailParts) === '1') {
+                    $onuId        = (string) $tailParts[1];
+                    $encodedIndex = (string) $tailParts[0];
+                } else {
+                    // Some firmwares may already omit the trailing .1
+                    $onuId        = (string) end($tailParts);
+                    $encodedIndex = (string) prev($tailParts);
+                }
+                $tailKey = $encodedIndex . '.' . $onuId;
+
+                // Decode raw → dBm. ZTE formula: (raw * 0.002) - 30
+                if (!preg_match('/-?\d+/', (string) $rawRx, $m)) continue;
+                $raw = (int) $m[0];
+                // Invalid / offline markers
+                if ($raw >= 65535 || $raw <= 0) {
+                    continue;
+                }
+                $rxDbm = ($raw * 0.002) - 30.0;
+                $totalScanned++;
+
+                // Decode PON label
+                if ($isC600Series) {
+                    $idx   = (int) $encodedIndex;
+                    $port  = ($idx >> 0)  & 0xFF;
+                    $slot  = ($idx >> 8)  & 0xFF;
+                    $frame = ($idx >> 16) & 0xFF;
+                    $pon   = $frame . '/' . $slot . '/' . $port;
+                } else {
+                    $pon = $encodedToPon[$encodedIndex] ?? null;
+                    if (!$pon) continue;
+                }
+
+                // Lookup name + SN by tailKey
+                $nameRaw = $names[$zteoid['oidOnuName'] . '.' . $tailKey] ?? '';
+                $name    = trim(preg_replace('/^(STRING|OCTET STRING):\s*/i', '', (string) $nameRaw), " \t\"'");
+
+                $snRawFull = $sns[$zteoid['oidOnuSn'] . '.' . $tailKey] ?? '';
+                $snHex     = preg_replace('/^(Hex-STRING|STRING|OCTET STRING):\s*/i', '', (string) $snRawFull);
+                $snDisplay = $this->decodeOnuSnHex($snHex);
+
+                $customer = $customers->firstWhere('id_onu', "$pon:$onuId");
+
+                $rows[] = [
+                    'pon'         => $pon,
+                    'onu_id'      => $onuId,
+                    'name'        => $name,
+                    'sn'          => $snDisplay,
+                    'rx_dbm'      => round($rxDbm, 2),
+                    'customer'    => $customer ? ($customer->name ?? '') : '',
+                    'customer_id' => $customer ? ($customer->id ?? null) : null,
+                ];
+            }
+
+            // Sort ascending by rx_dbm (most negative = worst first)
+            usort($rows, function ($a, $b) {
+                return $a['rx_dbm'] <=> $b['rx_dbm'];
+            });
+
+            $top = array_slice($rows, 0, $limit);
+
+            $snmp->close();
+
+            return response()->json([
+                'success'        => true,
+                'generated_at'   => now()->toDateTimeString(),
+                'total_scanned'  => $totalScanned,
+                'threshold_warn' => -25.0, // dBm — anything ≤ -25 dBm = perlu perhatian
+                'threshold_crit' => -27.0, // dBm — ≤ -27 dBm = kritis (mendekati LOS)
+                'data'           => $top,
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'OLT Not Found.'], 404);
+        } catch (\SNMPException $e) {
+            return response()->json(['success' => false, 'message' => 'SNMP error: ' . $e->getMessage()], 200);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 200);
+        }
+    }
+
                             public function getOltOnu(Request $request)
                             {
                                 try {

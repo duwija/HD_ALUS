@@ -405,7 +405,208 @@ $('#getOnu').click(function() {
         $('#spinnerx').hide();
       });
 
+  // ──────────────────────────────────────────────
+  // Search ONU by Name/SN across all PONs of this OLT
+  // (Backend: POST /olt/onu-search, supports ZTE C600/C620/C650)
+  // ──────────────────────────────────────────────
+  function escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
+  function runOnuSearch() {
+    var q = ($('#onuSearchInput').val() || '').trim();
+    var oltId = $('#olt_id').val();
+
+    if (q.length < 2) {
+      Swal.fire({ icon: 'warning', title: 'Keyword minimal 2 karakter', timer: 1800, showConfirmButton: false });
+      return;
+    }
+
+    var $btn  = $('#btnSearchOnu');
+    var $meta = $('#onuSearchResultMeta');
+    var $body = $('#onu-search-table tbody');
+
+    $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Searching…');
+    $('#onuSearchResult').show();
+    $meta.text('Walking SNMP…');
+    $body.html('<tr><td colspan="8" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>');
+
+    $.ajax({
+      url: '/olt/onu-search',
+      type: 'POST',
+      headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+      data: { olt_id: oltId, q: q },
+      dataType: 'json'
+    })
+    .done(function(res) {
+      if (!res.success) {
+        $meta.text('');
+        $body.html('<tr><td colspan="8" class="text-center text-danger">' + escapeHtml(res.message || 'Search gagal') + '</td></tr>');
+        return;
+      }
+      var rows = res.data || [];
+      $meta.text(res.message || (rows.length + ' result'));
+      if (rows.length === 0) {
+        $body.html('<tr><td colspan="8" class="text-center text-muted">Tidak ada ONU yang cocok.</td></tr>');
+        return;
+      }
+      var html = '';
+      rows.forEach(function(r, i) {
+        var custCell = r.customer
+          ? (r.customer_id
+              ? '<a href="/customer/' + encodeURIComponent(r.customer_id) + '">' + escapeHtml(r.customer) + '</a>'
+              : escapeHtml(r.customer))
+          : '<span class="text-muted">—</span>';
+
+        html += '<tr>'
+              +   '<td>' + (i + 1) + '</td>'
+              +   '<td><code>' + escapeHtml(r.pon) + '</code></td>'
+              +   '<td>' + escapeHtml(r.onu_id) + '</td>'
+              +   '<td><code>' + escapeHtml(r.sn) + '</code></td>'
+              +   '<td>' + escapeHtml(r.name) + '</td>'
+              +   '<td>' + escapeHtml(r.status) + '</td>'
+              +   '<td>' + custCell + '</td>'
+              +   '<td>'
+              +     '<button type="button" class="btn btn-xs btn-primary onu-jump-pon" '
+              +       'data-pon="' + escapeHtml(r.pon) + '" title="Tampilkan PON ini">'
+              +       '<i class="fas fa-eye"></i> Show PON'
+              +     '</button>'
+              +   '</td>'
+              + '</tr>';
+      });
+      $body.html(html);
+    })
+    .fail(function(xhr) {
+      var msg = 'HTTP ' + xhr.status;
+      try { msg = (JSON.parse(xhr.responseText).message) || msg; } catch (e) {}
+      $meta.text('');
+      $body.html('<tr><td colspan="8" class="text-center text-danger">' + escapeHtml(msg) + '</td></tr>');
+    })
+    .always(function() {
+      $btn.prop('disabled', false).html('<i class="fas fa-search"></i> Search');
+      $('#btnClearSearchOnu').show();
+    });
+  }
+
+  $(document).on('click', '#btnSearchOnu', runOnuSearch);
+
+  $(document).on('keypress', '#onuSearchInput', function(e) {
+    if (e.which === 13) { e.preventDefault(); runOnuSearch(); }
+  });
+
+  $(document).on('click', '#btnClearSearchOnu', function() {
+    $('#onuSearchInput').val('');
+    $('#onuSearchResult').hide();
+    $('#onu-search-table tbody').empty();
+    $('#onuSearchResultMeta').text('');
+    $(this).hide();
+  });
+
+  // Quick jump: when "Show PON" clicked, set dropdown & trigger existing Show
+  $(document).on('click', '.onu-jump-pon', function() {
+    var pon = String($(this).data('pon'));
+    var $sel = $('#oltPonComboBox');
+
+    // Find option by display text (e.g. "1/2/1"); the option value is the
+    // encoded suffix (e.g. "268566784" for C300) which differs from the PON label.
+    var $opt = $sel.find('option').filter(function() {
+      return $.trim($(this).text()) === pon;
+    }).first();
+
+    if ($opt.length === 0) {
+      alert('PON ' + pon + ' belum tersedia di dropdown. Mohon tunggu data PON selesai dimuat lalu coba lagi.');
+      return;
+    }
+
+    $sel.val($opt.val()).trigger('change');
+    $('#getOnu').click();
+    // Scroll to ONU table
+    if ($('#onu-table').length) {
+      $('html, body').animate({ scrollTop: $('#onu-table').offset().top - 80 }, 400);
+    }
+  });
+
+  // ───────────────────────── Health Dashboard: Top RX Worst ─────────────────────────
+  function rxBadge(rx) {
+    var val = rx.toFixed(2);
+    if (rx <= -27) return '<span class="badge badge-danger">' + val + ' dBm</span>';
+    if (rx <= -25) return '<span class="badge badge-warning">' + val + ' dBm</span>';
+    return '<span class="badge badge-success">' + val + ' dBm</span>';
+  }
+
+  function loadRxHealth() {
+    var oltId = $('#olt_id').val();
+    var $tbody = $('#rx-health-table tbody');
+    var $meta  = $('#rxHealthMeta');
+    var $btn   = $('#btnRefreshRxHealth');
+
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Loading…');
+    $('#rxHealthSpinner').show();
+    $tbody.html('');
+    $meta.text('');
+
+    $.ajax({
+      url: '/olt/health/top-rx/' + oltId + '?limit=10',
+      type: 'GET',
+      timeout: 120000
+    })
+    .done(function(res) {
+      $('#rxHealthSpinner').hide();
+      if (!res.success) {
+        $tbody.html('<tr><td colspan="8" class="text-center text-danger">'
+          + (res.message || 'Gagal memuat') + '</td></tr>');
+        return;
+      }
+      var rows = res.data || [];
+      if (rows.length === 0) {
+        $tbody.html('<tr><td colspan="8" class="text-center text-muted">'
+          + 'Tidak ada data RX power yang valid.</td></tr>');
+        $meta.text('Scanned ' + (res.total_scanned || 0) + ' ONU · ' + (res.generated_at || ''));
+        return;
+      }
+      var html = '';
+      rows.forEach(function(r, i) {
+        var custCell = r.customer
+          ? (r.customer_id
+              ? '<a href="/customer/' + encodeURIComponent(r.customer_id) + '">' + escapeHtml(r.customer) + '</a>'
+              : escapeHtml(r.customer))
+          : '<span class="text-muted">—</span>';
+        html += '<tr>'
+              +   '<td>' + (i + 1) + '</td>'
+              +   '<td>' + rxBadge(r.rx_dbm) + '</td>'
+              +   '<td><code>' + escapeHtml(r.pon) + '</code></td>'
+              +   '<td>' + escapeHtml(String(r.onu_id)) + '</td>'
+              +   '<td><code>' + escapeHtml(r.sn || '') + '</code></td>'
+              +   '<td>' + escapeHtml(r.name || '') + '</td>'
+              +   '<td>' + custCell + '</td>'
+              +   '<td>'
+              +     '<button type="button" class="btn btn-xs btn-primary onu-jump-pon" '
+              +       'data-pon="' + escapeHtml(r.pon) + '" title="Tampilkan PON ini">'
+              +       '<i class="fas fa-eye"></i> PON'
+              +     '</button>'
+              +   '</td>'
+              + '</tr>';
+      });
+      $tbody.html(html);
+      $meta.text('Scanned ' + res.total_scanned + ' ONU · ' + res.generated_at);
+    })
+    .fail(function(xhr) {
+      $('#rxHealthSpinner').hide();
+      var msg = 'HTTP ' + xhr.status;
+      try { msg = (JSON.parse(xhr.responseText).message) || msg; } catch (e) {}
+      $tbody.html('<tr><td colspan="8" class="text-center text-danger">' + escapeHtml(msg) + '</td></tr>');
+    })
+    .always(function() {
+      $btn.prop('disabled', false).html('<i class="fas fa-sync-alt"></i> Refresh');
+    });
+  }
+
+  $(document).on('click', '#btnRefreshRxHealth', loadRxHealth);
 
 });
 

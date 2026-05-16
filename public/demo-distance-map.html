@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Demo · ONU Distance Map</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           margin: 0; padding: 20px; background: #1a1d21; color: #e4e6eb; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .subtitle { color: #8a8d91; margin-bottom: 20px; font-size: 14px; }
+    .card { background: #242526; border: 1px solid #3a3b3c; border-radius: 8px;
+            padding: 20px; margin-bottom: 16px; }
+    .legend { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; margin-top: 12px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+             gap: 12px; margin-bottom: 16px; }
+    .stat { background: #242526; border: 1px solid #3a3b3c; border-radius: 8px;
+            padding: 12px; text-align: center; }
+    .stat-val { font-size: 24px; font-weight: 700; color: #4dabf7; }
+    .stat-lbl { font-size: 11px; color: #8a8d91; text-transform: uppercase; margin-top: 4px; }
+    .insights { background: #2a2d31; border-left: 4px solid #ffa94d; padding: 12px 16px;
+                border-radius: 4px; margin-top: 16px; font-size: 13px; }
+    .insights h4 { margin: 0 0 8px; color: #ffa94d; }
+    .insights ul { margin: 4px 0 0 18px; padding: 0; }
+    .insights li { margin: 4px 0; line-height: 1.5; }
+    .anomaly { color: #ff6b6b; font-weight: 600; }
+    canvas { max-height: 500px !important; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>📡 ONU Distance Map — OLT Pesagi (C300)</h1>
+  <div class="subtitle">Visualisasi sebaran ONU berdasarkan jarak fiber vs RX power. Klik titik untuk detail.</div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val">301</div><div class="stat-lbl">Total ONU</div></div>
+    <div class="stat"><div class="stat-val" style="color:#51cf66;">271</div><div class="stat-lbl">Sehat</div></div>
+    <div class="stat"><div class="stat-val" style="color:#ffd43b;">22</div><div class="stat-lbl">Warning</div></div>
+    <div class="stat"><div class="stat-val" style="color:#ff6b6b;">8</div><div class="stat-lbl">Kritis</div></div>
+    <div class="stat"><div class="stat-val">-22.4</div><div class="stat-lbl">Avg RX (dBm)</div></div>
+    <div class="stat"><div class="stat-val">2.1 km</div><div class="stat-lbl">Avg Distance</div></div>
+  </div>
+
+  <div class="card">
+    <canvas id="distanceMap"></canvas>
+    <div class="legend">
+      <div class="legend-item"><span class="dot" style="background:#51cf66"></span> Sehat (RX > -25 dBm)</div>
+      <div class="legend-item"><span class="dot" style="background:#ffd43b"></span> Warning (-25 s/d -27 dBm)</div>
+      <div class="legend-item"><span class="dot" style="background:#ff6b6b"></span> Kritis (≤ -27 dBm)</div>
+      <div class="legend-item"><span style="display:inline-block;width:24px;height:2px;background:#4dabf7;border:0;"></span> Trend regresi linear (expected)</div>
+    </div>
+  </div>
+
+  <div class="insights">
+    <h4>🔍 Auto-Insights</h4>
+    <ul>
+      <li><span class="anomaly">PON 1/2/4</span> — 5 ONU di splitter ini semua di bawah trend line ~3 dBm
+        → kemungkinan <strong>splitter rusak / connector kotor di feeder</strong>.</li>
+      <li><span class="anomaly">bb3villadroomkolam</span> @ 320m, RX -29.6 dBm — anomali ekstrem,
+        seharusnya ~-21 dBm di jarak segitu. <strong>Cek dropcore + connector ONU.</strong></li>
+      <li>Cluster ONU di jarak 4-5km mulai mendekati batas LOS — pertimbangkan
+        <strong>menambah splitter level kedua</strong> atau ganti ke port PON dengan TX lebih tinggi.</li>
+      <li>15 ONU di jarak &lt;1km dengan RX &lt; -23 dBm (seharusnya &gt; -20 dBm)
+        → kemungkinan ONU lama atau dropcore sudah aging.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+// ─── Sample data: 301 ONU dengan pattern realistis ────────────────────────
+function generateSamples() {
+  const pons = ['1/1/1','1/1/2','1/2/1','1/2/3','1/2/4','1/2/5','1/2/7','1/2/15'];
+  const rows = [];
+  // Normal distribution: -0.35 dB/km + jitter
+  for (let i = 0; i < 280; i++) {
+    const dist = Math.random() * 5500 + 200;        // 200m - 5.7km
+    const expectedRx = -19 - (dist / 1000) * 0.6;   // baseline drop
+    const jitter = (Math.random() - 0.5) * 2.5;     // ±1.25 dB normal jitter
+    const rx = expectedRx + jitter;
+    const pon = pons[Math.floor(Math.random() * pons.length)];
+    rows.push({ x: dist, y: rx, pon, name: 'cst_'+i, sn: 'ZTEG'+Math.random().toString(16).slice(2,10).toUpperCase() });
+  }
+  // Inject 5 ONU buruk di PON 1/2/4 (splitter problem)
+  for (let i = 0; i < 5; i++) {
+    rows.push({ x: 1200 + Math.random()*500, y: -27.5 - Math.random()*1.5,
+                pon: '1/2/4', name: 'psg_problem_'+i, sn: 'ZTEGSPLITTER'+i });
+  }
+  // The famous outlier:
+  rows.push({ x: 320, y: -29.59, pon: '1/2/3', name: 'bb3villadroomkolam', sn: 'ZTEGCA2E837C' });
+  // A few sporadic warnings
+  for (let i = 0; i < 8; i++) {
+    rows.push({ x: 600 + Math.random()*4500, y: -25.5 - Math.random()*1.5,
+                pon: pons[Math.floor(Math.random()*pons.length)],
+                name: 'warn_'+i, sn: 'ZTEGWARN'+i });
+  }
+  return rows;
+}
+
+const data = generateSamples();
+
+function colorFor(rx) {
+  if (rx <= -27) return '#ff6b6b';
+  if (rx <= -25) return '#ffd43b';
+  return '#51cf66';
+}
+
+// Trend line via simple linear regression
+function trendLine(points) {
+  const n = points.length;
+  let sx=0, sy=0, sxx=0, sxy=0;
+  points.forEach(p => { sx+=p.x; sy+=p.y; sxx+=p.x*p.x; sxy+=p.x*p.y; });
+  const slope = (n*sxy - sx*sy) / (n*sxx - sx*sx);
+  const intercept = (sy - slope*sx) / n;
+  const xMin = Math.min(...points.map(p=>p.x));
+  const xMax = Math.max(...points.map(p=>p.x));
+  return [
+    { x: xMin, y: slope*xMin + intercept },
+    { x: xMax, y: slope*xMax + intercept },
+  ];
+}
+
+const ctx = document.getElementById('distanceMap').getContext('2d');
+new Chart(ctx, {
+  type: 'scatter',
+  data: {
+    datasets: [
+      {
+        label: 'ONU',
+        data: data,
+        pointBackgroundColor: data.map(d => colorFor(d.y)),
+        pointBorderColor: data.map(d => colorFor(d.y)),
+        pointRadius: 5,
+        pointHoverRadius: 8,
+      },
+      {
+        label: 'Trend (regresi linear)',
+        type: 'line',
+        data: trendLine(data),
+        borderColor: '#4dabf7',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        fill: false,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#e4e6eb' } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            if (ctx.datasetIndex === 1) return null;
+            const d = ctx.raw;
+            return [
+              `Customer: ${d.name}`,
+              `PON: ${d.pon}`,
+              `SN: ${d.sn}`,
+              `Distance: ${Math.round(d.x)} m`,
+              `RX: ${d.y.toFixed(2)} dBm`,
+            ];
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: 'Distance from OLT (meter)', color: '#e4e6eb' },
+        grid: { color: '#3a3b3c' },
+        ticks: { color: '#8a8d91' },
+      },
+      y: {
+        title: { display: true, text: 'RX Power (dBm)', color: '#e4e6eb' },
+        grid: { color: '#3a3b3c' },
+        ticks: { color: '#8a8d91' },
+        reverse: false,
+        suggestedMin: -32,
+        suggestedMax: -18,
+      },
+    },
+    onClick: (evt, elements) => {
+      if (elements.length === 0) return;
+      const el = elements[0];
+      if (el.datasetIndex !== 0) return;
+      const d = data[el.index];
+      alert(`Jump to PON ${d.pon}\nONU: ${d.name}\nSN: ${d.sn}`);
+    },
+  }
+});
+</script>
+</body>
+</html>

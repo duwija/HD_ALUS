@@ -883,6 +883,8 @@ Route::get('/olt/getemptyonuid','OltController@getemptyonuid');
 Route::get('/olt/addonu/{customerid}/{oltis}','OltController@addonu');
 Route::get('/olt/addonu/{oltis}','OltController@addonucustome');
 Route::POST('/olt/getolt/onu','OltController@getOltOnu');
+Route::POST('/olt/onu-search','OltController@searchOnu');
+Route::get('/olt/health/top-rx/{id}','OltController@oltTopWorstRx');
 Route::post('/olt/onuregister','OltController@configure');
 Route::post('/olt/onuregistercst','OltController@configurecst');
 

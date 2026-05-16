@@ -93,6 +93,55 @@
           </div>
         </div>
 
+        {{-- Health Dashboard: Top 10 ONU dengan RX Power terburuk --}}
+        <div class="col-md-12">
+          <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="card-title mb-0">
+                <i class="fas fa-heartbeat text-danger"></i>
+                Health Dashboard — Top 10 ONU RX Terburuk
+              </h5>
+              <div>
+                <small id="rxHealthMeta" class="text-muted mr-2"></small>
+                <button id="btnRefreshRxHealth" type="button" class="btn btn-sm btn-outline-primary">
+                  <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+              </div>
+            </div>
+            <div class="card-body p-2">
+              <div id="rxHealthSpinner" class="text-center p-3" style="display:none;">
+                <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+                <div class="small text-muted mt-2">Scanning RX power semua ONU…</div>
+              </div>
+              <div class="table-responsive">
+                <table id="rx-health-table" class="table table-sm table-bordered table-striped mb-0">
+                  <thead class="thead-light">
+                    <tr>
+                      <th style="width:40px;">#</th>
+                      <th>RX (dBm)</th>
+                      <th>PON</th>
+                      <th>ONU ID</th>
+                      <th>SN</th>
+                      <th>Name</th>
+                      <th>Customer</th>
+                      <th style="width:90px;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td colspan="8" class="text-center text-muted">
+                      Klik <strong>Refresh</strong> untuk memuat data.
+                    </td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="small text-muted mt-2">
+                <span class="badge badge-warning">≤ -25 dBm</span> Perlu perhatian &nbsp;·&nbsp;
+                <span class="badge badge-danger">≤ -27 dBm</span> Kritis (mendekati LOS)
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="col-md-12">
           <div class="card mb-3">
             <div class="card-header">
@@ -101,13 +150,54 @@
               <!-- <a data-toggle="modal" href="#unconfigonu" class="float-right badge badge-primary">Unconfig Onu </a> -->
             </div>
             <div class="card-body">
-              <div class="row m-1 mb-3 ">
+              <div class="row m-1 mb-3 align-items-center">
                 <input hidden type="text" id="olt_id" name="olt_id" value="{{ $olt->id }}">
 
-                <select id="oltPonComboBox" name="oltPonComboBox" class="form-control col-md-4 float-right m-1">
-                  <option value="">Pilih OLT PON</option>
-                </select> 
-                <button id="getOnu" class="btn btn-primary ml-2 col-md-1 m-1">Show</button>
+                <div class="col-md-6 d-flex flex-wrap align-items-center p-0">
+                  <select id="oltPonComboBox" name="oltPonComboBox" class="form-control col-md-8 m-1">
+                    <option value="">Pilih OLT PON</option>
+                  </select>
+                  <button id="getOnu" class="btn btn-primary m-1">Show</button>
+                </div>
+
+                <div class="col-md-6 d-flex flex-wrap align-items-center justify-content-md-end p-0">
+                  <input type="text" id="onuSearchInput" class="form-control col-md-7 m-1"
+                    placeholder="Search by Name / SN (min 2 char)…">
+                  <button id="btnSearchOnu" class="btn btn-info m-1" type="button">
+                    <i class="fas fa-search"></i> Search
+                  </button>
+                  <button id="btnClearSearchOnu" class="btn btn-secondary m-1" type="button" style="display:none;">
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div id="onuSearchResult" class="m-1" style="display:none;">
+                <div class="card border-info">
+                  <div class="card-header bg-info text-white py-2">
+                    <strong>Hasil Search</strong>
+                    <span id="onuSearchResultMeta" class="float-right small"></span>
+                  </div>
+                  <div class="card-body p-2">
+                    <div class="table-responsive">
+                      <table id="onu-search-table" class="table table-bordered table-striped table-sm mb-0">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>PON</th>
+                            <th>ONU ID</th>
+                            <th>SN</th>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Customer</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div class="table-responsive">
                 <table id="onu-table" class="table table-bordered table-striped mt-4 ">
