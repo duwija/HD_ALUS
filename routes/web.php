@@ -885,6 +885,7 @@ Route::get('/olt/addonu/{oltis}','OltController@addonucustome');
 Route::POST('/olt/getolt/onu','OltController@getOltOnu');
 Route::POST('/olt/onu-search','OltController@searchOnu');
 Route::get('/olt/health/top-rx/{id}','OltController@oltTopWorstRx');
+Route::get('/olt/health/distance-map/{id}','OltController@oltDistanceMap');
 Route::post('/olt/onuregister','OltController@configure');
 Route::post('/olt/onuregistercst','OltController@configurecst');
 

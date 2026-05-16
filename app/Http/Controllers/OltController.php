@@ -2035,6 +2035,173 @@ public function getOltPon($id)
         }
     }
 
+    /**
+     * ONU Distance Map: distance (meter) vs RX power (dBm) per ONU.
+     * Untuk visualisasi scatter plot — identifikasi splitter loss abnormal.
+     *
+     * GET /olt/health/distance-map/{id}
+     *
+     * Response: JSON {
+     *   success, generated_at, total, avg_rx, avg_dist,
+     *   counts: { healthy, warning, critical },
+     *   data: [{ pon, onu_id, name, sn, distance_m, rx_dbm, customer, customer_id }]
+     * }
+     */
+    public function oltDistanceMap($id)
+    {
+        try {
+            $olt    = \App\Olt::findOrFail($id);
+            $zteoid = get_olt_oid_config($olt);
+
+            $oltVendor = strtolower($olt->vendor ?? '');
+            $oltType   = strtolower($olt->type ?? '');
+            $oltName   = strtolower($olt->name ?? '');
+
+            $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+            $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650')
+                         || str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+            $isC300Series = !$isC600Series && !$isHSGQ
+                         && (str_contains($oltType, 'c300') || str_contains($oltType, 'c320')
+                          || str_contains($oltName, 'c300') || str_contains($oltName, 'c320')
+                          || $oltVendor === 'zte');
+
+            if (!$isC600Series && !$isC300Series) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Distance Map saat ini hanya didukung untuk OLT seri ZTE C300/C320/C600/C620/C650.',
+                    'data'    => [],
+                ], 200);
+            }
+
+            @ini_set('max_execution_time', 180);
+
+            $host = $olt->ip . ':' . ($olt->snmp_port ?? 161);
+            $snmp = new \SNMP(\SNMP::VERSION_2c, $host, $olt->community_ro, 5000000, 2);
+            $snmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+
+            $rxWalk   = @$snmp->walk($zteoid['oidOnuRxPower']) ?: [];
+            $distWalk = @$snmp->walk($zteoid['oidOnuDistance']) ?: [];
+            $names    = @$snmp->walk($zteoid['oidOnuName']) ?: [];
+            $sns      = @$snmp->walk($zteoid['oidOnuSn']) ?: [];
+
+            // For C300, build reverse lookup encoded → frame/slot/port
+            $frameslotportid = $isC300Series ? (get_olt_frameslotport_config($olt) ?: []) : [];
+            $encodedToPon    = $isC300Series ? array_flip($frameslotportid) : [];
+
+            // Build distance lookup by tailKey ("encodedIndex.onuId")
+            // C300 distance OID = .1.3.6.1.4.1.3902.1012.3.11.4.1.2.{encoded}.{onuId}
+            // C600 distance OID = .1.3.6.1.4.1.3902.1082.500.10.2.3.10.1.2.{encoded}.{onuId}
+            $distByKey = [];
+            foreach ($distWalk as $oidKey => $rawDist) {
+                $parts = explode('.', $oidKey);
+                $count = count($parts);
+                if ($count < 2) continue;
+                $onuId = $parts[$count - 1];
+                $enc   = $parts[$count - 2];
+                if (!preg_match('/-?\d+/', (string) $rawDist, $m)) continue;
+                $distByKey[$enc . '.' . $onuId] = (int) $m[0];
+            }
+
+            $customers = \App\Customer::where('id_olt', $olt->id)->get();
+
+            $rows         = [];
+            $sumRx        = 0.0;
+            $sumDist      = 0;
+            $countHealthy = 0;
+            $countWarn    = 0;
+            $countCrit    = 0;
+
+            foreach ($rxWalk as $oidKey => $rawRx) {
+                $parts = explode('.', $oidKey);
+                if (count($parts) < 3) continue;
+
+                $tailParts = array_slice($parts, -3);
+                if ((string) end($tailParts) === '1') {
+                    $onuId        = (string) $tailParts[1];
+                    $encodedIndex = (string) $tailParts[0];
+                } else {
+                    $onuId        = (string) end($tailParts);
+                    $encodedIndex = (string) prev($tailParts);
+                }
+                $tailKey = $encodedIndex . '.' . $onuId;
+
+                if (!preg_match('/-?\d+/', (string) $rawRx, $m)) continue;
+                $raw = (int) $m[0];
+                if ($raw >= 65535 || $raw <= 0) continue;
+                $rxDbm = ($raw * 0.002) - 30.0;
+
+                // Distance
+                $distM = $distByKey[$tailKey] ?? null;
+                if ($distM === null || $distM <= 0) continue;
+
+                // Decode PON label
+                if ($isC600Series) {
+                    $idx   = (int) $encodedIndex;
+                    $port  = ($idx >> 0)  & 0xFF;
+                    $slot  = ($idx >> 8)  & 0xFF;
+                    $frame = ($idx >> 16) & 0xFF;
+                    $pon   = $frame . '/' . $slot . '/' . $port;
+                } else {
+                    $pon = $encodedToPon[$encodedIndex] ?? null;
+                    if (!$pon) continue;
+                }
+
+                // Lookup name + SN
+                $nameRaw = $names[$zteoid['oidOnuName'] . '.' . $tailKey] ?? '';
+                $name    = trim(preg_replace('/^(STRING|OCTET STRING):\s*/i', '', (string) $nameRaw), " \t\"'");
+
+                $snRawFull = $sns[$zteoid['oidOnuSn'] . '.' . $tailKey] ?? '';
+                $snHex     = preg_replace('/^(Hex-STRING|STRING|OCTET STRING):\s*/i', '', (string) $snRawFull);
+                $snDisplay = $this->decodeOnuSnHex($snHex);
+
+                $customer = $customers->firstWhere('id_onu', "$pon:$onuId");
+
+                $rows[] = [
+                    'pon'         => $pon,
+                    'onu_id'      => $onuId,
+                    'name'        => $name,
+                    'sn'          => $snDisplay,
+                    'distance_m'  => $distM,
+                    'rx_dbm'      => round($rxDbm, 2),
+                    'customer'    => $customer ? ($customer->name ?? '') : '',
+                    'customer_id' => $customer ? ($customer->id ?? null) : null,
+                ];
+
+                $sumRx   += $rxDbm;
+                $sumDist += $distM;
+                if ($rxDbm <= -27)      $countCrit++;
+                elseif ($rxDbm <= -25)  $countWarn++;
+                else                    $countHealthy++;
+            }
+
+            $snmp->close();
+
+            $total = count($rows);
+
+            return response()->json([
+                'success'        => true,
+                'generated_at'   => now()->toDateTimeString(),
+                'total'          => $total,
+                'avg_rx'         => $total > 0 ? round($sumRx / $total, 2) : null,
+                'avg_dist'       => $total > 0 ? (int) round($sumDist / $total) : null,
+                'counts'         => [
+                    'healthy'  => $countHealthy,
+                    'warning'  => $countWarn,
+                    'critical' => $countCrit,
+                ],
+                'threshold_warn' => -25.0,
+                'threshold_crit' => -27.0,
+                'data'           => $rows,
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'OLT Not Found.'], 404);
+        } catch (\SNMPException $e) {
+            return response()->json(['success' => false, 'message' => 'SNMP error: ' . $e->getMessage()], 200);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 200);
+        }
+    }
+
                             public function getOltOnu(Request $request)
                             {
                                 try {

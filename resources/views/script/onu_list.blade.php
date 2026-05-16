@@ -432,6 +432,7 @@ $('#getOnu').click(function() {
     var $body = $('#onu-search-table tbody');
 
     $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Searching…');
+    $('#onuSearchEmpty').hide();
     $('#onuSearchResult').show();
     $meta.text('Walking SNMP…');
     $body.html('<tr><td colspan="8" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>');
@@ -504,7 +505,15 @@ $('#getOnu').click(function() {
     $('#onuSearchResult').hide();
     $('#onu-search-table tbody').empty();
     $('#onuSearchResultMeta').text('');
+    $('#onuSearchEmpty').show();
     $(this).hide();
+  });
+
+  // Resize chart when Distance Map tab becomes visible (canvas needs reflow after hidden init)
+  $(document).on('shown.bs.tab', 'a[data-toggle="tab"]', function (e) {
+    if (e.target && e.target.id === 'tab-distmap-tab' && typeof distanceMapChart !== 'undefined' && distanceMapChart) {
+      try { distanceMapChart.resize(); distanceMapChart.update('none'); } catch (err) {}
+    }
   });
 
   // Quick jump: when "Show PON" clicked, set dropdown & trigger existing Show
@@ -607,6 +616,363 @@ $('#getOnu').click(function() {
   }
 
   $(document).on('click', '#btnRefreshRxHealth', loadRxHealth);
+
+  // ============================================================
+  // ONU Distance Map — scatter chart distance vs RX power
+  // ============================================================
+  var distanceMapChart = null;
+  var distMapSelected  = null; // last clicked ONU point
+
+  function ensureChartJs(cb) {
+    if (window.Chart) { cb(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    s.onload = cb;
+    s.onerror = function() { alert('Gagal memuat Chart.js dari CDN.'); };
+    document.head.appendChild(s);
+  }
+
+  function colorFor(rx) {
+    if (rx <= -27) return '#ff6b6b';
+    if (rx <= -25) return '#ffd43b';
+    return '#51cf66';
+  }
+
+  function isDarkMode() {
+    return document.body.classList.contains('dark-mode');
+  }
+
+  // Return color set for chart based on current theme
+  function dmThemeColors() {
+    if (isDarkMode()) {
+      return { text:'#e4e6eb', muted:'#8a8d91', grid:'#3a3b3c' };
+    }
+    return { text:'#212529', muted:'#6c757d', grid:'#dee2e6' };
+  }
+
+  function applyChartTheme() {
+    if (!distanceMapChart) return;
+    var t = dmThemeColors();
+    var opts = distanceMapChart.options;
+    if (opts.plugins && opts.plugins.legend && opts.plugins.legend.labels) {
+      opts.plugins.legend.labels.color = t.text;
+    }
+    ['x','y'].forEach(function(k){
+      if (!opts.scales || !opts.scales[k]) return;
+      opts.scales[k].title.color = t.text;
+      opts.scales[k].grid.color  = t.grid;
+      opts.scales[k].ticks.color = t.muted;
+    });
+    distanceMapChart.update('none');
+  }
+
+  function linearRegression(points) {
+    var n = points.length;
+    if (n < 2) return null;
+    var sx = 0, sy = 0, sxy = 0, sxx = 0;
+    for (var i = 0; i < n; i++) {
+      sx  += points[i].x;
+      sy  += points[i].y;
+      sxy += points[i].x * points[i].y;
+      sxx += points[i].x * points[i].x;
+    }
+    var denom = (n * sxx - sx * sx);
+    if (denom === 0) return null;
+    var m = (n * sxy - sx * sy) / denom;
+    var b = (sy - m * sx) / n;
+    return { m: m, b: b };
+  }
+
+  function loadDistanceMap() {
+    var oltId  = $('#olt_id').val();
+    if (!oltId) { alert('OLT ID tidak ditemukan.'); return; }
+    var $btn   = $('#btnRefreshDistMap');
+    var $meta  = $('#distMapMeta');
+    var $spin  = $('#distMapSpinner');
+    var $stats = $('#distMapStats');
+    var $empty = $('#distMapEmpty');
+    var $box   = $('#distMapChartBox');
+    var $ins   = $('#distMapInsights');
+
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Memuat...');
+    $spin.show();
+    $empty.hide();
+    $box.hide();
+    $ins.hide();
+    $meta.text('');
+
+    ensureChartJs(function() {
+      $.ajax({
+        url: '/olt/health/distance-map/' + oltId,
+        method: 'GET',
+        dataType: 'json',
+        timeout: 180000
+      })
+      .done(function(res) {
+        if (!res || !res.success) {
+          $empty.show().html('<span style="color:#ff6b6b;">' + escapeHtml((res && res.message) || 'Gagal memuat data.') + '</span>');
+          return;
+        }
+        var data = res.data || [];
+        if (!data.length) {
+          $empty.show().text('Tidak ada ONU dengan data distance + RX valid.');
+          return;
+        }
+
+        // Stats
+        $stats.css('display','grid');
+        $('#dmsTotal').text(res.total);
+        $('#dmsAvgRx').text(res.avg_rx != null ? res.avg_rx : '—');
+        $('#dmsAvgDist').text(res.avg_dist != null
+            ? (res.avg_dist >= 1000 ? (res.avg_dist/1000).toFixed(1) + ' km' : res.avg_dist + ' m')
+            : '—');
+        $('#dmsHealthy').text(res.counts.healthy);
+        $('#dmsWarn').text(res.counts.warning);
+        $('#dmsCrit').text(res.counts.critical);
+        $meta.text('Updated: ' + (res.generated_at || ''));
+
+        // Points
+        var points = data.map(function(d){
+          return {
+            x: d.distance_m, y: d.rx_dbm,
+            pon: d.pon, onu_id: d.onu_id,
+            name: d.name || ('onu_'+d.onu_id),
+            sn: d.sn || '-', customer: d.customer || ''
+          };
+        });
+        var colors = points.map(function(p){ return colorFor(p.y); });
+
+        // Trend
+        var reg = linearRegression(points);
+        var trendData = [];
+        if (reg) {
+          var xs = points.map(function(p){return p.x;});
+          var minX = Math.min.apply(null, xs);
+          var maxX = Math.max.apply(null, xs);
+          trendData = [
+            { x: minX, y: reg.m * minX + reg.b },
+            { x: maxX, y: reg.m * maxX + reg.b }
+          ];
+        }
+
+        // Build chart
+        if (distanceMapChart) { distanceMapChart.destroy(); distanceMapChart = null; }
+        $box.show();
+        var ctx = document.getElementById('distanceMapChart').getContext('2d');
+        distanceMapChart = new Chart(ctx, {
+          type: 'scatter',
+          data: {
+            datasets: [
+              {
+                label: 'ONU',
+                data: points,
+                pointBackgroundColor: colors,
+                pointBorderColor: colors,
+                pointRadius: 5,
+                pointHoverRadius: 8
+              },
+              {
+                label: 'Trend (regresi linear)',
+                type: 'line',
+                data: trendData,
+                borderColor: '#4dabf7',
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 0,
+                fill: false,
+                tension: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: dmThemeColors().text } },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    if (ctx.datasetIndex === 1) return null;
+                    var d = ctx.raw;
+                    return [
+                      'Customer: ' + (d.customer || d.name),
+                      'PON: ' + d.pon + '  ONU#' + d.onu_id,
+                      'SN: ' + d.sn,
+                      'Distance: ' + Math.round(d.x) + ' m',
+                      'RX: ' + d.y.toFixed(2) + ' dBm'
+                    ];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: 'Distance from OLT (meter)', color: dmThemeColors().text },
+                grid:  { color: dmThemeColors().grid },
+                ticks: { color: dmThemeColors().muted, callback: function(v){ return v + ' m'; } }
+              },
+              y: {
+                title: { display: true, text: 'RX Power (dBm)', color: dmThemeColors().text },
+                grid:  { color: dmThemeColors().grid },
+                ticks: { color: dmThemeColors().muted, callback: function(v){ return v + ' dBm'; } },
+                suggestedMin: -32,
+                suggestedMax: -16
+              }
+            },
+            onClick: function(evt, elements, chart) {
+              // Support both Chart.js v2 (el._index/_datasetIndex) and v3/v4 (el.index/datasetIndex)
+              var c = chart || distanceMapChart;
+              var els = elements && elements.length ? elements : [];
+              if (!els.length && c.getElementsAtEventForMode) {
+                try {
+                  els = c.getElementsAtEventForMode(evt, 'nearest', { intersect: false }, true);
+                } catch (e) {}
+              }
+              if (!els.length && c.getElementsAtEvent) {
+                try { els = c.getElementsAtEvent(evt); } catch (e) {}
+              }
+              if (!els.length) return;
+              var el  = els[0];
+              var di  = (el.datasetIndex != null) ? el.datasetIndex : el._datasetIndex;
+              var idx = (el.index != null)        ? el.index        : el._index;
+              if (di !== 0) return;
+              var p = c.data.datasets[0].data[idx];
+              if (!p) return;
+              showOnuInfo(p);
+            }
+          }
+        });
+
+        // Auto-insights
+        renderDistanceInsights(points, reg);
+      })
+      .fail(function(xhr) {
+        var msg = 'HTTP ' + xhr.status;
+        try { msg = (JSON.parse(xhr.responseText).message) || msg; } catch (e) {}
+        $empty.show().html('<span style="color:#ff6b6b;">' + escapeHtml(msg) + '</span>');
+      })
+      .always(function() {
+        $spin.hide();
+        $btn.prop('disabled', false).html('<i class="fas fa-sync-alt"></i> Refresh');
+      });
+    });
+  }
+
+  // Generate auto-insights based on PON anomalies, extreme outliers, LOS cluster, short-distance bad
+  function renderDistanceInsights(points, reg) {
+    var items = [];
+
+    // 1) PON-level anomaly: groups with >=3 ONU and avg residual <= -2 dB
+    if (reg) {
+      var byPon = {};
+      points.forEach(function(p){
+        var expected = reg.m * p.x + reg.b;
+        var resid = p.y - expected;
+        if (!byPon[p.pon]) byPon[p.pon] = { sum:0, n:0, bad:0 };
+        byPon[p.pon].sum += resid;
+        byPon[p.pon].n   += 1;
+        if (resid <= -2) byPon[p.pon].bad += 1;
+      });
+      Object.keys(byPon).forEach(function(pon){
+        var g = byPon[pon];
+        if (g.n >= 3 && (g.sum / g.n) <= -2) {
+          var avg = (g.sum / g.n).toFixed(1);
+          items.push('<span class="dm-anomaly">PON ' + escapeHtml(pon) + '</span> &mdash; ' +
+            g.n + ' ONU rata-rata <strong>' + avg + ' dB</strong> di bawah trend line ' +
+            '→ kemungkinan <strong>splitter rusak / connector kotor di feeder</strong>.');
+        }
+      });
+    }
+
+    // 2) Extreme individual outliers: residual <= -4 dB
+    if (reg) {
+      var outliers = points.map(function(p){
+        var expected = reg.m * p.x + reg.b;
+        return { p: p, resid: p.y - expected, expected: expected };
+      }).filter(function(o){ return o.resid <= -4; })
+        .sort(function(a,b){ return a.resid - b.resid; })
+        .slice(0, 3);
+      outliers.forEach(function(o){
+        items.push('<span class="dm-anomaly">' + escapeHtml(o.p.customer || o.p.name) + '</span> ' +
+          '@ ' + Math.round(o.p.x) + 'm, RX <strong>' + o.p.y.toFixed(2) + ' dBm</strong> &mdash; ' +
+          'anomali ekstrem, seharusnya ~' + o.expected.toFixed(1) + ' dBm. ' +
+          '<strong>Cek dropcore + connector ONU.</strong>');
+      });
+    }
+
+    // 3) LOS cluster: ONU > 4km and RX < -26
+    var losCluster = points.filter(function(p){ return p.x > 4000 && p.y < -26; });
+    if (losCluster.length >= 3) {
+      items.push(losCluster.length + ' ONU di jarak &gt;4km mendekati batas LOS &mdash; ' +
+        'pertimbangkan <strong>menambah splitter level kedua</strong> atau pindah ke port PON dengan TX lebih tinggi.');
+    }
+
+    // 4) Short-distance bad: < 1km and RX < -23
+    var shortBad = points.filter(function(p){ return p.x < 1000 && p.y < -23; });
+    if (shortBad.length >= 2) {
+      items.push(shortBad.length + ' ONU di jarak &lt;1km dengan RX &lt; -23 dBm (seharusnya &gt; -20 dBm) ' +
+        '→ kemungkinan <strong>ONU lama / dropcore aging / connector kotor</strong>.');
+    }
+
+    var $ins = $('#distMapInsights');
+    var $list = $('#distMapInsightsList');
+    if (items.length === 0) {
+      $list.html('<li><span class="dm-ok">Tidak ada anomali signifikan terdeteksi.</span> ' +
+        'Seluruh ONU berada dalam rentang RX normal terhadap jarak.</li>');
+    } else {
+      $list.html(items.map(function(it){ return '<li>' + it + '</li>'; }).join(''));
+    }
+    $ins.show();
+  }
+
+  $(document).on('click', '#btnRefreshDistMap', loadDistanceMap);
+
+  // Show ONU details panel (Name / SN / PON / RX) when a point is clicked
+  function showOnuInfo(p) {
+    distMapSelected = p;
+    var sev = (p.y <= -27) ? 'Kritis' : (p.y <= -25) ? 'Warning' : 'Sehat';
+    var sevColor = colorFor(p.y);
+    $('#dmInfoTitle').html('Detail ONU — <span style="color:' + sevColor + ';">' + escapeHtml(sev) + '</span>');
+    $('#dmInfoName').text(p.name || '-');
+    $('#dmInfoSn').text(p.sn || '-');
+    $('#dmInfoPon').text(p.pon + '  /  ONU #' + p.onu_id);
+    $('#dmInfoRx').html('<span style="color:' + sevColor + ';">' + p.y.toFixed(2) + ' dBm</span>');
+    $('#dmInfoDist').text(Math.round(p.x) + ' m'
+      + (p.x >= 1000 ? '  (' + (p.x/1000).toFixed(2) + ' km)' : ''));
+    $('#dmInfoCustomer').text(p.customer || '—');
+    $('#distMapOnuInfo').show();
+    // Scroll info into view smoothly
+    var top = $('#distMapOnuInfo').offset().top - 80;
+    if (top > 0) $('html, body').animate({ scrollTop: top }, 300);
+  }
+
+  function jumpToPon(pon) {
+    if (!pon) return;
+    var $sel = $('#oltPonComboBox');
+    var matched = null;
+    $sel.find('option').each(function(){
+      if ($(this).text().indexOf(pon) !== -1) { matched = $(this).val(); return false; }
+    });
+    if (matched !== null) {
+      $sel.val(matched).trigger('change');
+      $('#getOnu').trigger('click');
+      $('html, body').animate({ scrollTop: $('#getOnu').offset().top - 80 }, 400);
+    }
+  }
+
+  $(document).on('click', '#dmInfoClose', function(){
+    $('#distMapOnuInfo').hide();
+    distMapSelected = null;
+  });
+  $(document).on('click', '#dmInfoJump', function(){
+    if (distMapSelected) jumpToPon(distMapSelected.pon);
+  });
+
+  // Re-tint chart when dark-mode class on body toggles
+  if (window.MutationObserver) {
+    var dmObs = new MutationObserver(function(){ applyChartTheme(); });
+    dmObs.observe(document.body, { attributes:true, attributeFilter:['class'] });
+  }
 
 });
 
