@@ -6,7 +6,7 @@ return [
 	'oidOltVersion' => '.1.3.6.1.2.1.1.1.0',
 	'oidOltUptime' => '.1.3.6.1.2.1.1.3.0',
 	'oidOltDesc' => '.1.3.6.1.2.1.1.6.0',
-	'oidOltRxPower' => '.1.3.6.1.4.1.3902.1082.500.1.2.4.2.1.2', //Olt Rx Power
+	'oidOltRxPower' => '.1.3.6.1.4.1.3902.1015.1010.11.2.1.2', //Olt Rx Power (C300, sesuai dokumen)
 	'oidOnuName' => '.1.3.6.1.4.1.3902.1012.3.28.1.1.2', // onu name
 	'oidOnuStatus' => '.1.3.6.1.4.1.3902.1012.3.28.2.1.4', // onu status
 	'oidOnuUptime' => '.1.3.6.1.4.1.3902.1012.3.50.11.2.1.20',

@@ -472,6 +472,37 @@ class OltController extends Controller
 
             $onuCount = count($onuNameValue);
 
+            // Ambil SN + Model untuk ditampilkan di list dyinggasp/los/offline.
+            // Keyed by tail "{encodedIndex}.{onuId}" untuk ZTE (HSGQ pakai ifIndex, skip).
+            $snByTail    = [];
+            $modelByTail = [];
+            if (!$isHSGQ) {
+                try {
+                    $snOid  = $zteoid['oidOnuSn']    ?? null;
+                    $mdlOid = $zteoid['oidOnuModel'] ?? null;
+                    if ($snOid) {
+                        $snRaw = @$snmp->walk($snOid) ?: [];
+                        foreach ($snRaw as $k => $v) {
+                            $p = explode('.', $k);
+                            $tail = implode('.', array_slice($p, -2)); // {encodedIndex}.{onuId}
+                            $hex  = preg_replace('/^(Hex-STRING|STRING|OCTET STRING):\s*/i', '', (string) $v);
+                            $snByTail[$tail] = $this->decodeOnuSnHex($hex);
+                        }
+                    }
+                    if ($mdlOid) {
+                        $mdlRaw = @$snmp->walk($mdlOid) ?: [];
+                        foreach ($mdlRaw as $k => $v) {
+                            $p = explode('.', $k);
+                            $tail = implode('.', array_slice($p, -2));
+                            $val  = preg_replace('/^(STRING|OCTET STRING):\s*/i', '', (string) $v);
+                            $modelByTail[$tail] = trim($val, " \t\"'");
+                        }
+                    }
+                } catch (\Exception $e) {
+                    // best-effort, ignore
+                }
+            }
+
         // Proses status masing-masing ONU
             foreach ($onuNameValue as $key => $onuNameEntry) {
                 $components = explode('.', $key);
@@ -577,32 +608,52 @@ class OltController extends Controller
 
                 $result_status = $ontStatuses[$statusValue] ?? 'Unknown';
 
+
+                // Tail key untuk lookup SN/Model dari walk hasil sebelumnya (ZTE saja).
+                $tailKey = '';
+                if (!$isHSGQ) {
+                    if ($isC600Series && isset($encodedIndex, $onuId)) {
+                        $tailKey = $encodedIndex . '.' . $onuId;
+                    } elseif (!$isC600Series && isset($lastTwo[0], $lastTwo[1])) {
+                        $tailKey = $lastTwo[0] . '.' . $lastTwo[1];
+                    }
+                }
+                $snVal    = $snByTail[$tailKey]    ?? '';
+                $modelVal = $modelByTail[$tailKey] ?? '';
+
+                $entryBase = [
+                    'onuName' => $onuNameEntry,
+                    'Id'      => str_replace('\\', '', $onuid),
+                    'sn'      => $snVal,
+                    'model'   => $modelVal,
+                ];
+
                 switch ($result_status) {
                     case "working":
                     $working++;
                     break;
                     case "los":
                     $los++;
-                    $loslist[] = ['onuName' => $onuNameEntry, 'Id' => str_replace('\\', '', $onuid)];
+                    $loslist[] = $entryBase;
                     break;
                     case "powerdown":
                     $powerdown++;
-                    $powerdownlist[] = ['onuName' => $onuNameEntry, 'Id' => str_replace('\\', '', $onuid)];
+                    $powerdownlist[] = $entryBase;
                     break;
                     case "dyinggasp":
                     $dyinggasp++;
-                    $dyinggasplist[] = ['onuName' => $onuNameEntry, 'Id' => str_replace('\\', '', $onuid)];
+                    $dyinggasplist[] = $entryBase;
                     break;
                     case "logging":
                     $logging++;
                     break;
                     case "offline":
                     $offline++;
-                    $offlinelist[] = ['onuName' => $onuNameEntry, 'Id' => str_replace('\\', '', $onuid)];
+                    $offlinelist[] = $entryBase;
                     break;
                     default:
                     $unknow++;
-                    $unknowlist[] = ['onuName' => $onuNameEntry, 'Id' => str_replace('\\', '', $onuid)];
+                    $unknowlist[] = $entryBase;
                     break;
                 }
             }
@@ -1757,6 +1808,10 @@ public function getOltPon($id)
 
             $names = @$snmp->walk($zteoid['oidOnuName']) ?: [];
             $sns   = @$snmp->walk($zteoid['oidOnuSn']) ?: [];
+            // Walk RX/TX power so we can show them when ONU is 'working'.
+            // Key format: "{oidOnuRxPower}.{encodedIndex}.{onuId}.1" (same for TX).
+            $rxWalk = !empty($zteoid['oidOnuRxPower']) ? (@$snmp->walk($zteoid['oidOnuRxPower']) ?: []) : [];
+            $txWalk = !empty($zteoid['oidOnuTxPower']) ? (@$snmp->walk($zteoid['oidOnuTxPower']) ?: []) : [];
 
             // For C300, build reverse lookup encoded → frame/slot/port
             $frameslotportid    = $isC300Series ? (get_olt_frameslotport_config($olt) ?: []) : [];
@@ -1832,12 +1887,32 @@ public function getOltPon($id)
 
                 $customer = $customers->firstWhere('id_onu', "$pon:$onuId");
 
+                // If ONU is working, fetch RX/TX from the walk (avoid extra SNMP gets).
+                $rxDbm = null;
+                $txDbm = null;
+                if (stripos($statusText, 'working') !== false || stripos($statusText, 'online') !== false) {
+                    $rxKey = ($zteoid['oidOnuRxPower'] ?? '') . '.' . $tail . '.1';
+                    $txKey = ($zteoid['oidOnuTxPower'] ?? '') . '.' . $tail . '.1';
+                    $rxRaw = $rxWalk[$rxKey] ?? ($rxWalk[($zteoid['oidOnuRxPower'] ?? '') . '.' . $tail] ?? '');
+                    $txRaw = $txWalk[$txKey] ?? ($txWalk[($zteoid['oidOnuTxPower'] ?? '') . '.' . $tail] ?? '');
+                    if ($rxRaw !== '' && preg_match('/-?\d+/', (string) $rxRaw, $mr)) {
+                        $r = (int) $mr[0];
+                        if ($r > 0 && $r < 65535) $rxDbm = round(($r * 0.002) - 30.0, 2);
+                    }
+                    if ($txRaw !== '' && preg_match('/-?\d+/', (string) $txRaw, $mt)) {
+                        $t = (int) $mt[0];
+                        if ($t > 0 && $t < 65535) $txDbm = round(($t * 0.002) - 30.0, 2);
+                    }
+                }
+
                 $rows[] = [
                     'pon'         => $pon,
                     'onu_id'      => $onuId,
                     'sn'          => $snDisplay,
                     'name'        => $nameVal,
                     'status'      => $statusText,
+                    'rx_dbm'      => $rxDbm,
+                    'tx_dbm'      => $txDbm,
                     'customer'    => $customer ? ($customer->name ?? '') : '',
                     'customer_id' => $customer ? ($customer->id ?? null) : null,
                 ];
@@ -2400,7 +2475,7 @@ public function getOltPon($id)
                                                          $onuNameOid = $zteoid['oidOnuName'].".$encodedIndex.$onuId";
                                                          $OltRxPowerOid =$zteoid['oidOltRxPower'].".$encodedIndex.$onuId";
                                                      } else {
-                                                         // C300/C320: Use old format with oltPonIndex
+                                                         // C300/C320: Use pon_composite_index.onuId for OLT RX Power (sesuai dokumen ZTE)
                                                          $onuUptime = $zteoid['oidOnuUptime'].".$oltPonIndex.$onuId";
                                                          $rxPowerOid =$zteoid['oidOnuRxPower'].".$oltPonIndex.$onuId.1";
                                                          $txPowerOid = $zteoid['oidOnuTxPower'].".$oltPonIndex.$onuId.1";
@@ -2410,7 +2485,9 @@ public function getOltPon($id)
                                                          $onuDistance = $zteoid['oidOnuDistance'].".$oltPonIndex.$onuId";
                                                          $onuSn = $zteoid['oidOnuSn'].".$oltPonIndex.$onuId";
                                                          $onuNameOid = $zteoid['oidOnuName'].".$oltPonIndex.$onuId";
-                                                         $OltRxPowerOid =$zteoid['oidOltRxPower'].".$oltPonIndex.$onuId";
+                                                         // OLT RX Power pakai pon_composite_index.onuId
+                                                         $ponCompositeIndex = $pon_int ?? $oltPonIndex; // pastikan $pon_int sudah di-resolve dari mapping
+                                                         $OltRxPowerOid =$zteoid['oidOltRxPower'].".$ponCompositeIndex.$onuId";
                                                      }
 
                                                      $onuDistanceValue = $this->safeSnmpGet($snmp,$onuDistance).'m';

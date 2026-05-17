@@ -476,46 +476,56 @@
               <div class="modal-header">
                 <h4 class="modal-title">Dyinggasp ONU</h4>
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                
+
               </div>
               <div class="modal-body">
-
-
-
-
-                <div id="dyinggasp_list" >
-
-
-
-
-
+                <div class="table-responsive">
+                  <table id="table-onu-dyinggasp" class="table table-bordered table-striped table-sm mt-2">
+                    <thead>
+                      <tr>
+                        <th scope="col" style="width:50px;">#</th>
+                        <th scope="col">ONU Name</th>
+                        <th scope="col">PON</th>
+                        <th scope="col" style="width:80px;">ONU ID</th>
+                        <th scope="col">SN</th>
+                        <th scope="col">Model</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dyinggasp_list">
+                      <tr><td colspan="6" class="text-center text-muted">No data.</td></tr>
+                    </tbody>
+                  </table>
                 </div>
-
               </div>
             </div>
           </div>
         </div>
+
         <div class="modal  fade" id="offline">
           <div class="modal-dialog modal-lg">
             <div class="modal-content">
               <div class="modal-header">
                 <h4 class="modal-title">Offline ONU</h4>
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                
               </div>
               <div class="modal-body">
-
-
-
-
-                <div id="offline_list" >
-
-
-
-
-
+                <div class="table-responsive">
+                  <table id="table-onu-offline" class="table table-bordered table-striped table-sm mt-2">
+                    <thead>
+                      <tr>
+                        <th scope="col" style="width:50px;">#</th>
+                        <th scope="col">ONU Name</th>
+                        <th scope="col">PON</th>
+                        <th scope="col" style="width:80px;">ONU ID</th>
+                        <th scope="col">SN</th>
+                        <th scope="col">Model</th>
+                      </tr>
+                    </thead>
+                    <tbody id="offline_list">
+                      <tr><td colspan="6" class="text-center text-muted">No data.</td></tr>
+                    </tbody>
+                  </table>
                 </div>
-
               </div>
             </div>
           </div>
@@ -526,21 +536,25 @@
               <div class="modal-header">
                 <h4 class="modal-title">Los ONU</h4>
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                
               </div>
               <div class="modal-body">
-
-
-
-
-                <div id="los_list" >
-
-
-
-
-
+                <div class="table-responsive">
+                  <table id="table-onu-los" class="table table-bordered table-striped table-sm mt-2">
+                    <thead>
+                      <tr>
+                        <th scope="col" style="width:50px;">#</th>
+                        <th scope="col">ONU Name</th>
+                        <th scope="col">PON</th>
+                        <th scope="col" style="width:80px;">ONU ID</th>
+                        <th scope="col">SN</th>
+                        <th scope="col">Model</th>
+                      </tr>
+                    </thead>
+                    <tbody id="los_list">
+                      <tr><td colspan="6" class="text-center text-muted">No data.</td></tr>
+                    </tbody>
+                  </table>
                 </div>
-
               </div>
             </div>
           </div>

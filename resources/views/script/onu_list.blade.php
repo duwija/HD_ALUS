@@ -192,16 +192,24 @@
 
 // Check if dyinggasplist exists and has elements
         if (data.dyinggasplist && data.dyinggasplist.length > 0) {
-          data.dyinggasplist.forEach(function (onu) {
-            dyinggaspListHtml += `
-            <div class="onu-item">
-            <p><strong>ONU Name:</strong> ${onu.onuName}</br><strong>ID:</strong> ${onu.Id.replace(/\\/g, '')}</p>
-            </div>
-            <hr>
-            `;
+          data.dyinggasplist.forEach(function (onu, i) {
+            var idStr = String(onu.Id || '').replace(/\\/g, '');
+            var parts = idStr.split(':');
+            var pon   = parts[0] || '-';
+            var onuId = parts[1] || '-';
+            var sn    = onu.sn ? '<code>' + onu.sn + '</code>' : '<span class="text-muted">—</span>';
+            var model = onu.model ? onu.model : '<span class="text-muted">—</span>';
+            dyinggaspListHtml += '<tr>'
+              + '<td>' + (i + 1) + '</td>'
+              + '<td>' + (onu.onuName || '') + '</td>'
+              + '<td><code>' + pon + '</code></td>'
+              + '<td>' + onuId + '</td>'
+              + '<td>' + sn + '</td>'
+              + '<td>' + model + '</td>'
+              + '</tr>';
           });
         } else {
-          dyinggaspListHtml += `<p>No ONUs with status 'dyinggasp' found.</p>`;
+          dyinggaspListHtml = '<tr><td colspan="6" class="text-center text-muted">No ONUs with status \'dyinggasp\' found.</td></tr>';
         }
 
 // Update the HTML content of the element with ID 'dyinggasp_list'
@@ -210,48 +218,56 @@
 
 
 
-    // Initialize the HTML variable
-        let loslistHtml = '';
 
-// Check if loslist exists and has elements
+    // LOS ONU table
+        let loslistHtml = '';
         if (data.loslist && data.loslist.length > 0) {
-          data.loslist.forEach(function (onu) {
-            loslistHtml += `
-            <div class="onu-item">
-            <p><strong>ONU Name:</strong> ${onu.onuName}</br>
-            <strong>ID:</strong> ${onu.Id.replace(/\\/g, '')}</p>
-            </div>
-            <hr>
-            `;
+          data.loslist.forEach(function (onu, i) {
+            var idStr = String(onu.Id || '').replace(/\\/g, '');
+            var parts = idStr.split(':');
+            var pon   = parts[0] || '-';
+            var onuId = parts[1] || '-';
+            var sn    = onu.sn ? '<code>' + onu.sn + '</code>' : '<span class="text-muted">—</span>';
+            var model = onu.model ? onu.model : '<span class="text-muted">—</span>';
+            loslistHtml += '<tr>'
+              + '<td>' + (i + 1) + '</td>'
+              + '<td>' + (onu.onuName || '') + '</td>'
+              + '<td><code>' + pon + '</code></td>'
+              + '<td>' + onuId + '</td>'
+              + '<td>' + sn + '</td>'
+              + '<td>' + model + '</td>'
+              + '</tr>';
           });
         } else {
-          loslistHtml += `<p>No ONUs with status 'Los' found.</p>`;
+          loslistHtml = '<tr><td colspan="6" class="text-center text-muted">No ONUs with status \'Los\' found.</td></tr>';
         }
-
-// Update the HTML content of the element with ID 'dyinggasp_list'
         $('#los_list').html(loslistHtml);
 
 
 
-    // Initialize the HTML variable
-        let offlinelistHtml = '';
 
-// Check if offlinelist exists and has elements
+    // Offline ONU table
+        let offlinelistHtml = '';
         if (data.offlinelist && data.offlinelist.length > 0) {
-          data.offlinelist.forEach(function (onu) {
-            offlinelistHtml += `
-            <div class="onu-item">
-            <p><strong>ONU Name:</strong> ${onu.onuName}</br>
-            <strong>ID:</strong> ${onu.Id.replace(/\\/g, '')}</p>
-            </div>
-            <hr>
-            `;
+          data.offlinelist.forEach(function (onu, i) {
+            var idStr = String(onu.Id || '').replace(/\\/g, '');
+            var parts = idStr.split(':');
+            var pon   = parts[0] || '-';
+            var onuId = parts[1] || '-';
+            var sn    = onu.sn ? '<code>' + onu.sn + '</code>' : '<span class="text-muted">—</span>';
+            var model = onu.model ? onu.model : '<span class="text-muted">—</span>';
+            offlinelistHtml += '<tr>'
+              + '<td>' + (i + 1) + '</td>'
+              + '<td>' + (onu.onuName || '') + '</td>'
+              + '<td><code>' + pon + '</code></td>'
+              + '<td>' + onuId + '</td>'
+              + '<td>' + sn + '</td>'
+              + '<td>' + model + '</td>'
+              + '</tr>';
           });
         } else {
-          offlinelistHtml += `<p>No ONUs with status 'offline' found.</p>`;
+          offlinelistHtml = '<tr><td colspan="6" class="text-center text-muted">No ONUs with status \'offline\' found.</td></tr>';
         }
-
-// Update the HTML content of the element with ID 'dyinggasp_list'
         $('#offline_list').html(offlinelistHtml);
 
 
@@ -464,13 +480,34 @@ $('#getOnu').click(function() {
               : escapeHtml(r.customer))
           : '<span class="text-muted">—</span>';
 
+        // Build status cell — when working, append RX/TX badges (color-coded by RX threshold).
+        var statusLower = (r.status || '').toLowerCase();
+        var isWorking = statusLower.indexOf('working') !== -1 || statusLower.indexOf('online') !== -1;
+        var statusBadge = isWorking
+          ? '<span class="badge badge-success">' + escapeHtml(r.status) + '</span>'
+          : '<span class="badge badge-secondary">' + escapeHtml(r.status) + '</span>';
+        var rxTxHtml = '';
+        if (isWorking && (r.rx_dbm != null || r.tx_dbm != null)) {
+          var rxCls = 'badge-success';
+          if (r.rx_dbm != null) {
+            if (r.rx_dbm <= -27) rxCls = 'badge-danger';
+            else if (r.rx_dbm <= -25) rxCls = 'badge-warning';
+          }
+          var rxTxt = (r.rx_dbm != null) ? (r.rx_dbm.toFixed(2) + ' dBm') : 'n/a';
+          var txTxt = (r.tx_dbm != null) ? (r.tx_dbm.toFixed(2) + ' dBm') : 'n/a';
+          rxTxHtml = '<div class="small mt-1">'
+                   +   '<span class="badge ' + rxCls + '" title="RX Power">RX ' + rxTxt + '</span> '
+                   +   '<span class="badge badge-info" title="TX Power">TX ' + txTxt + '</span>'
+                   + '</div>';
+        }
+
         html += '<tr>'
               +   '<td>' + (i + 1) + '</td>'
               +   '<td><code>' + escapeHtml(r.pon) + '</code></td>'
               +   '<td>' + escapeHtml(r.onu_id) + '</td>'
               +   '<td><code>' + escapeHtml(r.sn) + '</code></td>'
               +   '<td>' + escapeHtml(r.name) + '</td>'
-              +   '<td>' + escapeHtml(r.status) + '</td>'
+              +   '<td>' + statusBadge + rxTxHtml + '</td>'
               +   '<td>' + custCell + '</td>'
               +   '<td>'
               +     '<button type="button" class="btn btn-xs btn-primary onu-jump-pon" '
