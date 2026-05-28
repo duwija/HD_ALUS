@@ -101,14 +101,14 @@
   {{-- ===== HEADER ===== --}}
   <div class="header-block center">
     <p class="big">{{ strtoupper($companyName) }}</p>
-    @if ($companyLegal)
+    <!-- @if ($companyLegal)
     <p>{{ $companyLegal }}</p>
+    @endif -->
+    @if ($companyAddress1)
+    <p class="small">{{ trim($companyAddress1) }}</p>
     @endif
-    @if ($address1)
-    <p class="small">{{ trim($address1) }}</p>
-    @endif
-    @if ($address2)
-    <p class="small">{{ trim($address2) }}</p>
+    @if ($companyAddress2)
+    <p class="small">{{ trim($companyAddress2) }}</p>
     @endif
   </div>
 

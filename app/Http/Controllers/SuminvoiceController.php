@@ -2994,12 +2994,23 @@ public function dotmatrix($id)
 {
     $bank = \App\Bank::pluck('name', 'id');
 
-    $companyName  = env('COMPANY_NAME') ?: env('APP_NAME') ?: 'ISP';
-    $companyLegal = env('COMPANY')      ?: '';
-    $address1     = env('COMPANY_ADDRESS1') ?: '';
-    $address2     = env('COMPANY_ADDRESS2') ?: '';
-    $signature    = config('app.signature') ?: '';
-    $invNote      = env('INV_NOTE') ?: '';
+    // $companyName  = env('COMPANY_NAME') ?: env('APP_NAME') ?: 'ISP';
+    // $companyLegal = env('COMPANY')      ?: '';
+    // $address1     = env('COMPANY_ADDRESS1') ?: '';
+    // $address2     = env('COMPANY_ADDRESS2') ?: '';
+    // $signature    = config('app.signature') ?: '';
+    // $invNote      = env('INV_NOTE') ?: '';
+
+    $companyName = config('app.name', 'INTERNET SERVICE PROVIDER');
+    $companyLegal = tenant_config('company', env('COMPANY', ''));
+    $companyAddress1 = tenant_config('company_address1', env('COMPANY_ADDRESS1', ''));
+    $companyAddress2 = tenant_config('company_address2', env('COMPANY_ADDRESS2', ''));
+    $signature = config('app.signature') ?? '';
+    $invNote = tenant_config('inv_note', env('INV_NOTE', '')) ?? '';
+
+    // Backward compatibility for existing dotmatrix view variables.
+    $address1 = $companyAddress1;
+    $address2 = $companyAddress2;
 
     $invoice = \App\Invoice::where('tempcode', $id)
         ->whereIn('payment_status', [3, 5])
@@ -3021,6 +3032,7 @@ public function dotmatrix($id)
 
     return view('suminvoice/dotmatrix', compact(
         'invoice', 'customer', 'bank', 'suminvoice_number',
+        'companyAddress1', 'companyAddress2',
         'companyName', 'companyLegal', 'address1', 'address2',
         'signature', 'invNote'
     ));

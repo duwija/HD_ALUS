@@ -9,6 +9,40 @@ use Illuminate\Support\Facades\DB;
 class TenantMiddleware
 {
     /**
+     * Resolve tenant value with case-insensitive key lookup.
+     * Supports exact key, lowercase, uppercase, and mixed-case variants.
+     *
+     * @param array $tenant
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    protected function tenantValue(array $tenant, string $key, $default = null)
+    {
+        if (array_key_exists($key, $tenant)) {
+            return $tenant[$key];
+        }
+
+        $lowerKey = strtolower($key);
+        if (array_key_exists($lowerKey, $tenant)) {
+            return $tenant[$lowerKey];
+        }
+
+        $upperKey = strtoupper($key);
+        if (array_key_exists($upperKey, $tenant)) {
+            return $tenant[$upperKey];
+        }
+
+        foreach ($tenant as $k => $v) {
+            if (is_string($k) && strtolower($k) === $lowerKey) {
+                return $v;
+            }
+        }
+
+        return $default;
+    }
+
+    /**
      * Handle an incoming request.
      *
      * @param  \Illuminate\Http\Request  $request
@@ -136,50 +170,61 @@ class TenantMiddleware
     protected function setTenantConfig($tenant)
     {
         // Set APP NAME
-        Config::set('app.name', $tenant['app_name'] ?? 'ISP Management');
+        Config::set('app.name', $this->tenantValue($tenant, 'app_name', 'ISP Management'));
         
         // Set APP URL
-        Config::set('app.url', 'https://' . $tenant['domain']);
+        Config::set('app.url', 'https://' . $this->tenantValue($tenant, 'domain'));
         
         // Set RESCODE
-        Config::set('app.rescode', $tenant['rescode'] ?? 'ISP');
+        Config::set('app.rescode', $this->tenantValue($tenant, 'rescode', 'ISP'));
         
         // Set SIGNATURE
-        Config::set('app.signature', $tenant['signature'] ?? $tenant['app_name']);
+        Config::set('app.signature', $this->tenantValue($tenant, 'signature', $this->tenantValue($tenant, 'app_name')));
         
         // Set tenant-specific storage paths
         $this->setTenantStorage($tenant);
         
         // Set MAIL FROM
-        if (!empty($tenant['mail_from_address'])) {
-            Config::set('mail.from.address', $tenant['mail_from_address']);
-        } elseif (!empty($tenant['mail_from'])) {
-            Config::set('mail.from.address', $tenant['mail_from']);
+        $mailFromAddress = $this->tenantValue($tenant, 'mail_from_address');
+        $mailFrom = $this->tenantValue($tenant, 'mail_from');
+        $mailFromName = $this->tenantValue($tenant, 'mail_from_name');
+
+        if (!empty($mailFromAddress)) {
+            Config::set('mail.from.address', $mailFromAddress);
+        } elseif (!empty($mailFrom)) {
+            Config::set('mail.from.address', $mailFrom);
         }
-        if (!empty($tenant['mail_from_name'])) {
-            Config::set('mail.from.name', $tenant['mail_from_name']);
+        if (!empty($mailFromName)) {
+            Config::set('mail.from.name', $mailFromName);
         } else {
-            Config::set('mail.from.name', $tenant['app_name'] ?? config('app.name'));
+            Config::set('mail.from.name', $this->tenantValue($tenant, 'app_name', config('app.name')));
         }
 
         // Set Mail SMTP Configuration (Laravel 8+ path: mail.mailers.smtp.*)
-        if (!empty($tenant['mail_host'])) {
-            Config::set('mail.mailers.smtp.host', $tenant['mail_host']);
+        $mailHost = $this->tenantValue($tenant, 'mail_host');
+        $mailPort = $this->tenantValue($tenant, 'mail_port');
+        $mailUsername = $this->tenantValue($tenant, 'mail_username');
+        $mailPassword = $this->tenantValue($tenant, 'mail_password');
+        $mailEncryption = $this->tenantValue($tenant, 'mail_encryption');
+        $mailMailer = $this->tenantValue($tenant, 'mail_mailer');
+
+        if (!empty($mailHost)) {
+            Config::set('mail.mailers.smtp.host', $mailHost);
         }
-        if (!empty($tenant['mail_port'])) {
-            Config::set('mail.mailers.smtp.port', (int) $tenant['mail_port']);
+        if (!empty($mailPort)) {
+            Config::set('mail.mailers.smtp.port', (int) $mailPort);
         }
-        if (!empty($tenant['mail_username'])) {
-            Config::set('mail.mailers.smtp.username', $tenant['mail_username']);
+        if (!empty($mailUsername)) {
+            Config::set('mail.mailers.smtp.username', $mailUsername);
         }
-        if (!empty($tenant['mail_password'])) {
-            Config::set('mail.mailers.smtp.password', $tenant['mail_password']);
+        if (!empty($mailPassword)) {
+            Config::set('mail.mailers.smtp.password', $mailPassword);
         }
-        if (!empty($tenant['mail_encryption'])) {
-            Config::set('mail.mailers.smtp.encryption', $tenant['mail_encryption']);
+        if (!empty($mailEncryption)) {
+            Config::set('mail.mailers.smtp.encryption', $mailEncryption);
         }
-        if (!empty($tenant['mail_mailer'])) {
-            Config::set('mail.default', $tenant['mail_mailer']);
+        if (!empty($mailMailer)) {
+            Config::set('mail.default', $mailMailer);
         }
         
         // Set WhatsApp config jika ada
@@ -283,26 +328,27 @@ class TenantMiddleware
         ];
         
         foreach ($customEnvKeys as $key) {
-            if (isset($tenant[$key])) {
+            $value = $this->tenantValue($tenant, $key);
+            if ($value !== null) {
                 // Set to config using dot notation
                 // Example: pppoe_password becomes config('tenant.pppoe_password')
-                Config::set('tenant.' . $key, $tenant[$key]);
+                Config::set('tenant.' . $key, $value);
                 
                 // Also set as uppercase ENV style for compatibility
                 $envKey = strtoupper($key);
-                putenv("{$envKey}={$tenant[$key]}");
-                $_ENV[$envKey] = $tenant[$key];
-                $_SERVER[$envKey] = $tenant[$key];
+                putenv("{$envKey}={$value}");
+                $_ENV[$envKey] = $value;
+                $_SERVER[$envKey] = $value;
                 
                 // Special handling for mail config - set to Laravel mail config
                 if (str_starts_with($key, 'mail_')) {
                     $mailKey = str_replace('mail_', '', $key);
                     if ($mailKey === 'host' || $mailKey === 'port' || $mailKey === 'encryption' || $mailKey === 'username' || $mailKey === 'password') {
-                        Config::set('mail.mailers.smtp.' . $mailKey, $tenant[$key]);
+                        Config::set('mail.mailers.smtp.' . $mailKey, $value);
                     } elseif ($mailKey === 'from_address') {
-                        Config::set('mail.from.address', $tenant[$key]);
+                        Config::set('mail.from.address', $value);
                     } elseif ($mailKey === 'from_name') {
-                        Config::set('mail.from.name', $tenant[$key]);
+                        Config::set('mail.from.name', $value);
                     }
                 }
             }

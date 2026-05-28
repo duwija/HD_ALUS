@@ -62,17 +62,27 @@
         .btn-bundle-pay.primary:hover { background: #fff; }
         /* Header */
         .page-header {
-            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+            background: #fff;
+            border-bottom: 1px solid var(--gray-200);
             padding: 20px 16px 28px;
             text-align: center;
-            color: #fff;
+            color: var(--gray-800);
         }
         .page-header img {
             height: 50px; width: auto;
             margin-bottom: 8px;
         }
-        .page-header .company-name { font-size: 13px; opacity: .85; margin-bottom: 2px; }
-        .page-header h1 { font-size: 18px; font-weight: 700; }
+        .page-header .company-name {
+            font-size: 18px;
+            opacity: 1;
+            color: var(--gray-600);
+            margin-bottom: 2px;
+        }
+        .page-header h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary-d);
+        }
         /* Wrapper */
         .content-wrap {
             max-width: 1100px;
