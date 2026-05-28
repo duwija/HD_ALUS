@@ -8,15 +8,15 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     @media print {
-      @page { margin: 2mm; size: 58mm auto; }
+      @page { margin: 1mm; size: 58mm auto; }
       body { margin: 0; padding: 0; }
       .no-print { display: none !important; }
       html, body { width: 58mm; }
     }
 
     body {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 8px;
+      font-family: 'Arial', Courier, monospace;
+      font-size: 10px;
       color: #000;
       background: #fff;
       width: 218px;
@@ -239,9 +239,9 @@
 
   {{-- ===== FOOTER ===== --}}
   <div class="footer-block center" style="margin-top:8px">
-    <p>Tabanan, {{ $isPaid ? $payDate : $invDate }}</p>
+    <p>{{ $isPaid ? $payDate : $invDate }}</p>
     <div class="qr-block">
-      {!! QrCode::size(50)->generate(url('/suminvoice/'.$suminvoice_number->tempcode.'/viewinvoice')) !!}
+      {!! QrCode::size(120)->generate(url('/suminvoice/'.$suminvoice_number->tempcode.'/viewinvoice')) !!}
     </div>
     <p class="small" style="margin-top:3px">Scan untuk verifikasi invoice</p>
     <p class="bold" style="margin-top:6px">{{ $signature }}</p>

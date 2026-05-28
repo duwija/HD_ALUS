@@ -1422,8 +1422,11 @@ $(document).ready(function() {
 
         fetch('/customer/createtunnel', {
           method: 'POST',
+          credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': '{{ csrf_token() }}'
           },
           body: JSON.stringify({ IdCustomer: IdCustomer, remoteIp: remoteIp })
@@ -1439,7 +1442,8 @@ $(document).ready(function() {
               showConfirmButton: false
             });
             setTimeout(() => {
-              window.open(`http://${data.host}:${data.port}`, '_blank');
+              const targetUrl = data.url;
+              window.open(targetUrl, '_blank');
             }, 2000);
           } else {
             Swal.fire({

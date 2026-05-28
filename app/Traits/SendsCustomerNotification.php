@@ -71,23 +71,26 @@ trait SendsCustomerNotification
      * @param  int  $longPauseEvery Long pause setiap N pesan
      * @return int  Detik delay
      */
-    public function messageDelay(int $index, int $longPauseEvery = 20): int
+    public function messageDelay(int $index, int $longPauseEvery = 1000): int
     {
-        // Batas delay dibaca dari tenant ENV agar bisa dikonfigurasi per-tenant
-        $delayMin  = max(5,              (int) tenant_config('NOTIF_DELAY_MIN',        180));
-        $delayMax  = max($delayMin + 5,  (int) tenant_config('NOTIF_DELAY_MAX',        360));
-        $longExtra = max(60,              (int) tenant_config('NOTIF_LONG_PAUSE_EXTRA', 600));
+        // Batas delay dibaca dari tenant ENV agar bisa dikonfigurasi per-tenant.
+        // Default global bila env tenant tidak di-set:
+        // NOTIF_DELAY_MIN=10, NOTIF_DELAY_MAX=30,
+        // NOTIF_LONG_PAUSE_EVERY=1000, NOTIF_LONG_PAUSE_EXTRA=1000
+        $delayMin  = max(1, (int) tenant_config('NOTIF_DELAY_MIN', 10));
+        $delayMax  = max($delayMin, (int) tenant_config('NOTIF_DELAY_MAX', 30));
+        $longExtra = max(1, (int) tenant_config('NOTIF_LONG_PAUSE_EXTRA', 1000));
 
         // 1. Base delay acak dalam range konfigurasi
         $base = rand($delayMin, $delayMax);
 
         // 2. Micro-variasi agar pola tidak terdeteksi bot
-        $variance = rand(0, 40);
+        $variance = rand(0, 20);
         $base += (rand(0, 1) ? $variance : -$variance);
 
         // 3. Perlambatan di setiap kelipatan 10
         if ($index % 10 === 0) {
-            $base += rand(20, 60);
+            $base += rand(5, 30);
         }
 
         // 4. Long pause setiap longPauseEvery pesan

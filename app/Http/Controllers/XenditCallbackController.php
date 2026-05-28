@@ -813,6 +813,21 @@ return("ACCEPTED");
             return response()->json(['success' => false, 'message' => 'Invoices not found'], 404);
         }
 
+        $unpaidInvoices = $invoices->where('payment_status', 0)->values();
+
+        // Jika seluruh invoice sudah lunas (mis. user sudah bayar via metode baru),
+        // jangan overwrite data pembayaran invoice lama.
+        if ($unpaidInvoices->isEmpty()) {
+            \DB::table('payment_bundles')->where('bundle_ref', $bundle->bundle_ref)->update([
+                'status'      => 1,
+                'paid_amount' => $paidAmount,
+                'updated_at'  => now(),
+            ]);
+
+            \Log::channel('payment')->warning("[{$source}] Callback bundle diterima tapi semua invoice sudah paid (kemungkinan link lama): {$bundle->bundle_ref}");
+            return response()->json(['success' => true, 'message' => 'All invoices already paid']);
+        }
+
         $customer = \App\Customer::where('id', $bundle->id_customer)->first();
         if (!$customer) {
             \Log::channel('payment')->error("[{$source}] Customer tidak ditemukan: id={$bundle->id_customer}");
@@ -828,7 +843,7 @@ return("ACCEPTED");
 
         DB::beginTransaction();
         try {
-            foreach ($invoices as $invoice) {
+            foreach ($unpaidInvoices as $invoice) {
                 $invoice->update([
                     'recieve_payment' => $invoice->total_amount,
                     'payment_point'   => $paymentPoint,
@@ -888,10 +903,10 @@ return("ACCEPTED");
             DB::commit();
 
             // Kirim notifikasi (gabung semua nomor invoice)
-            $invoiceNumbers = $invoices->pluck('number')->implode(', ');
+            $invoiceNumbers = $unpaidInvoices->pluck('number')->implode(', ');
             $this->sendPaymentNotification($customer, $invoiceNumbers, $paidAmount, $source . '/BUNDLE');
 
-            \Log::channel('payment')->info("[{$source}] Bundle berhasil diproses: {$bundle->bundle_ref} | " . $invoices->count() . " invoices");
+            \Log::channel('payment')->info("[{$source}] Bundle berhasil diproses: {$bundle->bundle_ref} | " . $unpaidInvoices->count() . " invoices (" . ($invoices->count() - $unpaidInvoices->count()) . " sudah paid)");
             return response()->json(['success' => true]);
 
         } catch (\Exception $e) {

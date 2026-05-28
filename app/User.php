@@ -19,7 +19,7 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name', 'full_name', 'email', 'password', 'date_of_bird', 'job_title', 'employee_type', 'join_date', 'address', 'phone','privilege','date_of_birth', 'email', 'photo','description', 'updated_at','created_at','deleted_at','id_merchant', 'dashboard_preference',
-        'supervisor_id', 'employee_id', 'is_active_employee', 'is_active', 'fcm_token',
+        'supervisor_id', 'employee_id', 'is_active_employee', 'is_active', 'fcm_token', 'admin_fee',
     ];
 
     /**

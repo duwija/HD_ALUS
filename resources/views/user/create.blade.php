@@ -86,6 +86,24 @@
           @enderror
           <small class="text-muted">Default: User</small>
         </div>
+
+        <div class="form-group col-sm-3" id="admin-fee-group" style="display: none;">
+          <label for="admin_fee">
+            <i class="fas fa-money-bill-wave"></i> Info Admin Fee
+          </label>
+          <input
+            type="text"
+            class="form-control @error('admin_fee') is-invalid @enderror"
+            name="admin_fee"
+            id="admin_fee"
+            placeholder="Contoh: 2500"
+            value="{{ old('admin_fee') }}"
+            oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+          >
+          @error('admin_fee')
+          <div class="error invalid-feedback">{{ $message }}</div>
+          @enderror
+        </div>
       </div>
       {{--  <div class="row">
 
@@ -264,6 +282,9 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  const privilegeSelect = document.getElementById('privilege');
+  const adminFeeGroup = document.getElementById('admin-fee-group');
+  const adminFeeInput = document.getElementById('admin_fee');
   const photoInput = document.getElementById('photo');
   const imagePreview = document.getElementById('image-preview');
   const previewContainer = document.getElementById('preview-container');
@@ -273,6 +294,21 @@ document.addEventListener('DOMContentLoaded', function() {
   const form = photoInput.closest('form');
   let cropper = null;
   let isCropped = false;
+
+  function toggleAdminFeeInput() {
+    if (!privilegeSelect || !adminFeeGroup || !adminFeeInput) return;
+
+    const isMerchant = privilegeSelect.value === 'merchant';
+    adminFeeGroup.style.display = isMerchant ? 'block' : 'none';
+    adminFeeInput.required = isMerchant;
+
+    if (!isMerchant) {
+      adminFeeInput.value = '';
+    }
+  }
+
+  toggleAdminFeeInput();
+  privilegeSelect.addEventListener('change', toggleAdminFeeInput);
 
   photoInput.addEventListener('change', function(e) {
     const file = e.target.files[0];

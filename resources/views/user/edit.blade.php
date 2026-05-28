@@ -134,6 +134,23 @@
         @endforeach
       </select>
     </div>
+    <div class="form-group col-sm-3" id="adminFeeInput" style="display: none;">
+      <label for="admin_fee">
+        <i class="fas fa-money-bill-wave"></i> Info Admin Fee
+      </label>
+      <input
+        type="text"
+        class="form-control @error('admin_fee') is-invalid @enderror"
+        name="admin_fee"
+        id="admin_fee"
+        placeholder="Contoh: 2500"
+        value="{{ old('admin_fee', $user->admin_fee) }}"
+        oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+      >
+      @error('admin_fee')
+      <div class="error invalid-feedback">{{ $message }}</div>
+      @enderror
+    </div>
     {{-- Dashboard Preference (disembunyikan untuk merchant/vendor) --}}
     <div class="form-group col-sm-3" id="dashboardPrefInput">
       <label for="dashboard_preference">
@@ -414,6 +431,8 @@ document.addEventListener('DOMContentLoaded', function() {
     var privilege = document.getElementById("privilege").value;
     var merchantInput = document.getElementById("merchantInput");
     var dashboardPrefInput = document.getElementById("dashboardPrefInput");
+    var adminFeeInputGroup = document.getElementById("adminFeeInput");
+    var adminFeeInput = document.getElementById("admin_fee");
 
     // Show merchant selector only for merchant privilege
     if (privilege === "merchant") {
@@ -427,6 +446,15 @@ document.addEventListener('DOMContentLoaded', function() {
       dashboardPrefInput.style.display = "none";
     } else {
       dashboardPrefInput.style.display = "block";
+    }
+
+    if (privilege === "merchant") {
+      adminFeeInputGroup.style.display = "block";
+      adminFeeInput.required = true;
+    } else {
+      adminFeeInputGroup.style.display = "none";
+      adminFeeInput.required = false;
+      adminFeeInput.value = "";
     }
   }
 

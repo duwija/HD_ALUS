@@ -89,7 +89,7 @@ class IsolirAuto extends Command
             }
 
             $tenantQueue    = $tenant['domain'] ?? 'default';
-            $longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', rand(18, 27));
+            $longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', 1000);
             $start          = Carbon::now();
             $count          = 0;
 

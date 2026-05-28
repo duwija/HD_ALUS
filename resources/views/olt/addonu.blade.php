@@ -36,7 +36,7 @@
 
                   <input type="hidden"  name="olt" id="olt"   value="{{$olt->id}}">
                   <input type="hidden"  name="id_customer" id="id_customer"   value="{{$customer->id}}">
-
+                  <input type="hidden"  name="pppoe" id="pppoe"   value="{{$customer->pppoe}}">
                 </div>
               </div>
 
@@ -191,6 +191,7 @@
 
                 <input type="hidden"  name="olt" id="olt"   value="{{$olt->id}}">
                 <input type="hidden"  name="id_customer" id="id_customer"   value="{{$customer->id}}">
+                <input type="hidden"  name="pppoe" id="pppoe"   value="{{$customer->pppoe}}">
                 <!--    <input type="text"  name="onu_name" id="onu_name"   value="{{$customer->customer_id}} {{$customer->name}}">  -->
 
               </div>

@@ -3154,12 +3154,22 @@ public function createtunnel(Request $request)
         ->equal('disabled', 'no');
         $client->query($queryScheduler)->read();
 
-        return response()->json([
+        $redirectUrl = url("/proxy/{$mikrotikHost}/{$localPort}/{$remoteIp}");
+
+        $payload = [
             'success' => true,
             'message' => "Port forwarding created on port {$localPort} and will auto delete in 30 minutes.",
             'host' => $mikrotikHost,
-            'port' => $localPort
-        ]);
+            'port' => $localPort,
+            'url' => $redirectUrl,
+        ];
+
+        // If the caller expects JSON (AJAX), return JSON; otherwise redirect the browser to the proxy URL.
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json($payload);
+        }
+
+        return redirect($redirectUrl);
 
     } catch (\Exception $e) {
         return response()->json([

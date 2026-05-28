@@ -264,7 +264,7 @@ class SuminvoiceController extends Controller
             'order_items'    => [
                 [
                     'sku'         => $request->description,
-                    'name'        => 'Invoice ' . tenant_config('APP_NAME', config('app.name', 'ISP')) . ' No #'. $merchantRef,
+                    'name'        => 'Tagihan ' . $customer_id . ' [' . $customer_id . '] no ' . $merchantRef,
                     'price'       => $amount,
                     'quantity'    => 1,
 
@@ -530,7 +530,7 @@ public function winpay()
             $params = [
                 'paymentAmount'   => $totalAmount,
                 'merchantOrderId' => $merchantOrderId,
-                'productDetails'  => 'Invoice #' . $customer->customer_id.'|'.mb_substr($customer->name, 0, 20),
+                'productDetails'  => 'Tagihan ' . $customer->customer_id . ' | INV no ' . $suminvoice->number,
                 'customerVaName'  => mb_substr($customer->name, 0, 20),
                 'email'           => !empty($customer->email) ? $customer->email : 'billing@noreply.com',
                 'phoneNumber'     => $intlPhone,
@@ -653,6 +653,21 @@ public function winpay()
                 return redirect()->back()->with('error', 'Invoice sudah lunas, tidak bisa direset.');
             }
 
+            $paymentId = (string) ($suminvoice->payment_id ?? '');
+            $gateway = (string) ($suminvoice->payment_gateway ?? '');
+
+            // Jika sebelumnya pakai Winpay, coba hapus transaksi remote agar tidak nyangkut.
+            if ($gateway === 'winpay' || str_starts_with($paymentId, 'winpay:')) {
+                try {
+                    $this->deleteWinpayVA($suminvoice->number);
+                } catch (\Throwable $winpayEx) {
+                    \Log::channel('payment')->warning('Payment reset: gagal delete VA Winpay', [
+                        'invoice_number' => $suminvoice->number,
+                        'message' => $winpayEx->getMessage(),
+                    ]);
+                }
+            }
+
             $suminvoice->update([
                 'payment_id'      => null,
                 'payment_gateway' => null,
@@ -670,7 +685,8 @@ public function winpay()
 
     /**
      * Batalkan bundle payment yang masih pending.
-     * Menghapus record di payment_bundles & payment_bundle_items.
+     * Ditandai sebagai expired/cancelled (status=2) agar callback dari link lama
+     * masih bisa di-resolve (khusus Tripay yang tidak punya cancel invoice).
      */
     public function cancelBundle(Request $request)
     {
@@ -686,15 +702,21 @@ public function winpay()
                 return redirect()->back()->with('error', 'Bundle sudah lunas, tidak bisa dibatalkan.');
             }
 
-            // Ambil invoice ids sebelum menghapus items
+            // Ambil invoice ids untuk reset pointer pembayaran di invoice.
             $invoiceIds = \DB::table('payment_bundle_items')
                 ->where('bundle_ref', $bundleRef)
                 ->pluck('suminvoice_id');
 
             \DB::transaction(function () use ($bundleRef, $invoiceIds) {
-                \DB::table('payment_bundle_items')->where('bundle_ref', $bundleRef)->delete();
-                \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)->delete();
-                // Bersihkan payment_id/payment_gateway pada invoice agar tidak tampil pending
+                // Jangan hapus record bundle/items.
+                // Simpan sebagai status=2 agar callback dari checkout URL lama masih bisa dipetakan.
+                \DB::table('payment_bundles')->where('bundle_ref', $bundleRef)->update([
+                    'status' => 2,
+                    'payment_url' => null,
+                    'updated_at' => now(),
+                ]);
+
+                // Bersihkan payment_id/payment_gateway pada invoice agar user bisa pilih metode baru.
                 if ($invoiceIds->count() > 0) {
                     \App\Suminvoice::whereIn('id', $invoiceIds)
                         ->where('payment_status', 0)
@@ -702,7 +724,7 @@ public function winpay()
                 }
             });
 
-            \Log::channel('payment')->info('Bundle cancelled: ' . $bundleRef);
+            \Log::channel('payment')->info('Bundle cancelled (status=2, kept for callback reconciliation): ' . $bundleRef);
 
             return redirect()->back()->with('success', 'Transaksi bundle berhasil dibatalkan. Silakan pilih metode pembayaran baru.');
 
@@ -855,11 +877,16 @@ public function winpay()
                 $firstName = $nameParts[0] ?? mb_substr($customer->name, 0, 50);
                 $lastName  = $nameParts[1] ?? '';
 
-                $invoiceNumbers = $invoices->pluck('number')->implode(', ');
+                $duitkuDetails = $invoices->map(function ($inv) use ($customer) {
+                    return 'Tagihan ' . $customer->customer_id . ' | INV no ' . $inv->number;
+                })->implode('; ');
+                if ($fee > 0) {
+                    $duitkuDetails .= '; ' . ($gw->fee_label ?: 'Biaya Transaksi');
+                }
                 $params = [
                     'paymentAmount'   => $chargeAmount,
                     'merchantOrderId' => $bundleRef,
-                    'productDetails'  => 'Tagihan #' . $customer->customer_id . ' | ' . $invoices->count() . ' invoice',
+                    'productDetails'  => $duitkuDetails,
                     'customerVaName'  => mb_substr($customer->name, 0, 20),
                     'email'           => !empty($customer->email) ? $customer->email : 'billing@noreply.com',
                     'phoneNumber'     => $intlPhone,
@@ -936,7 +963,13 @@ public function winpay()
                 $timestamp = (new \DateTime('now', new \DateTimeZone('Asia/Jakarta')))->format('Y-m-d\TH:i:sP');
                 $signature = hash_hmac('sha256', $timestamp, $secretKey);
 
-                $products = [['name' => 'Tagihan ' . $invoices->count() . ' invoice | ' . $customer->customer_id, 'qty' => 1, 'price' => $totalAmount]];
+                $products = $invoices->map(function ($inv) use ($customer) {
+                    return [
+                        'name'  => 'Tagihan ' . $customer->customer_id . ' | INV no ' . $inv->number,
+                        'qty'   => 1,
+                        'price' => (int) $inv->total_amount,
+                    ];
+                })->values()->all();
                 if ($fee > 0) {
                     $products[] = ['name' => $gw->fee_label ?: 'Biaya Transaksi', 'qty' => 1, 'price' => $fee];
                 }
@@ -987,6 +1020,24 @@ public function winpay()
                 $rawPhone = $customer->phone ?? '';
                 if (empty($rawPhone)) $rawPhone = '0818000000';
 
+                $tripayItems = $invoices->map(function ($inv) use ($customer) {
+                    return [
+                        'sku'      => (string) $inv->number,
+                        'name'     => 'Tagihan ' . $customer->customer_id . ' | INV no ' . $inv->number,
+                        'price'    => (int) $inv->total_amount,
+                        'quantity' => 1,
+                    ];
+                })->values()->all();
+
+                if ($fee > 0) {
+                    $tripayItems[] = [
+                        'sku'      => 'FEE',
+                        'name'     => $gw->fee_label ?: 'Biaya Transaksi',
+                        'price'    => (int) $fee,
+                        'quantity' => 1,
+                    ];
+                }
+
                 $data = [
                     'method'         => $tripayMethod,
                     'merchant_ref'   => $bundleRef,
@@ -994,12 +1045,7 @@ public function winpay()
                     'customer_name'  => $customer->name . ' | ' . $customer->customer_id,
                     'customer_email' => !empty($customer->email) ? $customer->email : 'billing@alus.co.id',
                     'customer_phone' => $rawPhone,
-                    'order_items'    => [[
-                        'sku'      => 'BUNDLE',
-                        'name'     => 'Tagihan ' . $invoices->count() . ' invoice | ' . $customer->customer_id,
-                        'price'    => $chargeAmount,
-                        'quantity' => 1,
-                    ]],
+                    'order_items'    => $tripayItems,
                     'return_url'   => $returnUrl,
                     'expired_time' => (time() + (24 * 60 * 60)),
                     'signature'    => $hash,
@@ -1079,7 +1125,7 @@ public function createWinpayVA(Request $request)
         // Prepare products array
         $products = [
             [
-                "name" => 'Invoice ' . tenant_config('APP_NAME', config('app.name', 'ISP')) . ' No #'. $suminvoice->number,
+                "name" => 'Tagihan ' . $customer->customer_id . ' [' . $customer->customer_id . '] no ' . $suminvoice->number,
                 "qty" => 1,
                 "price" => $suminvoice->total_amount
             ]
@@ -1343,7 +1389,7 @@ public function customerblockednotifJob()
     \Log::channel('notif')->info('Total blocked customers to notify: ' . $customers->count());
 
     $start         = Carbon::now();
-    $longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', rand(18, 27));
+    $longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', 1000);
     $index = 1;
     $count = 0;
 
@@ -1553,7 +1599,7 @@ public function customerisolirJob(Request $request)
 
     $count          = 0;
     $tenantQueue    = app('tenant')['domain'] ?? 'default';
-    $longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', rand(18, 27));
+    $longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', 1000);
 
     foreach ($customer as $cust) {
         $count++;
@@ -1622,7 +1668,7 @@ $start = Carbon::now();
 
 $count =0;
 
-$longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', rand(18, 27));
+$longPauseEvery = (int) tenant_config('NOTIF_LONG_PAUSE_EVERY', 1000);
 $index = 1;
 foreach($customers as $customer) {
 

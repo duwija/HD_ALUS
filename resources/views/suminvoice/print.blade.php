@@ -931,6 +931,36 @@ a button {
 
 @else
 
+@if (!empty($suminvoice_number->payment_id))
+<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:10px 0 14px;flex-wrap:wrap;">
+    @php
+        $activePaymentUrl = null;
+        if (strpos((string) $suminvoice_number->payment_id, '|') !== false) {
+            $parts = explode('|', (string) $suminvoice_number->payment_id, 2);
+            $activePaymentUrl = $parts[1] ?? null;
+        }
+    @endphp
+
+    @if(!empty($activePaymentUrl))
+    <a href="{{ $activePaymentUrl }}" target="_blank" rel="noopener noreferrer"
+       class="btn1"
+       style="display:inline-block;background:#ecfeff;color:#0f766e;border:1px solid #99f6e4;padding:8px 12px;border-radius:8px;text-decoration:none;font-size:12px;">
+        <i class="fas fa-external-link-alt"></i>&nbsp; Lanjutkan Pembayaran Aktif
+    </a>
+    @endif
+
+    <form method="POST" action="{{ url('/payment/reset') }}" style="margin:0;"
+          onsubmit="return confirm('Reset pembayaran ini dan ganti metode bayar?');">
+        @csrf
+        <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
+        <button type="submit" class="btn1"
+                style="background:#fff7ed;color:#9a3412;border:1px solid #fdba74;padding:8px 12px;border-radius:8px;font-size:12px;">
+            <i class="fas fa-random"></i>&nbsp; Ganti Metode Pembayaran
+        </button>
+    </form>
+</div>
+@endif
+
 <div style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
     <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
         <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan

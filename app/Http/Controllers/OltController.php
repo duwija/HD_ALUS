@@ -766,7 +766,7 @@ public function configure(Request $request)
     $vlanname = $parts_vlan[0];
     $vlan = strval($parts_vlan[1]);
 
-    $username_pppoe = $request->customer_id;
+    $username_pppoe = $request->pppoe;
     $password_pppoe = $request->password;
     $description = 'Config by System';
 
@@ -842,7 +842,7 @@ public function configurecst(Request $request)
     $vlanname = $parts_vlan[0];
     $vlan = strval($parts_vlan[1]);
 
-    $username_pppoe = $request->customer_id;
+    $username_pppoe = $request->pppoe;
     $password_pppoe = $request->password;
     $description = 'Config by System';
 

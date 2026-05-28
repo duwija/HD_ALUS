@@ -21,9 +21,9 @@ class AutoIsolirCustomerJob implements ShouldQueue
      */
     private function resolveDelaySeconds(int $index, array $tenant, int $longPauseEvery): int
     {
-        $delayMin = max(10, (int) ($tenant['NOTIF_DELAY_MIN'] ?? $tenant['notif_delay_min'] ?? 180));
-        $delayMax = max($delayMin + 10, (int) ($tenant['NOTIF_DELAY_MAX'] ?? $tenant['notif_delay_max'] ?? 360));
-        $longExtra = max(60, (int) ($tenant['NOTIF_LONG_PAUSE_EXTRA'] ?? $tenant['notif_long_pause_extra'] ?? 600));
+        $delayMin = max(1, (int) ($tenant['NOTIF_DELAY_MIN'] ?? $tenant['notif_delay_min'] ?? 10));
+        $delayMax = max($delayMin, (int) ($tenant['NOTIF_DELAY_MAX'] ?? $tenant['notif_delay_max'] ?? 30));
+        $longExtra = max(1, (int) ($tenant['NOTIF_LONG_PAUSE_EXTRA'] ?? $tenant['notif_long_pause_extra'] ?? 1000));
 
         $base = rand($delayMin, $delayMax);
 
@@ -79,7 +79,7 @@ class AutoIsolirCustomerJob implements ShouldQueue
 
                 $start = Carbon::now();
                 $count = 0;
-                $longPauseEvery = max(1, (int) ($tenant['NOTIF_LONG_PAUSE_EVERY'] ?? $tenant['notif_long_pause_every'] ?? rand(18, 27)));
+                $longPauseEvery = max(1, (int) ($tenant['NOTIF_LONG_PAUSE_EVERY'] ?? $tenant['notif_long_pause_every'] ?? 1000));
 
                 // Set tenant context agar IsolirJob constructor bisa simpan tenantDomain
                 app()->instance('tenant', $tenant);
