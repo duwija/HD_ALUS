@@ -2345,6 +2345,11 @@ public function searchmytransaction(Request $request)
 
      $email = !empty($customers->email) ? $customers->email : "return@alus.co.id";
 
+    $subtotal = (float) $request->input('subtotal', 0);
+    $taxPercent = (float) $request->input('tax', 0);
+    $taxTotal = (int) round(($subtotal * $taxPercent) / 100);
+    $totalAmount = (int) round($subtotal + $taxTotal);
+
    // try
    // { 
      $tax = $customers->tax ?? 0;
@@ -2374,7 +2379,7 @@ public function searchmytransaction(Request $request)
             'date' => ($request['invoice_date']), 
             'payment_status' => 0,
             'tax' => ($request['tax']),
-            'total_amount' =>($request['subtotal']+ $request['tax_total']),
+            'total_amount' => $totalAmount,
             'payment_id' => 'empty',
             'tempcode' => $tempcode,
             'due_date' => ($request['due_date']), 
@@ -2387,7 +2392,7 @@ public function searchmytransaction(Request $request)
 
 
         $data = [
-            'tax_total' => $request['tax_total'],
+            'tax_total' => $taxTotal,
             'date' => $date,
             'reff' => $tempcode,
             'type' => 'jumum',
@@ -2399,25 +2404,25 @@ public function searchmytransaction(Request $request)
 
 // Create debit entry
         $data['id_akun'] = '1-10100';
-        $data['debet'] = $request['subtotal']+ $request['tax_total'];
+    $data['debet'] = $totalAmount;
         \App\Jurnal::create($data);
 unset($data['debet']); // Remove debet key for the credit entry
 
 // Create credit entry
 $data['id_akun'] = '4-40000';
-$data['kredit'] = $request['subtotal'];
+$data['kredit'] = $subtotal;
 \App\Jurnal::create($data);
 
 if (!empty($request['tax']) && $request['tax'] != 0) {
     $data['id_akun'] = '2-20500';
-    $data['kredit'] = $request['tax_total'];
+    $data['kredit'] = $taxTotal;
     \App\Jurnal::create($data);
 }
 
 
 
 
-$sumamount =$request['subtotal'] + $request['tax_total'];
+$sumamount = $totalAmount;
 
 $encryptedurl = Crypt::encryptString($customers->id);
 if($customers->notification == 1)

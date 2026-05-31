@@ -230,7 +230,7 @@
                 $taxfee = $customer->tax;
               }
 
-              $tax = $subtotal * $taxfee/100;
+              $tax = round($subtotal * $taxfee / 100);
 
               $total = $subtotal + $tax;
 
@@ -475,15 +475,15 @@
     let subtotal = parseFloat(document.getElementById('subtotal').value) || 0;
 
     // Hitung ulang nilai pajak dan total
-    let taxTotal = (subtotal * taxFee) / 100;
-    let total = subtotal + taxTotal;
+    let taxTotal = Math.round((subtotal * taxFee) / 100);
+    let total = Math.round(subtotal + taxTotal);
 
     // Update nilai pajak yang ditampilkan
-    document.getElementById('tax_total').value = taxTotal.toFixed(0);
+    document.getElementById('tax_total').value = taxTotal;
     document.getElementById('tax_total_display').innerText = new Intl.NumberFormat('id-ID').format(taxTotal);
 
     // Update nilai total
-    document.getElementById('total').value = total.toFixed(0);
+    document.getElementById('total').value = total;
     document.getElementById('total_display').innerText = new Intl.NumberFormat('id-ID').format(total);
     localStorage.setItem('tax_' + customerId, taxFee);
     console.log(localStorage.getItem('tax_' + customerId));
