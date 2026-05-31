@@ -92,6 +92,25 @@ class OltController extends Controller
         $onuIndex = ($id - ($this->baseIndex + $gap));
         return ($onuIndex / 256) + 1;
     }
+    
+    /**
+     * Parse HSGQ ONU label from different firmware formats.
+     * Supported examples: "ONU2/1", "ONT01/001".
+     */
+    private function parseHsgqOnuLabel($label)
+    {
+        $text = trim(str_replace(['STRING: ', '"'], '', (string) $label));
+
+        if (preg_match('/ONU\s*(\d+)\s*\/(\d+)/i', $text, $m)) {
+            return ['pon' => (int) $m[1], 'onu' => (int) $m[2]];
+        }
+
+        if (preg_match('/ONT\s*0*(\d+)\s*\/\s*0*(\d+)/i', $text, $m)) {
+            return ['pon' => (int) $m[1], 'onu' => (int) $m[2]];
+        }
+
+        return null;
+    }
 
 
     //=================================================//
@@ -461,11 +480,33 @@ class OltController extends Controller
             }
 
         // Ambil daftar nama ONU
+            $hsgqUsingLegacyOnuSource = false;
             try {
                 $onuNameRaw = $snmp->walk($onuName);
                 $onuNameValue = is_array($onuNameRaw) ? array_map(function ($val) {
                     return str_replace(['STRING: ', '"'], "", $val);
                 }, $onuNameRaw) : [];
+
+                if ($isHSGQ) {
+                    $hasParsedOnu = false;
+                    foreach ($onuNameValue as $label) {
+                        if ($this->parseHsgqOnuLabel($label)) {
+                            $hasParsedOnu = true;
+                            break;
+                        }
+                    }
+
+                    if (!$hasParsedOnu) {
+                        $legacyOnuNameOid = config('hsgq_oid.oidOnuName') ?: '.1.3.6.1.4.1.50224.3.12.2.1.2';
+                        $legacyOnuWalk = @$snmp->walk($legacyOnuNameOid);
+                        if (is_array($legacyOnuWalk) && count($legacyOnuWalk) > 0) {
+                            $onuNameValue = array_map(function ($val) {
+                                return str_replace(['STRING: ', '"'], "", $val);
+                            }, $legacyOnuWalk);
+                            $hsgqUsingLegacyOnuSource = true;
+                        }
+                    }
+                }
             } catch (\Exception $e) {
                 $onuNameValue = [];
             }
@@ -508,65 +549,73 @@ class OltController extends Controller
                 $components = explode('.', $key);
                 
                 if ($isHSGQ) {
-                    // HSGQ: Parse IF-MIB ifDescr "ONU{PON}/{ID}"
-                    // Only count actual ONUs, skip non-ONU interfaces
-                    if (!preg_match('/ONU(\d+)\/(\d+)/', $onuNameEntry, $matches)) {
-                        continue; // Skip non-ONU interfaces
+                    $parsedOnu = $this->parseHsgqOnuLabel($onuNameEntry);
+                    if (!$parsedOnu) {
+                        continue;
                     }
-                    
-                    $ponNum = (int)$matches[1];
-                    $onuId = (int)$matches[2];
-                    
-                    // Get ifIndex from OID key
+
+                    $ponNum = $parsedOnu['pon'];
+                    $onuId = $parsedOnu['onu'];
+
+                    // Get ifIndex from OID key (works for IF-MIB based sources)
                     $ifIndex = (int)end($components);
-                    
-                    // Get ifOperStatus (1=up, 2=down)
-                    $statusOid = $onuStatus . '.' . $ifIndex;
-                    $statusValue = $this->safeSnmpGet($snmp, $statusOid);
-                    
-                    // Check power values for all ONUs to determine actual cause
+
+                    // Read IF-MIB status when available (legacy .50224 source usually has no matching ifIndex)
+                    $statusValue = '';
+                    if (!$hsgqUsingLegacyOnuSource) {
+                        $statusOid = $onuStatus . '.' . $ifIndex;
+                        $statusValue = $this->safeSnmpGet($snmp, $statusOid);
+                    }
+
                     $encodedIndex = encode_hsgq_index($ponNum, $onuId);
-                    $rxPowerOid = $zteoid['oidOnuRxPower'] . '.' . $encodedIndex . '.0.0';
-                    $txPowerOid = $zteoid['oidOnuTxPowerOnu'] . '.' . $encodedIndex . '.0.0';
-                    
+                    $hsgqMetricOid = $hsgqUsingLegacyOnuSource ? (config('hsgq_oid') ?: $zteoid) : $zteoid;
+                    $rxPowerOid = ($hsgqMetricOid['oidOnuRxPower'] ?? $zteoid['oidOnuRxPower']) . '.' . $encodedIndex . '.0.0';
+                    $txPowerOid = ($hsgqMetricOid['oidOnuTxPowerOnu'] ?? $zteoid['oidOnuTxPowerOnu']) . '.' . $encodedIndex . '.0.0';
+
                     $rxPowerValue = $this->safeSnmpGet($snmp, $rxPowerOid);
                     $txPowerValue = $this->safeSnmpGet($snmp, $txPowerOid);
-                    
-                    // Check if power values are valid
+
                     $rxValid = $rxPowerValue && !str_contains($rxPowerValue, 'No Such') && !str_contains($rxPowerValue, 'N/A');
                     $txValid = $txPowerValue && !str_contains($txPowerValue, 'No Such') && !str_contains($txPowerValue, 'N/A');
-                    
-                    // Extract numeric RX power value for threshold check
+
                     $rxNumeric = null;
                     if ($rxValid && preg_match('/-?\d+/', $rxPowerValue, $rxMatch)) {
                         $rxNumeric = (int)$rxMatch[0];
                     }
-                    
-                    // Map IF-MIB to HSGQ status codes using regex (handles "INTEGER: 1", "INTEGER: up(1)", etc.)
-                    if (preg_match('/\b(1|up)\b/', $statusValue)) {
-                        // ifOperStatus = UP
+
+                    if ($hsgqUsingLegacyOnuSource) {
+                        // Legacy .50224 source: derive state from optics only.
                         if (!$rxValid && !$txValid) {
-                            $statusValue = '5'; // powerdown - Both powers lost but interface still up
+                            $statusValue = '5'; // powerdown
                         } elseif (!$rxValid || !$txValid) {
-                            $statusValue = '4'; // los - One power missing
+                            $statusValue = '4'; // los
                         } elseif ($rxNumeric !== null && $rxNumeric < -2800) {
-                            $statusValue = '4'; // los - RX power too low (< -28 dBm)
+                            $statusValue = '4'; // los (too weak)
                         } else {
                             $statusValue = '3'; // working
                         }
-                    } else {
-                        // ifOperStatus = DOWN - check power to determine cause
+                    } elseif (preg_match('/\b(1|up)\b/', (string) $statusValue)) {
                         if (!$rxValid && !$txValid) {
-                            $statusValue = '5'; // powerdown - ONU has no power (dying gasp)
+                            $statusValue = '5';
                         } elseif (!$rxValid || !$txValid) {
-                            $statusValue = '4'; // los - Fiber issue (one power missing)
+                            $statusValue = '4';
                         } elseif ($rxNumeric !== null && $rxNumeric < -2800) {
-                            $statusValue = '4'; // los - RX power too low
+                            $statusValue = '4';
                         } else {
-                            $statusValue = '6'; // dyinggasp - Interface down but power values present
+                            $statusValue = '3';
+                        }
+                    } else {
+                        if (!$rxValid && !$txValid) {
+                            $statusValue = '5';
+                        } elseif (!$rxValid || !$txValid) {
+                            $statusValue = '4';
+                        } elseif ($rxNumeric !== null && $rxNumeric < -2800) {
+                            $statusValue = '4';
+                        } else {
+                            $statusValue = '6';
                         }
                     }
-                    
+
                     $pon_int = $ponNum;
                     $onuid = $ponNum . ':' . $onuId;
                 } elseif ($isC600Series) {
@@ -1649,20 +1698,19 @@ public function getOltPon($id)
 
         // Memeriksa apakah hasil 'oidOnuName' ada dan memprosesnya
                                         if ($result) {
+                                            $hasParsedOnu = false;
                                             foreach ($result as $key => $onuName) {
                 // Memisahkan kunci OID berdasarkan titik (.)
                                                 $parts = explode('.', $key);
 
                                                 if ($isHSGQ) {
-                                                    // HSGQ: Parse IF-MIB ifDescr format "ONU{PON}/{ID}"
-                                                    $ifDescr = str_replace(['STRING: ', '"'], '', $onuName);
-                                                    
-                                                    // Parse "ONU2/1" format to extract PON number
-                                                    if (preg_match('/ONU(\d+)\/(\d+)/', $ifDescr, $matches)) {
-                                                        $ponNum = (int)$matches[1];
+                                                    $parsedOnu = $this->parseHsgqOnuLabel($onuName);
+                                                    if ($parsedOnu) {
+                                                        $ponNum = $parsedOnu['pon'];
                                                         $suffix = $ponNum; // Use PON number as suffix
                                                         $oltPon = $ponNum;  // Direct PON number (1-16)
                                                         $portKey = null;    // Not used for HSGQ
+                                                        $hasParsedOnu = true;
                                                     } else {
                                                         continue; // Skip non-ONU interfaces
                                                     }
@@ -1721,6 +1769,30 @@ public function getOltPon($id)
                                                 ];
                                             }
                                         }
+
+                                            // Fallback: some HSGQ devices expose ONU list on enterprise OID (.50224)
+                                            if ($isHSGQ && !$hasParsedOnu) {
+                                                $legacyOnuNameOid = config('hsgq_oid.oidOnuName') ?: '.1.3.6.1.4.1.50224.3.12.2.1.2';
+                                                $legacyResult = @$snmp->walk($legacyOnuNameOid);
+                                                if (is_array($legacyResult)) {
+                                                    foreach ($legacyResult as $legacyOnuName) {
+                                                        $parsedOnu = $this->parseHsgqOnuLabel($legacyOnuName);
+                                                        if (!$parsedOnu) {
+                                                            continue;
+                                                        }
+
+                                                        $ponNum = $parsedOnu['pon'];
+                                                        $suffix = $ponNum;
+                                                        if (!in_array($suffix, $processedSuffixes)) {
+                                                            $processedSuffixes[] = $suffix;
+                                                            $data[] = [
+                                                                'olt_pon' => $ponNum,
+                                                                'suffix' => $suffix,
+                                                            ];
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         $snmp->close();
                                     } else {
                                         return response()->json(['error' => 'Data OLT tidak ditemukan atau tidak tersedia.'], 500);
@@ -2323,6 +2395,28 @@ public function getOltPon($id)
                                                 $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
                                                 $result = $snmp->walk($oidOnuName);
 
+                                                $hsgqUsingLegacyOnuSource = false;
+                                                if ($isHSGQ) {
+                                                    $hasParsedOnu = false;
+                                                    if (is_array($result)) {
+                                                        foreach ($result as $label) {
+                                                            if ($this->parseHsgqOnuLabel($label)) {
+                                                                $hasParsedOnu = true;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    if (!$hasParsedOnu) {
+                                                        $legacyOnuNameOid = config('hsgq_oid.oidOnuName') ?: '.1.3.6.1.4.1.50224.3.12.2.1.2';
+                                                        $legacyResult = @$snmp->walk($legacyOnuNameOid);
+                                                        if (is_array($legacyResult) && count($legacyResult) > 0) {
+                                                            $result = $legacyResult;
+                                                            $hsgqUsingLegacyOnuSource = true;
+                                                        }
+                                                    }
+                                                }
+
                                                 $data = [];
 
         // Memeriksa apakah hasil 'oidOnuName' ada
@@ -2339,13 +2433,12 @@ public function getOltPon($id)
                                                          // Get ifDescr to extract PON/ONU
                                                          $ifDescr = str_replace(['STRING: ', '"'], '', $onuName);
                                                          
-                                                         // Parse "ONU2/1" format
-                                                         if (preg_match('/ONU(\d+)\/(\d+)/', $ifDescr, $matches)) {
-                                                             $ponNum = (int)$matches[1];
-                                                             $onuId = (int)$matches[2];
-                                                         } else {
+                                                         $parsedOnu = $this->parseHsgqOnuLabel($ifDescr);
+                                                         if (!$parsedOnu) {
                                                              continue; // Skip non-ONU interfaces
                                                          }
+                                                         $ponNum = $parsedOnu['pon'];
+                                                         $onuId = $parsedOnu['onu'];
                                                          
                                                          // Filter: only process ONUs on selected PON
                                                          if ($ponNum != $oltPonIndex) {
@@ -2394,12 +2487,17 @@ public function getOltPon($id)
                                                      $customer = $customers->firstWhere('id_onu', "$pon_int:$onuId");
 
                                                      if ($isHSGQ) {
-                                                         // HSGQ: Use IF-MIB ifOperStatus (1=up, 2=down)
-                                                         $hasilStatusRaw = $this->safeSnmpGet($snmp, $oidOnuStatus.'.'.$ifIndex);
+                                                         // HSGQ: if source is legacy .50224, IF-MIB ifIndex usually doesn't match ONU rows.
+                                                         $hasilStatusRaw = '';
+                                                         if (!$hsgqUsingLegacyOnuSource) {
+                                                             $hasilStatusRaw = $this->safeSnmpGet($snmp, $oidOnuStatus.'.'.$ifIndex);
+                                                         }
+
+                                                         $hsgqMetricOid = $hsgqUsingLegacyOnuSource ? (config('hsgq_oid') ?: $zteoid) : $zteoid;
                                                          
                                                          // Check power values to determine actual ONU state
-                                                         $rxPowerCheckOid = $zteoid['oidOnuRxPower'].".$encodedIndex.0.0";
-                                                         $txPowerCheckOid = $zteoid['oidOnuTxPowerOnu'].".$encodedIndex.0.0";
+                                                         $rxPowerCheckOid = ($hsgqMetricOid['oidOnuRxPower'] ?? $zteoid['oidOnuRxPower']).".$encodedIndex.0.0";
+                                                         $txPowerCheckOid = ($hsgqMetricOid['oidOnuTxPowerOnu'] ?? $zteoid['oidOnuTxPowerOnu']).".$encodedIndex.0.0";
                                                          $rxPwrVal = $this->safeSnmpGet($snmp, $rxPowerCheckOid);
                                                          $txPwrVal = $this->safeSnmpGet($snmp, $txPowerCheckOid);
                                                          
@@ -2411,7 +2509,18 @@ public function getOltPon($id)
                                                              $rxPwrNum = (int)$rxM[0];
                                                          }
                                                          
-                                                         if (preg_match('/\b(1|up)\b/', $hasilStatusRaw)) {
+                                                         if ($hsgqUsingLegacyOnuSource) {
+                                                             // Legacy .50224 source: classify by optics only.
+                                                             if (!$rxPwrValid && !$txPwrValid) {
+                                                                 $hasilStatus = '5'; // powerdown
+                                                             } elseif (!$rxPwrValid || !$txPwrValid) {
+                                                                 $hasilStatus = '4'; // los
+                                                             } elseif ($rxPwrNum !== null && $rxPwrNum < -2800) {
+                                                                 $hasilStatus = '4'; // los - RX too weak
+                                                             } else {
+                                                                 $hasilStatus = '3'; // working
+                                                             }
+                                                         } elseif (preg_match('/\b(1|up)\b/', (string) $hasilStatusRaw)) {
                                                              // ifOperStatus = UP
                                                              if (!$rxPwrValid && !$txPwrValid) {
                                                                  $hasilStatus = '5'; // powerdown
@@ -2450,16 +2559,17 @@ public function getOltPon($id)
                                                          // HSGQ GPON: Enterprise OIDs
                                                          // Details: .50224.3.12.2.1.{field}.{hexIndex}
                                                          // Optics: .50224.3.12.3.1.{field}.{hexIndex}.0.0 (active) or .65535.65535 (offline)
-                                                         $onuUptime = $zteoid['oidOnuUptime'].".$encodedIndex"; // Field 21: Timeticks
-                                                         $rxPowerOid = $zteoid['oidOnuRxPower'].".$encodedIndex.0.0"; // Add subindex .0.0
-                                                         $txPowerOid = $zteoid['oidOnuTxPowerOnu'].".$encodedIndex.0.0"; // TX Power ONU
+                                                         $hsgqDetailOid = $hsgqUsingLegacyOnuSource ? (config('hsgq_oid') ?: $zteoid) : $zteoid;
+                                                         $onuUptime = ($hsgqDetailOid['oidOnuUptime'] ?? $zteoid['oidOnuUptime']).".$encodedIndex"; // Field 21: Timeticks
+                                                         $rxPowerOid = ($hsgqDetailOid['oidOnuRxPower'] ?? $zteoid['oidOnuRxPower']).".$encodedIndex.0.0"; // Add subindex .0.0
+                                                         $txPowerOid = ($hsgqDetailOid['oidOnuTxPowerOnu'] ?? $zteoid['oidOnuTxPowerOnu']).".$encodedIndex.0.0"; // TX Power ONU
                                                          $onuLastOffline = null; // Not available
                                                          $onuLastOnline = null; // Not available
-                                                         $onuModel = $zteoid['oidOnuModel'].".$encodedIndex";
-                                                         $onuDistance = $zteoid['oidOnuDistance'].".$encodedIndex.0.0"; // Add subindex
-                                                         $onuSn = $zteoid['oidOnuSn'].".$encodedIndex";
-                                                         $onuNameOid = $zteoid['oidOnuName'].".$encodedIndex"; // Enterprise OID for name
-                                                         $onuVendorOid = $zteoid['oidOnuVendor'].".$encodedIndex" ?? null;
+                                                         $onuModel = ($hsgqDetailOid['oidOnuModel'] ?? $zteoid['oidOnuModel']).".$encodedIndex";
+                                                         $onuDistance = ($hsgqDetailOid['oidOnuDistance'] ?? $zteoid['oidOnuDistance']).".$encodedIndex.0.0"; // Add subindex
+                                                         $onuSn = ($hsgqDetailOid['oidOnuSn'] ?? $zteoid['oidOnuSn']).".$encodedIndex";
+                                                         $onuNameOid = ($hsgqDetailOid['oidOnuName'] ?? $zteoid['oidOnuName']).".$encodedIndex"; // Enterprise OID for name
+                                                         $onuVendorOid = ($hsgqDetailOid['oidOnuVendor'] ?? $zteoid['oidOnuVendor']).".$encodedIndex" ?? null;
                                                          $OltRxPowerOid = null; // Not available
                                                      } elseif ($isC600Series) {
                                                          // C620: Branch .500 uses encoded index
@@ -3867,7 +3977,7 @@ public function coba($host, $community)
             if ($ifDescrWalk) {
                 foreach ($ifDescrWalk as $oid => $val) {
                     $desc = str_replace(['STRING: ', '"'], '', $val);
-                    if (preg_match('/ONU' . $ponNum . '\/' . $onuIdNum . '$/', $desc)) {
+                    if (preg_match('/(ONU|ONT)\s*0*' . $ponNum . '\/\s*0*' . $onuIdNum . '$/i', $desc)) {
                         $parts = explode('.', $oid);
                         $ifIndex = (int)end($parts);
                         break;
@@ -3923,6 +4033,36 @@ public function coba($host, $community)
             $onuSnAscii = $this->convertMacToAscii($onuSnRaw);
             $onuDistanceValue = str_replace(['INTEGER: ', '"'], "", $this->safeSnmpGet($snmp, $onuDistance));
             $onUptimeValue = str_replace(['Timeticks:', '"'], "", $this->safeSnmpGet($snmp, $onuUptime));
+
+            // Fallback for HSGQ variants that still store ONU details on legacy .50224 branch.
+            if (empty($onuNameValue) || strtoupper($onuNameValue) === 'N/A' || str_contains($onuNameValue, 'No Such')) {
+                $legacyHsgq = config('hsgq_oid') ?: [];
+                if (!empty($legacyHsgq)) {
+                    if (!empty($legacyHsgq['oidOnuName'])) {
+                        $onuNameValue = str_replace(['STRING: ', '"'], "", $this->safeSnmpGet($snmp, $legacyHsgq['oidOnuName'] . "." . $encodedIndex));
+                    }
+                    if (!empty($legacyHsgq['oidOnuModel'])) {
+                        $onuModelValue = str_replace(['STRING: ', '"'], "", $this->safeSnmpGet($snmp, $legacyHsgq['oidOnuModel'] . "." . $encodedIndex));
+                    }
+                    if (!empty($legacyHsgq['oidOnuSn'])) {
+                        $onuSnRaw = str_replace(['Hex-STRING: ', 'STRING: ', '"'], "", $this->safeSnmpGet($snmp, $legacyHsgq['oidOnuSn'] . "." . $encodedIndex));
+                        $onuSnAscii = $this->convertMacToAscii($onuSnRaw);
+                    }
+
+                    if ((!$rxPowerValue || str_contains($rxPowerValue, 'No Such')) && !empty($legacyHsgq['oidOnuRxPower'])) {
+                        $rxPowerValue = $this->safeSnmpGet($snmp, $legacyHsgq['oidOnuRxPower'] . "." . $encodedIndex . '.0.0');
+                        if ($rxPowerValue && preg_match('/-?\d+/', $rxPowerValue, $rxM)) {
+                            $rxNumeric = (int)$rxM[0];
+                        }
+                    }
+                    if ((!$txPowerValue || str_contains($txPowerValue, 'No Such')) && !empty($legacyHsgq['oidOnuTxPowerOnu'])) {
+                        $txPowerValue = $this->safeSnmpGet($snmp, $legacyHsgq['oidOnuTxPowerOnu'] . "." . $encodedIndex . '.0.0');
+                        if ($txPowerValue && preg_match('/-?\d+/', $txPowerValue, $txM)) {
+                            $txNumeric = (int)$txM[0];
+                        }
+                    }
+                }
+            }
 
             // Calculate power in dBm (HSGQ: value / 100)
             $rxDbm = ($rxNumeric !== null) ? round($rxNumeric / $powerDivisor, 2) : null;

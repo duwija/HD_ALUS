@@ -16,6 +16,8 @@ if (!function_exists('get_olt_oid_config')) {
         $oltVendor = strtolower($olt->vendor ?? '');
         $oltType = strtolower($olt->type ?? '');
         $oltName = strtolower($olt->name ?? '');
+        $isHsgqG02id = str_contains($oltType, 'g02id') || str_contains($oltType, 'g-02id') ||
+                   str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
         
         // CDATA Detection
         if (str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd')) {
@@ -25,6 +27,11 @@ if (!function_exists('get_olt_oid_config')) {
         
         // HSGQ Detection (EPON vs GPON)
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
+            // HSGQ-G02ID family (uses .3320 branch)
+            if ($isHsgqG02id) {
+                if (config('hsgq_g02id_oid')) return config('hsgq_g02id_oid');
+                \Log::warning("HSGQ-G02ID OLT detected but config/hsgq_g02id_oid.php not found");
+            }
             // Check if EPON
             if (str_contains($oltType, 'epon') || str_contains($oltName, 'epon')) {
                 if (config('hsgq_epon_oid')) return config('hsgq_epon_oid');
@@ -68,12 +75,17 @@ if (!function_exists('get_olt_frameslotport_config')) {
         $oltVendor = strtolower($olt->vendor ?? '');
         $oltType = strtolower($olt->type ?? '');
         $oltName = strtolower($olt->name ?? '');
+        $isHsgqG02id = str_contains($oltType, 'g02id') || str_contains($oltType, 'g-02id') ||
+                   str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
         
         if (str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd')) {
             if (config('cdata_frameslotportid')) return config('cdata_frameslotportid');
         }
         
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
+            if ($isHsgqG02id) {
+                if (config('hsgq_frameslotportid')) return config('hsgq_frameslotportid');
+            }
             // Check if EPON
             if (str_contains($oltType, 'epon') || str_contains($oltName, 'epon')) {
                 if (config('hsgq_epon_frameslotportid')) return config('hsgq_epon_frameslotportid');
@@ -108,8 +120,13 @@ if (!function_exists('get_olt_status_config')) {
         $oltVendor = strtolower($olt->vendor ?? '');
         $oltType = strtolower($olt->type ?? '');
         $oltName = strtolower($olt->name ?? '');
+        $isHsgqG02id = str_contains($oltType, 'g02id') || str_contains($oltType, 'g-02id') ||
+                   str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
         
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
+            if ($isHsgqG02id) {
+                if (config('hsgq_g02id_onustatus')) return config('hsgq_g02id_onustatus');
+            }
             // Check if EPON
             if (str_contains($oltType, 'epon') || str_contains($oltName, 'epon')) {
                 if (config('hsgq_epon_onustatus')) return config('hsgq_epon_onustatus');
@@ -148,8 +165,13 @@ if (!function_exists('get_olt_vendor')) {
         $oltVendor = strtolower($olt->vendor ?? '');
         $oltType = strtolower($olt->type ?? '');
         $oltName = strtolower($olt->name ?? '');
+        $isHsgqG02id = str_contains($oltType, 'g02id') || str_contains($oltType, 'g-02id') ||
+                   str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
         
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
+            if ($isHsgqG02id) {
+                return 'HSGQ G02ID';
+            }
             if (str_contains($oltType, 'epon') || str_contains($oltName, 'epon')) {
                 return 'HSGQ EPON';
             }
