@@ -8,7 +8,7 @@
 
 
  var table = $('#table-distpoint-list').DataTable({
-  "responsive": true,
+  "responsive": false,
   "autoWidth": false,
   "searching": false,
   "language": {

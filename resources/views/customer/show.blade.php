@@ -342,29 +342,34 @@
 </tr>
 </tbody>
 </table>
-<div class="card-footer col-md-12 mt-5 mb-5">
- <a href="/customer/{{ $customer->id }}/edit" title="edit" class="btn btn-primary btn-sm "> <i class="fa fa-edit">  </i> Edit </a>
- <a href="/customer/log/{{ $customer->id }}" title="log" class="btn btn-info btn-sm "> <i class="fa fa-history">  </i> log </a>
- <button type="button" class="btn btn-warning btn-sm" data-toggle="modal" data-target="#modal-reset-password" title="Reset Password Portal"> <i class="fas fa-key"></i> Reset Password </button>
- <button type="button" class="{{-- float-right  --}}btn bg-success btn-sm" data-toggle="modal" data-target="#modal-wa"> <i class="fab fa-whatsapp">  </i> WA</button>
- @if($customer->fcm_token || $customer->app_token)
- <button type="button" class="btn btn-danger btn-sm" data-toggle="modal" data-target="#modal-app-logout" title="Logout Aplikasi Mobile">
-   <i class="fas fa-mobile-alt mr-1"></i><i class="fas fa-sign-out-alt mr-1"></i> Logout App
- </button>
- @else
- <button type="button" class="btn btn-secondary btn-sm" disabled title="Customer tidak login di aplikasi">
-   <i class="fas fa-mobile-alt mr-1"></i> Tidak Login App
- </button>
- @endif
+<div class="card-footer col-md-12 mt-4 mb-4 px-0">
+  <div class="d-flex flex-wrap justify-content-between align-items-start" style="gap:14px;">
+    <div class="d-flex flex-wrap" style="gap:8px;">
+      <a href="/customer/{{ $customer->id }}/edit" title="edit" class="btn btn-primary btn-sm"> <i class="fa fa-edit"></i> Edit </a>
+      <a href="/customer/log/{{ $customer->id }}" title="log" class="btn btn-info btn-sm"> <i class="fa fa-history"></i> log </a>
+      <button type="button" class="btn btn-warning btn-sm" data-toggle="modal" data-target="#modal-reset-password" title="Reset Password Portal"> <i class="fas fa-key"></i> Reset Password </button>
+      <button type="button" class="btn bg-success btn-sm" data-toggle="modal" data-target="#modal-wa"> <i class="fab fa-whatsapp"></i> WA</button>
+      @if($customer->fcm_token || $customer->app_token)
+      <button type="button" class="btn btn-danger btn-sm" data-toggle="modal" data-target="#modal-app-logout" title="Logout Aplikasi Mobile">
+        <i class="fas fa-mobile-alt mr-1"></i><i class="fas fa-sign-out-alt mr-1"></i> Logout App
+      </button>
+      @else
+      <button type="button" class="btn btn-secondary btn-sm" disabled title="Customer tidak login di aplikasi">
+        <i class="fas fa-mobile-alt mr-1"></i> Tidak Login App
+      </button>
+      @endif
+    </div>
 
- @if (in_array($customer->status_name->name, ['Inactive', 'Potensial']))
- <button type="button" class="btn btn-danger btn-sm float-right"
-   onclick="confirmDeleteCustomer({{ $customer->id }})">
-   <i class="fa fa-times"></i> Delete
- </button>
-@else
-<button title="Delete" type="button" disabled class="btn btn-danger btn-sm float-right"> <i class="fa fa-times"> </i> Delete </button>
-@endif
+    <div class="d-flex flex-wrap" style="gap:8px;">
+      @if (in_array($customer->status_name->name, ['Inactive', 'Potensial']))
+      <button type="button" class="btn btn-danger btn-sm" onclick="confirmDeleteCustomer({{ $customer->id }})">
+        <i class="fa fa-times"></i> Delete
+      </button>
+      @else
+      <button title="Delete" type="button" disabled class="btn btn-danger btn-sm"> <i class="fa fa-times"></i> Delete </button>
+      @endif
+    </div>
+  </div>
 
 <!-- Modal Konfirmasi Delete Customer -->
 <div class="modal fade" id="modal-confirm-delete" tabindex="-1">
@@ -663,13 +668,13 @@
 @endif
 @endif
 
-<div class="col-md-12 mt-4">
+<div class="col-md-12 mt-5 pt-2">
   <div class="card card-primary card-outline">
-    <div class="card-header d-flex align-items-center">
+    <div class="card-header d-flex flex-wrap align-items-center" style="gap:10px;">
       <h3 class="card-title mb-0">File List</h3>
 
-      <div class="ml-auto">
-        <button type="button" class="btn bg-gradient-primary btn-sm mr-2" data-toggle="modal" data-target="#modal-customerfile">
+      <div class="ml-auto d-flex flex-wrap" style="gap:8px;">
+        <button type="button" class="btn bg-gradient-primary btn-sm" data-toggle="modal" data-target="#modal-customerfile">
           Upload File
         </button>
         <a href="/subscribe/{{ $customer->id }}" class="btn btn-primary btn-sm">
@@ -1728,6 +1733,17 @@ $(document).ready(function() {
               @foreach($customer->router_list ?? [] as $id => $name)
                 <option value="{{ $id }}" {{ $customer->id_distrouter == $id ? 'selected' : '' }}>{{ $name }}</option>
               @endforeach
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="convert_isolir_date">Isolir Date <span class="text-danger">*</span></label>
+            <select name="isolir_date" id="convert_isolir_date" class="form-control" required>
+              <option value="">-- Pilih Tanggal --</option>
+              @for ($day = 0; $day < 30; $day++)
+                @php $formattedDay = sprintf('%02d', $day); @endphp
+                <option value="{{ $day }}" {{ (int) old('isolir_date', $customer->isolir_date ?? 21) === $day ? 'selected' : '' }}>{{ $formattedDay }}</option>
+              @endfor
             </select>
           </div>
 

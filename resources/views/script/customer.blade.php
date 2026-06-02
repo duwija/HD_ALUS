@@ -234,7 +234,7 @@
         },
         options: {
            // indexAxis: 'y', // Membuat chart horizontal
-          responsive: true,
+          responsive: false,
           maintainAspectRatio: false,
           plugins: {
             legend: {

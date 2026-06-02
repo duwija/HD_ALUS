@@ -1258,7 +1258,7 @@
       });
 
       var table = $('#table-sale-customer').DataTable({
-        "responsive": true,
+        "responsive": false,
         "autoWidth": true,
         "searching": true,
         "language": {
@@ -1329,7 +1329,7 @@
 
     var table = $('#table_sales').DataTable({
 
-      "responsive": true,
+      "responsive": false,
       "autoWidth": false,
       "searching": false,
       "language": {
@@ -1490,7 +1490,7 @@
 
 
 
-      "responsive": true,
+      "responsive": false,
       "autoWidth": false,
       dom: 'Bfrtip',
       buttons: [
@@ -1507,7 +1507,7 @@
 
 
 
-      "responsive": true,
+      "responsive": false,
       "autoWidth": false,
       dom: 'Bfrtip',
       buttons: [
@@ -1545,7 +1545,7 @@
       "ordering": true,
       "info": true,
       "autoWidth": false,
-      "responsive": true,
+      "responsive": false,
       dom: 'Bfrtip',
       buttons: [
         'copyHtml5',
@@ -1563,7 +1563,7 @@
       "ordering": true,
       "info": false,
       "autoWidth": false,
-      "responsive": true,
+      "responsive": false,
       dom: 'Bfrtip',
       buttons: [
         'copyHtml5',

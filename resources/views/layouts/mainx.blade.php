@@ -786,7 +786,7 @@
 <script>
   $(function () {
     $("#example1").DataTable({
-      "responsive": true,
+      "responsive": false,
       "autoWidth": false,
     });
     $('#example2').DataTable({
@@ -796,7 +796,7 @@
       "ordering": true,
       "info": true,
       "autoWidth": false,
-      "responsive": true,
+      "responsive": false,
     });
   });
 </script>

@@ -6,7 +6,7 @@
 });
 
  var table = $('#table-invoice').DataTable({
-  "responsive": true,
+  "responsive": false,
   "autoWidth": false,
   "searching": false,
   "language": {

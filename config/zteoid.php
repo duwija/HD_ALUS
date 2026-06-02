@@ -122,6 +122,10 @@ if (!function_exists('get_olt_status_config')) {
         $oltName = strtolower($olt->name ?? '');
         $isHsgqG02id = str_contains($oltType, 'g02id') || str_contains($oltType, 'g-02id') ||
                    str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
+
+        if (str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd')) {
+            if (config('cdata_onustatus')) return config('cdata_onustatus');
+        }
         
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
             if ($isHsgqG02id) {
@@ -167,6 +171,10 @@ if (!function_exists('get_olt_vendor')) {
         $oltName = strtolower($olt->name ?? '');
         $isHsgqG02id = str_contains($oltType, 'g02id') || str_contains($oltType, 'g-02id') ||
                    str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
+
+        if (str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd')) {
+            return 'CDATA';
+        }
         
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
             if ($isHsgqG02id) {

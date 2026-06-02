@@ -4,7 +4,7 @@
  
 
   var table = $('#table-olt-list').DataTable({
-    "responsive": true,
+    "responsive": false,
     "autoWidth": false,
     "searching": false,
     "language": {

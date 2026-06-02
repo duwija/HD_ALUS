@@ -379,7 +379,7 @@ $(document).ready(function() {
  });
 
  var table = $('#bukubesar-table').DataTable({
-   "responsive": true,
+   "responsive": false,
    "autoWidth": false,
        // "searching": true,
    "language": {

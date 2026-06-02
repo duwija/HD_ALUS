@@ -11,15 +11,41 @@ if (!function_exists('get_olt_frameslotport_config')) {
             return config('zte_c300_frameslotportid');
         }
 
-        // Get OLT model/version from name or type
-        $oltModel = strtolower($olt->name ?? '');
+        $oltVendor = strtolower($olt->vendor ?? '');
         $oltType = strtolower($olt->type ?? '');
-        
-        // Detect OLT series based on name or type
+        $oltName = strtolower($olt->name ?? '');
+        $isHsgqG02id = str_contains($oltType, 'g02id') || str_contains($oltType, 'g-02id') ||
+            str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
+
+        // CDATA
+        if (str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd')) {
+            if (config('cdata_frameslotportid')) {
+                return config('cdata_frameslotportid');
+            }
+        }
+
+        // HSGQ
+        if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
+            if ($isHsgqG02id) {
+                if (config('hsgq_frameslotportid')) {
+                    return config('hsgq_frameslotportid');
+                }
+            }
+            if (str_contains($oltType, 'epon') || str_contains($oltName, 'epon')) {
+                if (config('hsgq_epon_frameslotportid')) {
+                    return config('hsgq_epon_frameslotportid');
+                }
+            }
+            if (config('hsgq_frameslotportid')) {
+                return config('hsgq_frameslotportid');
+            }
+        }
+
+        // ZTE C600/C620/C650
         if (
-            str_contains($oltModel, 'c600') || 
-            str_contains($oltModel, 'c620') || 
-            str_contains($oltModel, 'c650') ||
+            str_contains($oltName, 'c600') ||
+            str_contains($oltName, 'c620') ||
+            str_contains($oltName, 'c650') ||
             str_contains($oltType, 'c600') ||
             str_contains($oltType, 'c620') ||
             str_contains($oltType, 'c650') ||
@@ -27,8 +53,8 @@ if (!function_exists('get_olt_frameslotport_config')) {
         ) {
             return config('zte_c600_frameslotportid');
         }
-        
-        // Default to C300/C320 series
+
+        // Default to ZTE C300/C320
         return config('zte_c300_frameslotportid');
     }
 }

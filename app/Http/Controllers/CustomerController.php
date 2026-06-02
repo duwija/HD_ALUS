@@ -167,11 +167,57 @@ class CustomerController extends Controller
             ->orderBy('lost_at', 'desc')
             ->get();
 
+        // Points for map: leads with Potensial status and valid coordinates.
+        $potentialMapPoints = \App\Customer::where('id_status', 1)
+            ->tap($periodFilter)
+            ->whereNotNull('coordinate')
+            ->where('coordinate', '<>', '')
+            ->with(['sale_name'])
+            ->orderBy('customers.created_at', 'desc')
+            ->get()
+            ->map(function ($lead) {
+                $coord = trim((string) ($lead->coordinate ?? ''));
+                if ($coord === '') {
+                    return null;
+                }
+
+                $parts = preg_split('/\s*,\s*/', $coord);
+                if (!is_array($parts) || count($parts) < 2) {
+                    return null;
+                }
+
+                $lat = is_numeric($parts[0]) ? (float) $parts[0] : null;
+                $lng = is_numeric($parts[1]) ? (float) $parts[1] : null;
+                if ($lat === null || $lng === null) {
+                    return null;
+                }
+
+                if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+                    return null;
+                }
+
+                return [
+                    'id' => (int) $lead->id,
+                    'sale_id' => $lead->id_sale ? (int) $lead->id_sale : null,
+                    'name' => (string) ($lead->name ?? '-'),
+                    'phone' => (string) ($lead->phone ?? '-'),
+                    'address' => (string) ($lead->address ?? '-'),
+                    'lead_source' => (string) ($lead->lead_source ?? '-'),
+                    'sale' => (string) ($lead->sale_name->name ?? 'Unassigned'),
+                    'created_at' => optional($lead->created_at)->format('d M Y H:i') ?? '-',
+                    'lat' => $lat,
+                    'lng' => $lng,
+                    'detail_url' => '/customer/' . $lead->id,
+                ];
+            })
+            ->filter()
+            ->values();
+
         return view('marketing.lead-summary', compact(
             'start', 'end', 'filterSale', 'allSales',
             'totalLeads', 'totalInprogress', 'totalConverted', 'totalLost',
             'pctInprogress', 'pctConverted', 'pctLost',
-            'salesPerf', 'inprogressLeads', 'lostLeads'
+            'salesPerf', 'inprogressLeads', 'lostLeads', 'potentialMapPoints'
         ));
     }
     /**
@@ -1437,6 +1483,9 @@ public function table_invoice(Request $request)
             'npwp'  => 'nullable',
             'tax' => $isPotensial ? 'nullable|numeric' : 'required|numeric',
             'billing_start' => $isPotensial ? 'nullable|date' : 'required|date',
+            'isolir_date' => $isPotensial
+                ? ['nullable', 'regex:/^([0-9]|[12][0-9])$/']
+                : ['required', 'regex:/^([0-9]|[12][0-9])$/'],
             'id_olt' => $isPotensial ? 'nullable|integer' : 'required|integer',
             'id_distpoint' => $isPotensial ? 'nullable|integer' : 'required|integer',
             'id_distrouter' => $isPotensial ? 'nullable|integer' : 'required|integer',
@@ -1450,6 +1499,7 @@ public function table_invoice(Request $request)
             'phone.digits_between' => 'Nomor telepon hanya boleh berisi angka (6-15 digit), tanpa tanda + atau spasi.',
             'phone.required'       => 'Nomor telepon wajib diisi.',
             'email.email'          => 'Format email tidak valid.',
+            'isolir_date.regex'    => 'Tanggal Isolir harus antara 00 sampai 29.',
         ]);
 
         // Set default values for optional fields (only for Potensial status)
@@ -1459,6 +1509,9 @@ public function table_invoice(Request $request)
             }
             if (empty($request->billing_start)) {
                 $request->merge(['billing_start' => date('Y-m-d')]);
+            }
+            if (empty($request->isolir_date)) {
+                $request->merge(['isolir_date' => 21]);
             }
         }
 
@@ -3275,8 +3328,11 @@ public function convertToActive(Request $request, $id)
     $request->validate([
         'id_plan' => 'required|integer|exists:plans,id',
         'id_distrouter' => 'required|integer|exists:distrouters,id',
+        'isolir_date' => ['required', 'regex:/^([0-9]|[12][0-9])$/'],
         'id_olt' => 'nullable|integer|exists:olts,id',
         'id_distpoint' => 'nullable|integer|exists:distpoints,id',
+    ], [
+        'isolir_date.regex' => 'Tanggal Isolir harus antara 00 sampai 29.',
     ]);
 
     try {
@@ -3291,6 +3347,7 @@ public function convertToActive(Request $request, $id)
         $customer->id_status = 2; // Active
         $customer->id_plan = $request->id_plan;
         $customer->id_distrouter = $request->id_distrouter;
+        $customer->isolir_date = $request->isolir_date;
         
         if ($request->id_olt) {
             $customer->id_olt = $request->id_olt;
@@ -3340,6 +3397,7 @@ public function convertToActive(Request $request, $id)
             'id_status'    => 2,
             'id_plan'      => $request->id_plan,
             'id_distrouter'=> $request->id_distrouter,
+            'isolir_date'  => $request->isolir_date,
             'converted_at' => now(),
             'converted_by' => auth()->id(),
             // bersihkan lost jika pernah ditandai gagal
@@ -3364,6 +3422,7 @@ public function convertToActive(Request $request, $id)
                 'Status'  => ['old' => 'Potensial', 'new' => 'Active'],
                 'Plan'    => ['old' => '-', 'new' => $planName],
                 'Router'  => ['old' => '-', 'new' => $routerName],
+                'Tanggal Isolir' => ['old' => '-', 'new' => sprintf('%02d', (int) $request->isolir_date)],
             ]),
         ]);
 

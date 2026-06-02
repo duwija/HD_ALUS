@@ -216,7 +216,7 @@ $('#jurnal').click(function() {
 });
 
 var table = $('#jurnal-table').DataTable({
-  "responsive": true,
+  "responsive": false,
   "autoWidth": false,
   "language": {
     "processing": "<span class='fa-stack fa-lg'>\n\

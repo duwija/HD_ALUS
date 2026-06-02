@@ -11,7 +11,7 @@
 
 
     var table = $('#table-unpaid-customer').DataTable({
-      "responsive": true,
+      "responsive": false,
       "autoWidth": false,
       "searching": false,
       "language": {

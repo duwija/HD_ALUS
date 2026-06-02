@@ -423,7 +423,7 @@ $('#getOnu').click(function() {
 
   // ──────────────────────────────────────────────
   // Search ONU by Name/SN across all PONs of this OLT
-  // (Backend: POST /olt/onu-search, supports ZTE C600/C620/C650)
+  // (Backend: POST /olt/onu-search, supports ZTE + HSGQ)
   // ──────────────────────────────────────────────
   function escapeHtml(str) {
     return String(str ?? '')
@@ -822,7 +822,7 @@ $('#getOnu').click(function() {
             ]
           },
           options: {
-            responsive: true,
+            responsive: false,
             maintainAspectRatio: false,
             plugins: {
               legend: { labels: { color: dmThemeColors().text } },
@@ -1030,7 +1030,7 @@ $('#getOnu').click(function() {
 
 
   // var table = $('#onu-table').DataTable({
-  //   "responsive": true,
+  //   "responsive": false,
   //   "autoWidth": false,
   //   "searching": false,
   //   "language": {
@@ -1089,7 +1089,7 @@ $('#getOnu').click(function() {
 
 
 var table = $('#table-onu-unconfig').DataTable({
-  "responsive": true,
+  "responsive": false,
   "autoWidth": false,
   "searching": false,
   "language": {

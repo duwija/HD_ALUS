@@ -28,7 +28,7 @@
 
 
   var table = $('#table-groupticket-list').DataTable({
-    "responsive": true,
+    "responsive": false,
     "autoWidth": false,
     "searching": false,
     "language": {

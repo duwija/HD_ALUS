@@ -470,7 +470,7 @@ $(document).ready(function() {
             ]
         },
         options: {
-            responsive: true,
+            responsive: false,
             maintainAspectRatio: false,
             interaction: {
                 mode: 'index',
@@ -519,7 +519,7 @@ $(document).ready(function() {
 
     // Initialize DataTable
     var table = $('#table-transaction-list').DataTable({
-        "responsive": true,
+        "responsive": false,
         "autoWidth": false,
         "searching": false,
         "language": {

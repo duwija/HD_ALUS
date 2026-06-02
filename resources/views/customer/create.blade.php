@@ -264,6 +264,20 @@
         </div>
       </div>
 
+      <div class="form-group col-md-2" id="isolir-date-group" style="display: none;">
+        <label for="isolir_date">Isolir Date <span class="text-danger" id="isolir-required" style="display: none;">*</span></label>
+        <select name="isolir_date" id="isolir_date" class="form-control select2" style="width: 100%;">
+          <option value="">-- Pilih Tanggal --</option>
+          @for ($day = 0; $day < 30; $day++)
+            @php $formattedDay = sprintf('%02d', $day); @endphp
+            <option value="{{ $day }}" {{ (int) old('isolir_date', 21) === $day ? 'selected' : '' }}>{{ $formattedDay }}</option>
+          @endfor
+        </select>
+        @error('isolir_date')
+        <div class="error invalid-feedback d-block">{{ $message }}</div>
+        @enderror
+      </div>
+
       <div class="form-group col-md-3">
         <label for="id_olt">OLT <span class="text-danger" id="olt-required" style="display: none;">*</span></label>
         <select name="id_olt" id="id_olt" class="form-control select2" style="width: 100%;">
@@ -454,20 +468,34 @@
         // Make fields required
         $('#tax').attr('required', true);
         $('#billing_start').attr('required', true);
+        $('#isolir_date').attr('required', true);
         $('#id_olt').attr('required', true);
         $('#id_distpoint').attr('required', true);
         $('#id_distrouter').attr('required', true);
         // Show asterisk
-        $('#tax-required, #billing-required, #olt-required, #distpoint-required, #distrouter-required').show();
+        $('#tax-required, #billing-required, #isolir-required, #olt-required, #distpoint-required, #distrouter-required').show();
       } else {
         // Make fields optional
         $('#tax').removeAttr('required');
         $('#billing_start').removeAttr('required');
+        $('#isolir_date').removeAttr('required');
         $('#id_olt').removeAttr('required');
         $('#id_distpoint').removeAttr('required');
         $('#id_distrouter').removeAttr('required');
         // Hide asterisk
-        $('#tax-required, #billing-required, #olt-required, #distpoint-required, #distrouter-required').hide();
+        $('#tax-required, #billing-required, #isolir-required, #olt-required, #distpoint-required, #distrouter-required').hide();
+      }
+    }
+
+    function toggleIsolirDateField(isPotensial) {
+      if (isPotensial) {
+        $('#isolir-date-group').hide();
+        $('#isolir_date').removeAttr('required');
+        $('#isolir-required').hide();
+      } else {
+        $('#isolir-date-group').show();
+        $('#isolir_date').attr('required', true);
+        $('#isolir-required').show();
       }
     }
     
@@ -482,6 +510,7 @@
         $('#show-optional-fields').prop('checked', false);
         // Make optional fields NOT required
         toggleOptionalFieldsRequired(false);
+        toggleIsolirDateField(true);
       } else { // Active, Inactive, Block, dll
         // Hide lead fields
         $('#lead-fields').slideUp(300);
@@ -490,6 +519,7 @@
         $('#optional-fields').slideDown(300);
         // Make optional fields REQUIRED
         toggleOptionalFieldsRequired(true);
+        toggleIsolirDateField(false);
       }
     });
 
@@ -508,11 +538,13 @@
       $('#optional-fields-toggle-wrapper').show();
       $('#optional-fields').hide();
       toggleOptionalFieldsRequired(false);
+      toggleIsolirDateField(true);
     } else { // Status lain
       $('#lead-fields').hide();
       $('#optional-fields-toggle-wrapper').hide();
       $('#optional-fields').show();
       toggleOptionalFieldsRequired(true);
+      toggleIsolirDateField(false);
     }
   });
 

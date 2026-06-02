@@ -5,7 +5,7 @@
   });
 
     var table = $('#table-isolir-customer').DataTable({
-        "responsive": true,
+        "responsive": false,
         "autoWidth": false,
         "searching": true,
         "language": {

@@ -4,7 +4,7 @@
 
 
   var table = $('#table-merchant-list').DataTable({
-    "responsive": true,
+    "responsive": false,
     "autoWidth": false,
     "searching": true,
     "language": {

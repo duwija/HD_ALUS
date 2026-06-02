@@ -801,7 +801,7 @@ Bootstrap 4
     });
 
       var table = $('#table-customer').DataTable({
-        "responsive": true,
+        "responsive": false,
         "autoWidth": false,
         "searching": false,
         "language": {
@@ -870,7 +870,7 @@ Bootstrap 4
 
       var table = $('#table_sales').DataTable({
          
-        "responsive": true,
+        "responsive": false,
         "autoWidth": false,
         "searching": false,
         "language": {
@@ -998,7 +998,7 @@ Bootstrap 4
 
 
 
-        "responsive": true,
+        "responsive": false,
         "autoWidth": false,
         dom: 'Bfrtip',
         buttons: [
@@ -1034,7 +1034,7 @@ Bootstrap 4
 
 
 
-        "responsive": true,
+        "responsive": false,
         "autoWidth": false,
         dom: 'Bfrtip',
         buttons: [
@@ -1051,7 +1051,7 @@ Bootstrap 4
 
 
 
-        "responsive": true,
+        "responsive": false,
         "autoWidth": false,
         dom: 'Bfrtip',
         buttons: [
@@ -1088,7 +1088,7 @@ Bootstrap 4
         "ordering": true,
         "info": true,
         "autoWidth": false,
-        "responsive": true,
+        "responsive": false,
         dom: 'Bfrtip',
         buttons: [
         'copyHtml5',
@@ -1104,7 +1104,7 @@ Bootstrap 4
         "ordering": true,
         "info": false,
         "autoWidth": false,
-        "responsive": true,
+        "responsive": false,
         dom: 'Bfrtip',
         buttons: [
         'copyHtml5',

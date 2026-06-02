@@ -143,7 +143,7 @@
       }]
     },
     options: {
-      responsive: true,
+      responsive: false,
       plugins: {
         legend: { display: false },
         title: { display: true, text: 'Tren Volume Pembayaran Harian' }

@@ -11,6 +11,7 @@
 
     <!-- /.card-header -->
     <div class="card-body">
+      <div class="table-responsive">
       <table id="onu-table" class="table table-bordered table-striped">
 
         <thead >
@@ -22,6 +23,7 @@
         </thead>
 
       </table>
+      </div>
     </div>
   </div>
 
@@ -37,7 +39,7 @@
 
   $(document).ready(function() {
     var table = $('#onu-table').DataTable({
-      "responsive": true,
+      "responsive": false,
       "autoWidth": false,
       "searching": false,
       "language": {

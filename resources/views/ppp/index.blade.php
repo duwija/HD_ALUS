@@ -82,6 +82,7 @@
       </h3>
     </div>
     <div class="card-body p-0">
+      <div class="table-responsive">
       <table class="table table-sm table-hover table-striped" id="tbl-db">
         <thead class="thead-dark">
           <tr>
@@ -135,6 +136,7 @@
           @endforelse
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -148,6 +150,7 @@
       </h3>
     </div>
     <div class="card-body p-0">
+      <div class="table-responsive">
       <table class="table table-sm table-hover table-striped" id="tbl-file">
         <thead class="thead-dark">
           <tr>
@@ -188,6 +191,7 @@
           @endforeach
         </tbody>
       </table>
+      </div>
     </div>
   </div>
   @endif
@@ -256,7 +260,7 @@ $(function () {
   // DataTable untuk tabel DB
   if ($('#tbl-db tbody tr').length > 1) {
     $('#tbl-db').DataTable({
-      responsive: true,
+      responsive: false,
       pageLength: 25,
       order: [[3, 'asc']],
     });

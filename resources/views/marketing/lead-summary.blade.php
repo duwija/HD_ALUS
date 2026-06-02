@@ -362,6 +362,24 @@
   </div>
   @endif
 
+  {{-- ── POTENTIAL LEADS MAP ───────────────────────────────────────────────────── --}}
+  <div class="card card-outline card-info mb-3">
+    <div class="card-header">
+      <h3 class="card-title">
+        <i class="fas fa-map-marked-alt"></i> Peta Koordinat Lead Potensial
+        <span class="badge badge-info ml-1">{{ isset($potentialMapPoints) ? $potentialMapPoints->count() : 0 }}</span>
+      </h3>
+    </div>
+    <div class="card-body">
+      @if(isset($potentialMapPoints) && $potentialMapPoints->count() > 0)
+        <div id="potentialLeadMap" style="height: 420px; border-radius: 6px; border: 1px solid #dee2e6;"></div>
+        <small class="text-muted d-block mt-2">Klik marker untuk melihat info user. Titik tampil: <span id="mapVisibleCount">0</span></small>
+      @else
+        <div class="text-muted text-center py-4">Tidak ada lead potensial dengan koordinat valid pada periode/filter ini.</div>
+      @endif
+    </div>
+  </div>
+
 </div>
 </section>
 @endsection
@@ -414,5 +432,100 @@
       row.style.display = (!q || name.includes(q) || sales.includes(q)) ? '' : 'none';
     });
   });
+
+  // Potential leads map
+  (function () {
+    const points = @json($potentialMapPoints ?? []);
+    if (!points || !points.length) return;
+
+    const mapEl = document.getElementById('potentialLeadMap');
+    const salesFilterEl = document.getElementById('id_sale');
+    const visibleCountEl = document.getElementById('mapVisibleCount');
+    if (!mapEl) return;
+
+    let map = null;
+    let markerLayer = null;
+
+    function esc(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function filterPointsBySales() {
+      if (!salesFilterEl || !salesFilterEl.value) return points;
+      const selectedSaleId = String(salesFilterEl.value);
+      return points.filter(function (p) {
+        return String(p.sale_id == null ? '' : p.sale_id) === selectedSaleId;
+      });
+    }
+
+    function renderMarkers(filteredPoints) {
+      if (!markerLayer) return;
+
+      markerLayer.clearLayers();
+      const bounds = [];
+
+      filteredPoints.forEach(function (p) {
+        const marker = L.marker([p.lat, p.lng]);
+        bounds.push([p.lat, p.lng]);
+
+        const popup = ''
+          + '<div style="min-width:230px">'
+          + '<div><strong>' + esc(p.name || '-') + '</strong></div>'
+          + '<div><small class="text-muted">Sales:</small> ' + esc(p.sale || '-') + '</div>'
+          + '<div><small class="text-muted">Phone:</small> ' + esc(p.phone || '-') + '</div>'
+          + '<div><small class="text-muted">Source:</small> ' + esc(p.lead_source || '-') + '</div>'
+          + '<div><small class="text-muted">Alamat:</small><br>' + esc(p.address || '-') + '</div>'
+          + '<div><small class="text-muted">Dibuat:</small> ' + esc(p.created_at || '-') + '</div>'
+          + '<div class="mt-1"><a href="' + esc(p.detail_url || '#') + '" class="btn btn-xs btn-primary">Lihat Detail</a></div>'
+          + '</div>';
+
+        marker.bindPopup(popup);
+        markerLayer.addLayer(marker);
+      });
+
+      if (visibleCountEl) {
+        visibleCountEl.textContent = String(filteredPoints.length);
+      }
+
+      if (!map) return;
+      if (bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [20, 20] });
+      } else if (bounds.length === 1) {
+        map.setView(bounds[0], 14);
+      }
+    }
+
+    function initSalesFilter() {
+      if (!salesFilterEl) return;
+      salesFilterEl.addEventListener('change', function () {
+        renderMarkers(filterPointsBySales());
+      });
+    }
+
+    function bootMap() {
+      if (typeof L === 'undefined') {
+        setTimeout(bootMap, 200);
+        return;
+      }
+
+      const first = points[0];
+      map = L.map('potentialLeadMap').setView([first.lat, first.lng], 12);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      markerLayer = L.layerGroup().addTo(map);
+      initSalesFilter();
+      renderMarkers(filterPointsBySales());
+    }
+
+    bootMap();
+  })();
 </script>
 @endsection

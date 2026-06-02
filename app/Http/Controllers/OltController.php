@@ -109,6 +109,15 @@ class OltController extends Controller
             return ['pon' => (int) $m[1], 'onu' => (int) $m[2]];
         }
 
+        // Common variants seen on HSGQ models (including G02ID/EPON style labels).
+        if (preg_match('/(?:ONU|ONT|EPON|GPON)\s*[:#-]?\s*0*(\d+)\s*[:\/-]\s*0*(\d+)/i', $text, $m)) {
+            return ['pon' => (int) $m[1], 'onu' => (int) $m[2]];
+        }
+
+        if (preg_match('/(?:PON|EPON|GPON)\s*0*(\d+)\s*[:\/-]\s*(?:ONU|ONT)?\s*0*(\d+)/i', $text, $m)) {
+            return ['pon' => (int) $m[1], 'onu' => (int) $m[2]];
+        }
+
         return null;
     }
 
@@ -454,6 +463,7 @@ class OltController extends Controller
             $oltName = strtolower($olt->name ?? '');
             
             $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+            $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
             $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                             str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
             
@@ -464,6 +474,87 @@ class OltController extends Controller
             } else {
                 $onuName = $zteoid['oidOnuName'];
                 $onuStatus = $zteoid['oidOnuStatus'];
+            }
+
+            if ($isCDATA) {
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                $rows = $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt);
+
+                $onuCount = count($rows);
+                foreach ($rows as $row) {
+                    $entryBase = [
+                        'onuName' => (string) ($row['name'] ?? ''),
+                        'Id'      => ((string) ($row['pon'] ?? '')) . ':' . ((string) ($row['onu_id'] ?? '')),
+                        'sn'      => (string) ($row['sn'] ?? ''),
+                        'model'   => '',
+                    ];
+
+                    switch ((string) ($row['status'] ?? 'Unknown')) {
+                        case 'working':
+                        case 'online':
+                            $working++;
+                            break;
+                        case 'los':
+                            $los++;
+                            $loslist[] = $entryBase;
+                            break;
+                        case 'powerdown':
+                            $powerdown++;
+                            $powerdownlist[] = $entryBase;
+                            break;
+                        case 'dyinggasp':
+                            $dyinggasp++;
+                            $dyinggasplist[] = $entryBase;
+                            break;
+                        case 'logging':
+                            $logging++;
+                            break;
+                        case 'offline':
+                            $offline++;
+                            $offlinelist[] = $entryBase;
+                            break;
+                        case 'authFailed':
+                            $authFailed++;
+                            break;
+                        case 'syncMib':
+                            $synMib++;
+                            break;
+                        default:
+                            $unknow++;
+                            $unknowlist[] = $entryBase;
+                            break;
+                    }
+                }
+
+                $oltInfo = [
+                    'oltName' => str_replace(['STRING: ', '"'], '', (string) $this->safeSnmpGet($snmp, $oidOltName)),
+                    'oltUptime' => str_replace(['Timeticks: ', '"'], '', (string) $this->safeSnmpGet($snmp, $oidOltUptime)),
+                    'oltVersion' => str_replace(['STRING: ', '"'], '', (string) $this->safeSnmpGet($snmp, $oidOltVersion)),
+                    'oltDesc' => str_replace(['STRING: ', '"'], '', (string) $this->safeSnmpGet($snmp, $oidOltDesc)),
+                    'onuUnConfg' => $onuUncfgValue,
+                    'onuCount' => $onuCount,
+                    'logging' => $logging,
+                    'los' => $los,
+                    'powerdown' => $powerdown,
+                    'synMib' => $synMib,
+                    'working' => $working,
+                    'dyinggasp' => $dyinggasp,
+                    'authFailed' => $authFailed,
+                    'offline' => $offline,
+                    'unknown' => $unknow,
+                ];
+
+                $snmp->close();
+
+                return response()->json([
+                    'success' => true,
+                    'oltInfo' => $oltInfo,
+                    'dyinggasplist' => $dyinggasplist,
+                    'loslist' => $loslist,
+                    'powerdownlist' => $powerdownlist,
+                    'offlinelist' => $offlinelist,
+                    'unknowlist' => $unknowlist,
+                ]);
             }
 
         // Ambil jumlah ONU belum terkonfigurasi
@@ -517,6 +608,8 @@ class OltController extends Controller
             // Keyed by tail "{encodedIndex}.{onuId}" untuk ZTE (HSGQ pakai ifIndex, skip).
             $snByTail    = [];
             $modelByTail = [];
+            $hsgqSnByPonOnu = [];
+            $hsgqModelByPonOnu = [];
             if (!$isHSGQ) {
                 try {
                     $snOid  = $zteoid['oidOnuSn']    ?? null;
@@ -537,6 +630,90 @@ class OltController extends Controller
                             $tail = implode('.', array_slice($p, -2));
                             $val  = preg_replace('/^(STRING|OCTET STRING):\s*/i', '', (string) $v);
                             $modelByTail[$tail] = trim($val, " \t\"'");
+                        }
+                    }
+                } catch (\Exception $e) {
+                    // best-effort, ignore
+                }
+            } else {
+                try {
+                    $hsgqConfigs = [$zteoid];
+                    if ($hsgqUsingLegacyOnuSource) {
+                        $legacyCfg = config('hsgq_oid') ?: [];
+                        if (!empty($legacyCfg)) {
+                            $hsgqConfigs[] = $legacyCfg;
+                        }
+                    }
+
+                    foreach ($hsgqConfigs as $cfg) {
+                        $snOid = $cfg['oidOnuSn'] ?? null;
+                        $mdlOid = $cfg['oidOnuModel'] ?? null;
+
+                        if ($snOid) {
+                            $snRaw = @$snmp->walk($snOid) ?: [];
+                            foreach ($snRaw as $k => $v) {
+                                $parts = array_map('intval', explode('.', (string) $k));
+                                $tail = array_slice($parts, -4);
+                                $decoded = null;
+
+                                // Prefer encoded-index decode, then fallback to plain {pon}.{onu} tail.
+                                foreach (array_reverse($tail) as $cand) {
+                                    $decoded = $this->decodeHsgqPonOnuFromIndex((int) $cand);
+                                    if ($decoded) {
+                                        break;
+                                    }
+                                }
+
+                                if (!$decoded && count($parts) >= 2) {
+                                    $ponTail = (int) $parts[count($parts) - 2];
+                                    $onuTail = (int) $parts[count($parts) - 1];
+                                    if ($ponTail > 0 && $ponTail <= 64 && $onuTail >= 0 && $onuTail <= 1024) {
+                                        $decoded = ['pon' => $ponTail, 'onu' => $onuTail];
+                                    }
+                                }
+
+                                if (!$decoded) {
+                                    continue;
+                                }
+
+                                $val = $this->normalizeOnuSerial($v);
+                                if ($val !== null && $val !== '') {
+                                    $hsgqSnByPonOnu[$decoded['pon'] . ':' . $decoded['onu']] = $val;
+                                }
+                            }
+                        }
+
+                        if ($mdlOid) {
+                            $mdlRaw = @$snmp->walk($mdlOid) ?: [];
+                            foreach ($mdlRaw as $k => $v) {
+                                $parts = array_map('intval', explode('.', (string) $k));
+                                $tail = array_slice($parts, -4);
+                                $decoded = null;
+
+                                foreach (array_reverse($tail) as $cand) {
+                                    $decoded = $this->decodeHsgqPonOnuFromIndex((int) $cand);
+                                    if ($decoded) {
+                                        break;
+                                    }
+                                }
+
+                                if (!$decoded && count($parts) >= 2) {
+                                    $ponTail = (int) $parts[count($parts) - 2];
+                                    $onuTail = (int) $parts[count($parts) - 1];
+                                    if ($ponTail > 0 && $ponTail <= 64 && $onuTail >= 0 && $onuTail <= 1024) {
+                                        $decoded = ['pon' => $ponTail, 'onu' => $onuTail];
+                                    }
+                                }
+
+                                if (!$decoded) {
+                                    continue;
+                                }
+
+                                $val = trim($this->stripSnmpPrefix($v), " \t\"'");
+                                if ($val !== '') {
+                                    $hsgqModelByPonOnu[$decoded['pon'] . ':' . $decoded['onu']] = $val;
+                                }
+                            }
                         }
                     }
                 } catch (\Exception $e) {
@@ -667,8 +844,14 @@ class OltController extends Controller
                         $tailKey = $lastTwo[0] . '.' . $lastTwo[1];
                     }
                 }
-                $snVal    = $snByTail[$tailKey]    ?? '';
-                $modelVal = $modelByTail[$tailKey] ?? '';
+                if ($isHSGQ) {
+                    $ponOnuKey = ($ponNum ?? null) . ':' . ($onuId ?? null);
+                    $snVal = $hsgqSnByPonOnu[$ponOnuKey] ?? '';
+                    $modelVal = $hsgqModelByPonOnu[$ponOnuKey] ?? '';
+                } else {
+                    $snVal = $snByTail[$tailKey] ?? '';
+                    $modelVal = $modelByTail[$tailKey] ?? '';
+                }
 
                 $entryBase = [
                     'onuName' => $onuNameEntry,
@@ -1855,17 +2038,18 @@ public function getOltPon($id)
             $oltName   = strtolower($olt->name ?? '');
 
             $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+            $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
             $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650')
                          || str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
-            $isC300Series = !$isC600Series && !$isHSGQ
+            $isC300Series = !$isC600Series && !$isHSGQ && !$isCDATA
                          && (str_contains($oltType, 'c300') || str_contains($oltType, 'c320')
                           || str_contains($oltName, 'c300') || str_contains($oltName, 'c320')
                           || $oltVendor === 'zte');
 
-            if (!$isC600Series && !$isC300Series) {
+            if (!$isC600Series && !$isC300Series && !$isHSGQ && !$isCDATA) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Search by Name/SN saat ini hanya didukung untuk OLT seri ZTE C300/C320/C600/C620/C650.',
+                    'message' => 'Search by Name/SN saat ini didukung untuk ZTE C300/C320/C600/C620/C650, HSGQ, dan CDATA.',
                     'data'    => [],
                     'total'   => 0,
                 ], 200);
@@ -1877,6 +2061,80 @@ public function getOltPon($id)
             $snmp = new \SNMP(\SNMP::VERSION_2c, $host, $olt->community_ro);
             // NOTE: do NOT use SNMP_VALUE_PLAIN — we need Hex-STRING format for SN decoding.
             $snmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+
+            if ($isHSGQ) {
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                $rows = $this->collectHsgqOnuMetrics($snmp, $zteoid, $ontStatuses, $customers);
+
+                $qLower = mb_strtolower($q);
+                $qUpperHex = strtoupper(preg_replace('/[^a-fA-F0-9]/', '', $q));
+
+                $rows = array_values(array_filter($rows, function ($row) use ($qLower, $qUpperHex) {
+                    $hay = mb_strtolower(implode(' ', [
+                        (string) ($row['name'] ?? ''),
+                        (string) ($row['sn'] ?? ''),
+                        (string) ($row['pon'] ?? ''),
+                        (string) ($row['onu_id'] ?? ''),
+                        (string) ($row['status'] ?? ''),
+                    ]));
+
+                    $matched = (mb_strpos($hay, $qLower) !== false);
+                    if (!$matched && $qUpperHex !== '' && strlen($qUpperHex) >= 4) {
+                        $matched = (strpos(strtoupper((string) ($row['sn'] ?? '')), $qUpperHex) !== false);
+                    }
+                    return $matched;
+                }));
+
+                if (count($rows) > 200) {
+                    $rows = array_slice($rows, 0, 200);
+                }
+
+                $snmp->close();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => count($rows) . ' ONU ditemukan.',
+                    'data'    => $rows,
+                    'total'   => count($rows),
+                ]);
+            }
+
+            if ($isCDATA) {
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                $rows = $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt);
+
+                $qLower = mb_strtolower($q);
+                $qUpperHex = strtoupper(preg_replace('/[^a-fA-F0-9]/', '', $q));
+
+                $rows = array_values(array_filter($rows, function ($row) use ($qLower, $qUpperHex) {
+                    $hay = mb_strtolower(implode(' ', [
+                        (string) ($row['name'] ?? ''),
+                        (string) ($row['sn'] ?? ''),
+                        (string) ($row['pon'] ?? ''),
+                        (string) ($row['onu_id'] ?? ''),
+                        (string) ($row['status'] ?? ''),
+                    ]));
+
+                    $matched = (mb_strpos($hay, $qLower) !== false);
+                    if (!$matched && $qUpperHex !== '' && strlen($qUpperHex) >= 4) {
+                        $matched = (strpos(strtoupper((string) ($row['sn'] ?? '')), $qUpperHex) !== false);
+                    }
+                    return $matched;
+                }));
+
+                if (count($rows) > 200) {
+                    $rows = array_slice($rows, 0, 200);
+                }
+
+                $snmp->close();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => count($rows) . ' ONU ditemukan.',
+                    'data'    => $rows,
+                    'total'   => count($rows),
+                ]);
+            }
 
             $names = @$snmp->walk($zteoid['oidOnuName']) ?: [];
             $sns   = @$snmp->walk($zteoid['oidOnuSn']) ?: [];
@@ -2038,6 +2296,548 @@ public function getOltPon($id)
         return $vendor !== '' ? ($vendor . $serial) : $clean;
     }
 
+    private function parseSnmpIntValue($raw): ?int
+    {
+        if (!preg_match('/-?\d+/', (string) $raw, $m)) {
+            return null;
+        }
+        return (int) $m[0];
+    }
+
+    private function mapOnuStatusText($statusRaw, array $ontStatuses): string
+    {
+        $statusRaw = trim((string) $statusRaw);
+        if ($statusRaw === '') {
+            return 'Unknown';
+        }
+
+        if (isset($ontStatuses[$statusRaw])) {
+            return (string) $ontStatuses[$statusRaw];
+        }
+
+        $num = $this->parseSnmpIntValue($statusRaw);
+        if ($num !== null) {
+            return $ontStatuses[(string) $num]
+                ?? $ontStatuses[$num]
+                ?? $ontStatuses['INTEGER: ' . $num]
+                ?? 'Unknown';
+        }
+
+        return 'Unknown';
+    }
+
+    private function convertOnuPowerToDbm(?int $raw, array $oidConfig, string $type = 'onu_rx'): ?float
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        $convertFn = $oidConfig['convertOpticalPower'] ?? null;
+        if (is_callable($convertFn)) {
+            $converted = $convertFn($raw, $type);
+            if (is_numeric($converted)) {
+                return round((float) $converted, 2);
+            }
+        }
+
+        $divisor = (int) ($oidConfig['powerDivisor'] ?? 0);
+        if ($divisor > 0) {
+            if ($raw === 65535 || $raw === -65535) {
+                return null;
+            }
+            return round($raw / $divisor, 2);
+        }
+
+        if ($raw > 0 && $raw < 65535) {
+            return round(($raw * 0.002) - 30.0, 2);
+        }
+
+        return null;
+    }
+
+    private function normalizeOnuSerial($raw): string
+    {
+        $sn = $this->stripSnmpPrefix($raw);
+        if ($sn === '') {
+            return '';
+        }
+
+        if (preg_match('/^[0-9A-Fa-f]{2}([\s:.-]?[0-9A-Fa-f]{2}){7,}$/', $sn)) {
+            return $this->decodeOnuSnHex($sn);
+        }
+
+        return trim($sn);
+    }
+
+    private function buildHsgqIndexCandidates(int $ifIndex, int $pon, int $onu): array
+    {
+        $candidates = [
+            (string) $ifIndex,
+            $ifIndex . '.0',
+            $ifIndex . '.0.0',
+        ];
+
+        $encoded = encode_hsgq_index($pon, $onu);
+        $candidates[] = (string) $encoded;
+        $candidates[] = $encoded . '.0';
+        $candidates[] = $encoded . '.0.0';
+        $candidates[] = $encoded . '.' . $onu;
+        $candidates[] = $encoded . '.' . $onu . '.1';
+        $candidates[] = $encoded . '.' . $onu . '.0.0';
+
+        if (function_exists('encode_hsgq_epon_index')) {
+            $encodedEpon = encode_hsgq_epon_index($pon, $onu);
+            $candidates[] = (string) $encodedEpon;
+            $candidates[] = $encodedEpon . '.0';
+            $candidates[] = $encodedEpon . '.0.0';
+            $candidates[] = $encodedEpon . '.' . $onu;
+            $candidates[] = $encodedEpon . '.' . $onu . '.1';
+            $candidates[] = $encodedEpon . '.' . $onu . '.0.0';
+        }
+
+        return array_values(array_unique($candidates));
+    }
+
+    private function getSnmpWalkValueByCandidates(array $walk, ?string $baseOid, array $candidates)
+    {
+        if (empty($walk) || empty($baseOid)) {
+            return null;
+        }
+
+        foreach ($candidates as $suffix) {
+            $key = $baseOid . '.' . $suffix;
+            if (array_key_exists($key, $walk)) {
+                return $walk[$key];
+            }
+        }
+
+        // Fuzzy fallback for devices that append extra sub-index levels.
+        foreach ($walk as $k => $v) {
+            foreach ($candidates as $suffix) {
+                $s1 = '.' . $suffix;
+                $s2 = '.' . $suffix . '.0';
+                $s3 = '.' . $suffix . '.0.0';
+                if (
+                    str_ends_with((string) $k, $s1) ||
+                    str_ends_with((string) $k, $s2) ||
+                    str_ends_with((string) $k, $s3)
+                ) {
+                    return $v;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function safeSnmpGetByCandidates($snmp, ?string $baseOid, array $candidates)
+    {
+        if (empty($baseOid)) {
+            return null;
+        }
+
+        foreach ($candidates as $suffix) {
+            $oid = $baseOid . '.' . $suffix;
+            $val = $this->safeSnmpGet($snmp, $oid);
+            if ($val !== null && $val !== '' && !str_contains((string) $val, 'No Such')) {
+                return $val;
+            }
+        }
+
+        return null;
+    }
+
+    private function decodeHsgqPonOnuFromIndex(int $index): ?array
+    {
+        if ($index <= 0) {
+            return null;
+        }
+
+        $best = null;
+
+        if (function_exists('decode_hsgq_index')) {
+            $d = decode_hsgq_index($index);
+            if (isset($d['pon'], $d['onu']) && $d['pon'] > 0 && $d['pon'] <= 64 && $d['onu'] >= 0 && $d['onu'] <= 256) {
+                $best = ['pon' => (int) $d['pon'], 'onu' => (int) $d['onu']];
+            }
+        }
+
+        if (function_exists('decode_hsgq_epon_index')) {
+            $d = decode_hsgq_epon_index($index);
+            if (isset($d['pon'], $d['onu']) && $d['pon'] > 0 && $d['pon'] <= 64 && $d['onu'] >= 0 && $d['onu'] <= 1024) {
+                // Prefer EPON mapping when it looks valid, useful for G02ID variants.
+                $best = ['pon' => (int) $d['pon'], 'onu' => (int) $d['onu']];
+            }
+        }
+
+        return $best;
+    }
+
+    private function collectCdataOnuMetrics($snmp, array $oidConfig, array $ontStatuses, $customers, $olt = null): array
+    {
+        $nameOid = $oidConfig['oidOnuName'] ?? null;
+        $statusOid = $oidConfig['oidOnuStatus'] ?? null;
+        $snOid = $oidConfig['oidOnuSn'] ?? null;
+        $onuIdOid = $oidConfig['oidOnuId'] ?? null;
+
+        if (empty($nameOid) || empty($statusOid)) {
+            return [];
+        }
+
+        $nameWalk = @$snmp->walk($nameOid) ?: [];
+        $statusWalk = @$snmp->walk($statusOid) ?: [];
+        $snWalk = $snOid ? (@$snmp->walk($snOid) ?: []) : [];
+        $onuIdWalk = $onuIdOid ? (@$snmp->walk($onuIdOid) ?: []) : [];
+
+        if (empty($nameWalk)) {
+            return [];
+        }
+
+        $frameslotportid = $olt ? (get_olt_frameslotport_config($olt) ?: []) : [];
+        $rows = [];
+
+        foreach ($nameWalk as $oidKey => $rawName) {
+            $parts = explode('.', (string) $oidKey);
+            if (count($parts) < 3) {
+                continue;
+            }
+
+            $tail = array_slice($parts, -3); // {ponCardSlotId, oltId, linkId}
+            $ponCardSlotId = (string) $tail[0];
+            $linkId = (string) $tail[2];
+            $tailKey = implode('.', $tail);
+
+            $statusRaw = $statusWalk[$statusOid . '.' . $tailKey] ?? null;
+            if ($statusRaw === null) {
+                $statusRaw = $this->safeSnmpGet($snmp, $statusOid . '.' . $tailKey);
+            }
+
+            $statusText = 'Unknown';
+            if ($statusRaw !== null && $statusRaw !== '') {
+                if (isset($ontStatuses[$statusRaw])) {
+                    $statusText = $ontStatuses[$statusRaw];
+                } elseif (preg_match('/(\d+)/', (string) $statusRaw, $m)) {
+                    $statusText = $ontStatuses[$m[1]]
+                        ?? $ontStatuses[(int) $m[1]]
+                        ?? $ontStatuses['INTEGER: ' . $m[1]]
+                        ?? 'Unknown';
+                }
+            }
+
+            $onuIdRaw = $onuIdWalk[$onuIdOid . '.' . $tailKey] ?? null;
+            $onuLogicalId = null;
+            if ($onuIdRaw !== null && preg_match('/(\d+)/', (string) $onuIdRaw, $m)) {
+                $onuLogicalId = (string) ((int) $m[1]);
+            }
+            if ($onuLogicalId === null || $onuLogicalId === '') {
+                $onuLogicalId = $linkId;
+            }
+
+            $nameVal = trim($this->stripSnmpPrefix((string) $rawName), " \t\"'");
+            if ($nameVal === '') {
+                $nameVal = 'LLID-' . $linkId;
+            }
+
+            $snRaw = $snWalk[$snOid . '.' . $tailKey] ?? $rawName;
+            $snVal = trim($this->normalizeOnuSerial((string) $snRaw), " \t\"'");
+
+            $ponLabel = array_search($ponCardSlotId, $frameslotportid, true);
+            if ($ponLabel === false) {
+                $ponLabel = $ponCardSlotId;
+            }
+
+            $customer = $customers ? $customers->firstWhere('id_onu', $ponLabel . ':' . $onuLogicalId) : null;
+
+            $rows[] = [
+                'pon' => (string) $ponLabel,
+                'onu_id' => (string) $onuLogicalId,
+                'sn' => (string) $snVal,
+                'name' => (string) $nameVal,
+                'status' => (string) $statusText,
+                'rx_dbm' => null,
+                'tx_dbm' => null,
+                'distance_m' => null,
+                'customer' => $customer ? ($customer->name ?? '') : '',
+                'customer_id' => $customer ? ($customer->id ?? null) : null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function collectHsgqOnuMetrics($snmp, array $oidConfig, array $ontStatuses, $customers): array
+    {
+        $ifDescrOid = $oidConfig['oidIfDescr'] ?? '.1.3.6.1.2.1.2.2.1.2';
+        $ifOperOid = $oidConfig['oidIfOperStatus'] ?? '.1.3.6.1.2.1.2.2.1.8';
+
+        $ifDescrWalk = @$snmp->walk($ifDescrOid) ?: [];
+        $ifOperWalk = @$snmp->walk($ifOperOid) ?: [];
+
+        $nameOid = $oidConfig['oidOnuName'] ?? null;
+        $snOid = $oidConfig['oidOnuSn'] ?? null;
+        $statusOid = $oidConfig['oidOnuStatus'] ?? null;
+        $rxOid = $oidConfig['oidOnuRxPower'] ?? null;
+        $txOid = $oidConfig['oidOnuTxPowerOnu'] ?? ($oidConfig['oidOnuTxPower'] ?? null);
+        $distOid = $oidConfig['oidOnuDistance'] ?? null;
+
+        $nameWalk = $nameOid ? (@$snmp->walk($nameOid) ?: []) : [];
+        $snWalk = $snOid ? (@$snmp->walk($snOid) ?: []) : [];
+        $statusWalk = $statusOid ? (@$snmp->walk($statusOid) ?: []) : [];
+        $rxWalk = $rxOid ? (@$snmp->walk($rxOid) ?: []) : [];
+        $txWalk = $txOid ? (@$snmp->walk($txOid) ?: []) : [];
+        $distWalk = $distOid ? (@$snmp->walk($distOid) ?: []) : [];
+
+        // Auto-fallback for HSGQ variants (including some G02ID) that expose ONU tables under .50224.
+        $looksEmptyOnuTelemetry = empty($rxWalk) && empty($distWalk) && (empty($statusWalk) || $statusOid === null);
+        if ($looksEmptyOnuTelemetry) {
+            $legacyCfg = config('hsgq_oid') ?: [];
+            $legacyNameOid = $legacyCfg['oidOnuName'] ?? null;
+            if (!empty($legacyNameOid)) {
+                $legacyNameWalk = @$snmp->walk($legacyNameOid) ?: [];
+                $hasOnuLikeLabel = false;
+                if (is_array($legacyNameWalk)) {
+                    foreach ($legacyNameWalk as $legacyVal) {
+                        if ($this->parseHsgqOnuLabel($legacyVal)) {
+                            $hasOnuLikeLabel = true;
+                            break;
+                        }
+                    }
+                }
+
+                if ($hasOnuLikeLabel) {
+                    $nameOid = $legacyCfg['oidOnuName'] ?? $nameOid;
+                    $snOid = $legacyCfg['oidOnuSn'] ?? $snOid;
+                    $rxOid = $legacyCfg['oidOnuRxPower'] ?? $rxOid;
+                    $txOid = ($legacyCfg['oidOnuTxPowerOnu'] ?? ($legacyCfg['oidOnuTxPower'] ?? $txOid));
+                    $distOid = $legacyCfg['oidOnuDistance'] ?? $distOid;
+                    $statusOid = $legacyCfg['oidOnuStatus'] ?? $statusOid;
+
+                    $nameWalk = $legacyNameWalk;
+                    $snWalk = $snOid ? (@$snmp->walk($snOid) ?: []) : [];
+                    $statusWalk = $statusOid ? (@$snmp->walk($statusOid) ?: []) : [];
+                    $rxWalk = $rxOid ? (@$snmp->walk($rxOid) ?: []) : [];
+                    $txWalk = $txOid ? (@$snmp->walk($txOid) ?: []) : [];
+                    $distWalk = $distOid ? (@$snmp->walk($distOid) ?: []) : [];
+                }
+            }
+        }
+
+        // Some HSGQ firmwares put ONU labels in ifDescr, others in ifAlias/onuName.
+        $discoveryWalk = $ifDescrWalk;
+        foreach ($nameWalk as $k => $v) {
+            if (!array_key_exists($k, $discoveryWalk)) {
+                $discoveryWalk[$k] = $v;
+            }
+        }
+
+        $rows = [];
+        $seen = [];
+
+        foreach ($discoveryWalk as $oidKey => $rawLabel) {
+            $parsed = $this->parseHsgqOnuLabel($rawLabel);
+            if (!$parsed) {
+                continue;
+            }
+
+            $parts = explode('.', (string) $oidKey);
+            $ifIndex = (int) end($parts);
+            $pon = (int) $parsed['pon'];
+            $onu = (int) $parsed['onu'];
+            $uniq = $pon . ':' . $onu;
+            if (isset($seen[$uniq])) {
+                continue;
+            }
+            $seen[$uniq] = true;
+
+            $candidates = array_values(array_unique(array_merge(
+                $this->buildHsgqIndexCandidates($ifIndex, $pon, $onu),
+                [
+                    $pon . '.' . $onu,
+                    $pon . '.' . $onu . '.0',
+                    $pon . '.' . $onu . '.1',
+                    $pon . '.' . $onu . '.0.0',
+                ]
+            )));
+
+            $nameRaw = $this->safeSnmpGetByCandidates($snmp, $nameOid, $candidates)
+                ?? $this->getSnmpWalkValueByCandidates($nameWalk, $nameOid, $candidates);
+            $snRaw = $this->safeSnmpGetByCandidates($snmp, $snOid, $candidates)
+                ?? $this->getSnmpWalkValueByCandidates($snWalk, $snOid, $candidates);
+            $statusRaw = $this->safeSnmpGetByCandidates($snmp, $ifOperOid, [(string) $ifIndex])
+                ?? $this->getSnmpWalkValueByCandidates($ifOperWalk, $ifOperOid, [(string) $ifIndex]);
+            if ($statusRaw === null) {
+                $statusRaw = $this->safeSnmpGetByCandidates($snmp, $statusOid, $candidates)
+                    ?? $this->getSnmpWalkValueByCandidates($statusWalk, $statusOid, $candidates);
+            }
+            $rxRaw = $this->safeSnmpGetByCandidates($snmp, $rxOid, $candidates)
+                ?? $this->getSnmpWalkValueByCandidates($rxWalk, $rxOid, $candidates);
+            $txRaw = $this->safeSnmpGetByCandidates($snmp, $txOid, $candidates)
+                ?? $this->getSnmpWalkValueByCandidates($txWalk, $txOid, $candidates);
+            $distRaw = $this->safeSnmpGetByCandidates($snmp, $distOid, $candidates)
+                ?? $this->getSnmpWalkValueByCandidates($distWalk, $distOid, $candidates);
+
+            $rxInt = $this->parseSnmpIntValue($rxRaw);
+            $txInt = $this->parseSnmpIntValue($txRaw);
+            $distInt = $this->parseSnmpIntValue($distRaw);
+
+            $rxDbm = $this->convertOnuPowerToDbm($rxInt, $oidConfig, 'onu_rx');
+            $txDbm = $this->convertOnuPowerToDbm($txInt, $oidConfig, 'onu_tx');
+            $statusText = $this->mapOnuStatusText($statusRaw, $ontStatuses);
+
+            if ($statusText === 'Unknown') {
+                if ($rxDbm !== null || $txDbm !== null) {
+                    $statusText = ($rxDbm !== null && $rxDbm <= -27) ? 'los' : 'working';
+                } else {
+                    $statusText = 'powerdown';
+                }
+            }
+
+            $ponLabel = (string) $pon;
+            $onuIdLabel = (string) $onu;
+            $customer = $customers ? $customers->firstWhere('id_onu', $ponLabel . ':' . $onuIdLabel) : null;
+
+            $rows[] = [
+                'pon' => $ponLabel,
+                'onu_id' => $onuIdLabel,
+                'sn' => $this->normalizeOnuSerial($snRaw),
+                'name' => $this->stripSnmpPrefix($nameRaw ?? $rawLabel),
+                'status' => $statusText,
+                'rx_dbm' => $rxDbm,
+                'tx_dbm' => $txDbm,
+                'distance_m' => ($distInt !== null && $distInt > 0) ? $distInt : null,
+                'customer' => $customer ? ($customer->name ?? '') : '',
+                'customer_id' => $customer ? ($customer->id ?? null) : null,
+            ];
+        }
+
+        // Fallback for models where IF-DESCR label format is not parseable (e.g., some HSGQ-G02ID firmware).
+        // Derive PON/ONU directly from numeric index in status/RX/name OID tails.
+        if (empty($rows)) {
+            $sourceWalk = !empty($statusWalk) ? $statusWalk : (!empty($rxWalk) ? $rxWalk : $nameWalk);
+            foreach ($sourceWalk as $oidKey => $rawVal) {
+                $parts = explode('.', (string) $oidKey);
+                if (count($parts) < 2) {
+                    continue;
+                }
+
+                $tail = array_map('intval', array_slice($parts, -4));
+                $candidateIdx = array_reverse($tail);
+
+                $parsed = null;
+                $baseIdx = null;
+
+                // Some HSGQ-G02ID firmwares expose tails as plain {pon}.{onu}.
+                if (count($parts) >= 2) {
+                    $lastTwoRaw = array_slice($parts, -2);
+                    $ponTail = (int) $lastTwoRaw[0];
+                    $onuTail = (int) $lastTwoRaw[1];
+                    if ($ponTail > 0 && $ponTail <= 64 && $onuTail >= 0 && $onuTail <= 1024) {
+                        $parsed = ['pon' => $ponTail, 'onu' => $onuTail];
+                        $baseIdx = $onuTail;
+                    }
+                }
+
+                foreach ($candidateIdx as $cand) {
+                    if ($parsed) {
+                        break;
+                    }
+                    $d = $this->decodeHsgqPonOnuFromIndex((int) $cand);
+                    if ($d) {
+                        $parsed = $d;
+                        $baseIdx = (int) $cand;
+                        break;
+                    }
+                }
+
+                if (!$parsed || $baseIdx === null) {
+                    continue;
+                }
+
+                $pon = (int) $parsed['pon'];
+                $onu = (int) $parsed['onu'];
+                $uniq = $pon . ':' . $onu;
+                if (isset($seen[$uniq])) {
+                    continue;
+                }
+                $seen[$uniq] = true;
+
+                $ifIndex = $baseIdx;
+                $candidates = array_values(array_unique(array_merge(
+                    $this->buildHsgqIndexCandidates($ifIndex, $pon, $onu),
+                    [
+                        $pon . '.' . $onu,
+                        $pon . '.' . $onu . '.0',
+                        $pon . '.' . $onu . '.1',
+                        $pon . '.' . $onu . '.0.0',
+                    ]
+                )));
+
+                $nameRaw = $this->safeSnmpGetByCandidates($snmp, $nameOid, $candidates)
+                    ?? $this->getSnmpWalkValueByCandidates($nameWalk, $nameOid, $candidates);
+                $snRaw = $this->safeSnmpGetByCandidates($snmp, $snOid, $candidates)
+                    ?? $this->getSnmpWalkValueByCandidates($snWalk, $snOid, $candidates);
+                $statusRaw = $this->safeSnmpGetByCandidates($snmp, $statusOid, $candidates)
+                    ?? $this->getSnmpWalkValueByCandidates($statusWalk, $statusOid, $candidates);
+                if ($statusRaw === null) {
+                    $statusRaw = $this->safeSnmpGetByCandidates($snmp, $ifOperOid, [(string) $ifIndex])
+                        ?? $this->getSnmpWalkValueByCandidates($ifOperWalk, $ifOperOid, [(string) $ifIndex]);
+                }
+                $rxRaw = $this->safeSnmpGetByCandidates($snmp, $rxOid, $candidates)
+                    ?? $this->getSnmpWalkValueByCandidates($rxWalk, $rxOid, $candidates);
+                $txRaw = $this->safeSnmpGetByCandidates($snmp, $txOid, $candidates)
+                    ?? $this->getSnmpWalkValueByCandidates($txWalk, $txOid, $candidates);
+                $distRaw = $this->safeSnmpGetByCandidates($snmp, $distOid, $candidates)
+                    ?? $this->getSnmpWalkValueByCandidates($distWalk, $distOid, $candidates);
+
+                $rxInt = $this->parseSnmpIntValue($rxRaw);
+                $txInt = $this->parseSnmpIntValue($txRaw);
+                $distInt = $this->parseSnmpIntValue($distRaw);
+
+                $rxDbm = $this->convertOnuPowerToDbm($rxInt, $oidConfig, 'onu_rx');
+                $txDbm = $this->convertOnuPowerToDbm($txInt, $oidConfig, 'onu_tx');
+                $statusText = $this->mapOnuStatusText($statusRaw ?? $rawVal, $ontStatuses);
+                if ($statusText === 'Unknown') {
+                    $statusText = ($rxDbm !== null || $txDbm !== null) ? 'working' : 'offline';
+                }
+
+                $ponLabel = (string) $pon;
+                $onuIdLabel = (string) $onu;
+                $customer = $customers ? $customers->firstWhere('id_onu', $ponLabel . ':' . $onuIdLabel) : null;
+
+                $rows[] = [
+                    'pon' => $ponLabel,
+                    'onu_id' => $onuIdLabel,
+                    'sn' => $this->normalizeOnuSerial($snRaw),
+                    'name' => $this->stripSnmpPrefix($nameRaw ?? ''),
+                    'status' => $statusText,
+                    'rx_dbm' => $rxDbm,
+                    'tx_dbm' => $txDbm,
+                    'distance_m' => ($distInt !== null && $distInt > 0) ? $distInt : null,
+                    'customer' => $customer ? ($customer->name ?? '') : '',
+                    'customer_id' => $customer ? ($customer->id ?? null) : null,
+                ];
+            }
+        }
+
+        if (empty($rows)) {
+            Log::warning('[HSGQ collect] Empty ONU metrics', [
+                'ifDescr_count' => count($ifDescrWalk),
+                'ifOper_count' => count($ifOperWalk),
+                'name_count' => count($nameWalk),
+                'status_count' => count($statusWalk),
+                'rx_count' => count($rxWalk),
+                'dist_count' => count($distWalk),
+                'ifDescr_keys_sample' => array_slice(array_keys($ifDescrWalk), 0, 5),
+                'name_keys_sample' => array_slice(array_keys($nameWalk), 0, 5),
+                'status_keys_sample' => array_slice(array_keys($statusWalk), 0, 5),
+                'rx_keys_sample' => array_slice(array_keys($rxWalk), 0, 5),
+                'dist_keys_sample' => array_slice(array_keys($distWalk), 0, 5),
+            ]);
+        }
+
+        return $rows;
+    }
+
     /**
      * Health Dashboard: Top-N ONU dengan RX Power terburuk (paling kecil dBm).
      * Vendor: ZTE C300/C320 dan C600/C620/C650.
@@ -2061,17 +2861,18 @@ public function getOltPon($id)
             $oltName   = strtolower($olt->name ?? '');
 
             $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+            $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
             $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650')
                          || str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
-            $isC300Series = !$isC600Series && !$isHSGQ
+            $isC300Series = !$isC600Series && !$isHSGQ && !$isCDATA
                          && (str_contains($oltType, 'c300') || str_contains($oltType, 'c320')
                           || str_contains($oltName, 'c300') || str_contains($oltName, 'c320')
                           || $oltVendor === 'zte');
 
-            if (!$isC600Series && !$isC300Series) {
+            if (!$isC600Series && !$isC300Series && !$isHSGQ && !$isCDATA) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Top RX dashboard saat ini hanya didukung untuk OLT seri ZTE C300/C320/C600/C620/C650.',
+                    'message' => 'Top RX dashboard saat ini didukung untuk ZTE, HSGQ, dan CDATA (jika OID optics tersedia).',
                     'data'    => [],
                 ], 200);
             }
@@ -2082,6 +2883,61 @@ public function getOltPon($id)
             // 5s per request, 2 retries — needed for C300 with many ONUs.
             $snmp = new \SNMP(\SNMP::VERSION_2c, $host, $olt->community_ro, 5000000, 2);
             $snmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+
+            if ($isHSGQ) {
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                $rows = $this->collectHsgqOnuMetrics($snmp, $zteoid, get_olt_status_config($olt), $customers);
+
+                $rows = array_values(array_filter($rows, function ($row) {
+                    return isset($row['rx_dbm']) && $row['rx_dbm'] !== null;
+                }));
+
+                usort($rows, function ($a, $b) {
+                    return $a['rx_dbm'] <=> $b['rx_dbm'];
+                });
+
+                $totalScanned = count($rows);
+                $top = array_slice($rows, 0, $limit);
+
+                $snmp->close();
+
+                return response()->json([
+                    'success'        => true,
+                    'generated_at'   => now()->toDateTimeString(),
+                    'total_scanned'  => $totalScanned,
+                    'threshold_warn' => -25.0,
+                    'threshold_crit' => -27.0,
+                    'data'           => $top,
+                ]);
+            }
+
+            if ($isCDATA) {
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                $rows = $this->collectCdataOnuMetrics($snmp, $zteoid, get_olt_status_config($olt), $customers, $olt);
+
+                $rows = array_values(array_filter($rows, function ($row) {
+                    return isset($row['rx_dbm']) && $row['rx_dbm'] !== null;
+                }));
+
+                usort($rows, function ($a, $b) {
+                    return $a['rx_dbm'] <=> $b['rx_dbm'];
+                });
+
+                $totalScanned = count($rows);
+                $top = array_slice($rows, 0, $limit);
+
+                $snmp->close();
+
+                return response()->json([
+                    'success'        => true,
+                    'generated_at'   => now()->toDateTimeString(),
+                    'total_scanned'  => $totalScanned,
+                    'threshold_warn' => -25.0,
+                    'threshold_crit' => -27.0,
+                    'data'           => $top,
+                    'message'        => $totalScanned === 0 ? 'OID RX power CDATA belum tersedia pada profil MIB saat ini.' : null,
+                ]);
+            }
 
             $rxWalk    = @$snmp->walk($zteoid['oidOnuRxPower']) ?: [];
             $names     = @$snmp->walk($zteoid['oidOnuName']) ?: [];
@@ -2205,17 +3061,18 @@ public function getOltPon($id)
             $oltName   = strtolower($olt->name ?? '');
 
             $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+            $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
             $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650')
                          || str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
-            $isC300Series = !$isC600Series && !$isHSGQ
+            $isC300Series = !$isC600Series && !$isHSGQ && !$isCDATA
                          && (str_contains($oltType, 'c300') || str_contains($oltType, 'c320')
                           || str_contains($oltName, 'c300') || str_contains($oltName, 'c320')
                           || $oltVendor === 'zte');
 
-            if (!$isC600Series && !$isC300Series) {
+            if (!$isC600Series && !$isC300Series && !$isHSGQ && !$isCDATA) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Distance Map saat ini hanya didukung untuk OLT seri ZTE C300/C320/C600/C620/C650.',
+                    'message' => 'Distance Map saat ini didukung untuk ZTE, HSGQ, dan CDATA (jika OID distance/optics tersedia).',
                     'data'    => [],
                 ], 200);
             }
@@ -2225,6 +3082,109 @@ public function getOltPon($id)
             $host = $olt->ip . ':' . ($olt->snmp_port ?? 161);
             $snmp = new \SNMP(\SNMP::VERSION_2c, $host, $olt->community_ro, 5000000, 2);
             $snmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+
+            if ($isHSGQ) {
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                $rows = $this->collectHsgqOnuMetrics($snmp, $zteoid, get_olt_status_config($olt), $customers);
+
+                $rows = array_values(array_filter($rows, function ($row) {
+                    return isset($row['rx_dbm'], $row['distance_m'])
+                        && $row['rx_dbm'] !== null
+                        && $row['distance_m'] !== null
+                        && $row['distance_m'] > 0;
+                }));
+
+                $sumRx = 0.0;
+                $sumDist = 0;
+                $countHealthy = 0;
+                $countWarn = 0;
+                $countCrit = 0;
+
+                foreach ($rows as $row) {
+                    $rx = (float) $row['rx_dbm'];
+                    $sumRx += $rx;
+                    $sumDist += (int) $row['distance_m'];
+                    if ($rx <= -27) {
+                        $countCrit++;
+                    } elseif ($rx <= -25) {
+                        $countWarn++;
+                    } else {
+                        $countHealthy++;
+                    }
+                }
+
+                $snmp->close();
+
+                $total = count($rows);
+
+                return response()->json([
+                    'success'        => true,
+                    'generated_at'   => now()->toDateTimeString(),
+                    'total'          => $total,
+                    'avg_rx'         => $total > 0 ? round($sumRx / $total, 2) : null,
+                    'avg_dist'       => $total > 0 ? (int) round($sumDist / $total) : null,
+                    'counts'         => [
+                        'healthy'  => $countHealthy,
+                        'warning'  => $countWarn,
+                        'critical' => $countCrit,
+                    ],
+                    'threshold_warn' => -25.0,
+                    'threshold_crit' => -27.0,
+                    'data'           => $rows,
+                ]);
+            }
+
+            if ($isCDATA) {
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                $rows = $this->collectCdataOnuMetrics($snmp, $zteoid, get_olt_status_config($olt), $customers, $olt);
+
+                $rows = array_values(array_filter($rows, function ($row) {
+                    return isset($row['rx_dbm'], $row['distance_m'])
+                        && $row['rx_dbm'] !== null
+                        && $row['distance_m'] !== null
+                        && $row['distance_m'] > 0;
+                }));
+
+                $sumRx = 0.0;
+                $sumDist = 0;
+                $countHealthy = 0;
+                $countWarn = 0;
+                $countCrit = 0;
+
+                foreach ($rows as $row) {
+                    $rx = (float) $row['rx_dbm'];
+                    $sumRx += $rx;
+                    $sumDist += (int) $row['distance_m'];
+                    if ($rx <= -27) {
+                        $countCrit++;
+                    } elseif ($rx <= -25) {
+                        $countWarn++;
+                    } else {
+                        $countHealthy++;
+                    }
+                }
+
+                $snmp->close();
+
+                $total = count($rows);
+
+                return response()->json([
+                    'success'        => true,
+                    'generated_at'   => now()->toDateTimeString(),
+                    'total'          => $total,
+                    'avg_rx'         => $total > 0 ? round($sumRx / $total, 2) : null,
+                    'avg_dist'       => $total > 0 ? (int) round($sumDist / $total) : null,
+                    'counts'         => [
+                        'healthy'  => $countHealthy,
+                        'warning'  => $countWarn,
+                        'critical' => $countCrit,
+                    ],
+                    'threshold_warn' => -25.0,
+                    'threshold_crit' => -27.0,
+                    'data'           => $rows,
+                    'message'        => $total === 0 ? 'OID distance/RX CDATA belum tersedia pada profil MIB saat ini.' : null,
+                ]);
+            }
 
             $rxWalk   = @$snmp->walk($zteoid['oidOnuRxPower']) ?: [];
             $distWalk = @$snmp->walk($zteoid['oidOnuDistance']) ?: [];

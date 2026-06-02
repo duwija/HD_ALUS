@@ -347,13 +347,14 @@
             <div class=" text-sm  p-2 card ">
               <b>Note:</b> {{$suminvoice_number->note}}
             </div>
+            <div class="d-flex flex-wrap align-items-start mt-3" style="gap:8px;">
             @if ($suminvoice_number->payment_status ==0)
 
 
             @if (Auth::user()->privilege == 'admin' OR Auth::user()->privilege =='accounting' )
 
 
-            <button type="button" class="float-right btn p-2  bg-gradient-primary btn-sm btn-primary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
+            <button type="button" class="btn p-2 bg-gradient-primary btn-sm btn-primary" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
 
 
 <!--              <form  action="/suminvoice/{{$suminvoice_number->id }}" method="POST" class="d-inline invoice-cancel" >
@@ -367,17 +368,17 @@
               <button  type="submit"  class="float-left btn p-2  bg-gradient-warning btn-sm btn-warning mr-2  mb-2 "> Cancel </button>
             </form> -->
 
-            <button type="button" class="float-left btn p-2 bg-gradient-warning btn-sm btn-warning mr-2 mb-2" data-toggle="modal" data-target="#cancelModal">
+            <button type="button" class="btn p-2 bg-gradient-warning btn-sm btn-warning" data-toggle="modal" data-target="#cancelModal">
               Cancel
             </button>
             @elseif ( Auth::user()->privilege =='merchant' OR Auth::user()->privilege =='payment')
 
 
             @if ( $current_inv_status == 1)
-            <button type="button" class="float-right btn p-2  bg-gradient-danger btn-sm btn-danger mb-2" data-toggle="modal" >  Masih Ada tagihan yang belum terbayar di bulan sebelumnya </button>
+            <button type="button" class="btn p-2 bg-gradient-danger btn-sm btn-danger" data-toggle="modal" >  Masih Ada tagihan yang belum terbayar di bulan sebelumnya </button>
 
             @else
-            <button type="button" class="float-right btn p-2  bg-gradient-primary btn-sm btn-primary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
+            <button type="button" class="btn p-2 bg-gradient-primary btn-sm btn-primary" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
             @endif
 
 
@@ -388,16 +389,16 @@
             @endif
             @elseif ($suminvoice_number->payment_status ==1)
             @if (Auth::user()->privilege == 'admin' OR Auth::user()->privilege =='accounting' )
-            <button type="button" class="float-left btn p-2 bg-gradient-warning btn-sm btn-warning mr-2 mb-2" data-toggle="modal" data-target="#cancelModal">
+            <button type="button" class="btn p-2 bg-gradient-warning btn-sm btn-warning" data-toggle="modal" data-target="#cancelModal">
               Cancel
             </button>
             @endif
-            <button disabled="" type="button" class="float-right btn p-2 btn-sm btn-secondary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
+            <button disabled="" type="button" class="btn p-2 btn-sm btn-secondary" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
             @else
 <!--             <button type="button" class="float-left btn p-2 bg-gradient-warning btn-sm btn-warning mr-2 mb-2" data-toggle="modal" data-target="#cancelModal">
               Cancel
             </button> -->
-            <button disabled="" type="button" class="float-right btn p-2 btn-sm btn-secondary mb-2" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
+            <button disabled="" type="button" class="btn p-2 btn-sm btn-secondary" data-toggle="modal" data-target="#modal-payment">  + Make Payment </button>
 
 
             @endif 
@@ -406,8 +407,8 @@
 
 
 
-            <a href="{{url('suminvoice').'/' .$invoice->tempcode. '/print'}}" target="_blank" class="btn btn-primary float-left mr-2 ">Print</a>
-            <a href="{{url('suminvoice').'/' .$invoice->tempcode. '/dotmatrix'}}" target="_blank" class="btn btn-primary float-left mr-2">Print Thermal</a>
+            <a href="{{url('suminvoice').'/' .$invoice->tempcode. '/print'}}" target="_blank" class="btn btn-primary">Print</a>
+            <a href="{{url('suminvoice').'/' .$invoice->tempcode. '/dotmatrix'}}" target="_blank" class="btn btn-primary">Print Thermal</a>
 
           <!--   @if (Auth::user()->privilege == 'admin' OR Auth::user()->privilege =='accounting' )
            
@@ -419,10 +420,11 @@
             @endif -->
 
             @if (in_array(Auth::user()->privilege, ['admin', 'accounting', 'marketing']))
-            <button type="button" class="btn btn-success float-left mr-2" onclick="showNotificationOptions('{{ $suminvoice_number->id }}')">
+            <button type="button" class="btn btn-success" onclick="showNotificationOptions('{{ $suminvoice_number->id }}')">
               <i class="fab fa-whatsapp"></i> Send Remainder
             </button>
             @endif
+            </div>
           </div>
         </div>
 

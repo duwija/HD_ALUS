@@ -11,6 +11,7 @@
 
     <!-- /.card-header -->
     <div class="card-body">
+      <div class="table-responsive">
       <table id="table-distpointgroup-list" class="table table-bordered table-striped">
 
         <thead >
@@ -28,6 +29,7 @@
           
       </tbody>
     </table>
+      </div>
   </div>
 </div>
 
@@ -45,7 +47,7 @@
 
 
  var table = $('#table-distpointgroup-list').DataTable({
-  "responsive": true,
+  "responsive": false,
   "autoWidth": false,
   "searching": true,
   "language": {

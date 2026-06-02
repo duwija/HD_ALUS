@@ -150,6 +150,7 @@
         </div>
       @endif
       
+      <div class="table-responsive">
       <table id="example" class="table table-bordered table-striped">
 
         <thead>
@@ -170,6 +171,7 @@
         </thead>
         <tbody></tbody>
       </table>
+      </div>
   </div>
 </div>
 
@@ -343,7 +345,7 @@ $(document).ready(function() {
       }]
     },
     options: {
-      responsive: true,
+      responsive: false,
       maintainAspectRatio: true,
       plugins: {
         legend: {
@@ -390,7 +392,7 @@ $(document).ready(function() {
       }]
     },
     options: {
-      responsive: true,
+      responsive: false,
       maintainAspectRatio: true,
       plugins: {
         legend: { display: true, position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
@@ -405,7 +407,7 @@ $(document).ready(function() {
   }
 
   var table = $('#example').DataTable({
-    responsive: true,
+    responsive: false,
     lengthChange: true,
     autoWidth: false,
     buttons: ["copy", "csv", "excel", "pdf", "print"],

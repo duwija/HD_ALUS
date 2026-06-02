@@ -28,7 +28,7 @@
  });
 
   var table = $('#table-sale').DataTable({
-    "responsive": true,
+    "responsive": false,
     "autoWidth": false,
     "searching": false,
     "language": {

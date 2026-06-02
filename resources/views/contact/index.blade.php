@@ -36,7 +36,7 @@
 @section('footer-scripts')
 <script>
   var table = $('#table-contact-list').DataTable({
-    "responsive": true,
+    "responsive": false,
     "autoWidth": false,
     "searching": true,
     "language": {
