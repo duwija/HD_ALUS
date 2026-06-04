@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 use App\User;
 use App\Attendance;
 use App\AttendanceLocation;
+use App\LeaveRequest;
 use App\ShiftSchedule;
 use App\Shift;
 
@@ -64,7 +65,7 @@ class EmployeeAttendanceController extends Controller
                 'full_name'   => $user->full_name,
                 'email'       => $user->email,
                 'phone'       => $user->phone,
-                'photo'       => $user->photo ? asset('storage/' . $user->photo) : null,
+                'photo'       => $this->photoUrl($user->photo),
                 'job_title'   => $user->job_title,
                 'employee_id' => $user->employee_id,
                 'supervisor'  => optional($user->supervisor)->name,
@@ -97,7 +98,7 @@ class EmployeeAttendanceController extends Controller
                 'full_name'    => $user->full_name,
                 'email'        => $user->email,
                 'phone'        => $user->phone,
-                'photo'        => $user->photo ? asset('storage/' . $user->photo) : null,
+                'photo'        => $this->photoUrl($user->photo),
                 'job_title'    => $user->job_title,
                 'employee_id'  => $user->employee_id,
                 'join_date'    => $user->join_date,
@@ -263,12 +264,12 @@ class EmployeeAttendanceController extends Controller
     public function clockIn(Request $request)
     {
         $request->validate([
-            'latitude'     => 'required|numeric',
-            'longitude'    => 'required|numeric',
+            'latitude'     => 'required|numeric|between:-90,90',
+            'longitude'    => 'required|numeric|between:-180,180',
             'photo'        => 'required',
             'device_info'  => 'nullable|string|max:200',
             'is_mock'      => 'nullable|boolean',
-            'gps_accuracy' => 'nullable|numeric',
+            'gps_accuracy' => 'required|numeric|min:0',
             'gps_altitude' => 'nullable|numeric',
             'gps_speed'    => 'nullable|numeric',
         ]);
@@ -283,9 +284,14 @@ class EmployeeAttendanceController extends Controller
         if ($resp = $this->validateGpsMetadata($request)) return $resp;
 
         $user = $request->user();
+        $today = today()->toDateString();
+
+        if ($resp = $this->assertAttendanceAllowed($request)) {
+            return $resp;
+        }
 
         // Cek sudah clock-in hari ini?
-        $existing = Attendance::where('user_id', $user->id)->whereDate('date', today())->first();
+        $existing = Attendance::where('user_id', $user->id)->whereDate('date', $today)->first();
         if ($existing?->clock_in) {
             return response()->json([
                 'success' => false,
@@ -305,18 +311,35 @@ class EmployeeAttendanceController extends Controller
             ], 422);
         }
 
+        if ((int) $locationResult['distance'] > $locationResult['location']->radius) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lokasi tidak valid. Anda berada di luar radius absensi.',
+            ], 422);
+        }
+
+        if ($this->looksLikeFakeGps($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Absensi ditolak: data GPS mencurigakan. Pastikan lokasi perangkat asli.',
+            ], 422);
+        }
+
+        $accuracy = (float) $request->gps_accuracy;
+        $accuracyLimit = max(30, (int) round($locationResult['location']->radius / 2));
+        if ($accuracy > $accuracyLimit) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akurasi GPS terlalu rendah. Dekatkan ke lokasi dan coba lagi.',
+            ], 422);
+        }
+
         // Simpan foto selfie
         $photoPath = $this->savePhoto($request->photo, 'in', $user->id);
 
         // Ambil shift hari ini (fallback ke OH)
-        $schedule = ShiftSchedule::with('shift')->where('user_id', $user->id)->whereDate('date', today())->first();
-        $shift    = $schedule?->shift
-            ?? Shift::where('is_active', true)
-                ->where(function($q) {
-                    $q->whereRaw('LOWER(name) LIKE ?', ['%oh%'])
-                      ->orWhereRaw('LOWER(name) LIKE ?', ['%office hour%']);
-                })->first()
-            ?? Shift::where('is_active', true)->orderBy('id')->first();
+        $schedule = ShiftSchedule::with('shift')->where('user_id', $user->id)->whereDate('date', $today)->first();
+        $shift    = $schedule?->shift ?? $this->resolveDefaultShift();
 
         // Hitung terlambat
         $clockInTime  = now()->format('H:i:s');
@@ -324,7 +347,7 @@ class EmployeeAttendanceController extends Controller
         $status       = $lateMinutes > 0 ? 'late' : 'present';
 
         $attendance = Attendance::updateOrCreate(
-            ['user_id' => $user->id, 'date' => today()],
+            ['user_id' => $user->id, 'date' => $today],
             [
                 'shift_id'      => $shift?->id,
                 'location_id_in'=> $locationResult['location']->id,
@@ -359,11 +382,11 @@ class EmployeeAttendanceController extends Controller
     public function clockOut(Request $request)
     {
         $request->validate([
-            'latitude'     => 'required|numeric',
-            'longitude'    => 'required|numeric',
+            'latitude'     => 'required|numeric|between:-90,90',
+            'longitude'    => 'required|numeric|between:-180,180',
             'photo'        => 'required',
             'is_mock'      => 'nullable|boolean',
-            'gps_accuracy' => 'nullable|numeric',
+            'gps_accuracy' => 'required|numeric|min:0',
             'gps_altitude' => 'nullable|numeric',
             'gps_speed'    => 'nullable|numeric',
         ]);
@@ -378,8 +401,13 @@ class EmployeeAttendanceController extends Controller
         if ($resp = $this->validateGpsMetadata($request)) return $resp;
 
         $user = $request->user();
+        $today = today()->toDateString();
 
-        $attendance = Attendance::where('user_id', $user->id)->whereDate('date', today())->first();
+        if ($resp = $this->assertAttendanceAllowed($request)) {
+            return $resp;
+        }
+
+        $attendance = Attendance::where('user_id', $user->id)->whereDate('date', $today)->first();
         if (!$attendance?->clock_in) {
             return response()->json([
                 'success' => false,
@@ -402,6 +430,29 @@ class EmployeeAttendanceController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Lokasi tidak valid. Anda berada di luar area absen.',
+            ], 422);
+        }
+
+        if ((int) $locationResult['distance'] > $locationResult['location']->radius) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lokasi tidak valid. Anda berada di luar radius absensi.',
+            ], 422);
+        }
+
+        if ($this->looksLikeFakeGps($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Absensi ditolak: data GPS mencurigakan. Pastikan lokasi perangkat asli.',
+            ], 422);
+        }
+
+        $accuracy = (float) $request->gps_accuracy;
+        $accuracyLimit = max(30, (int) round($locationResult['location']->radius / 2));
+        if ($accuracy > $accuracyLimit) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akurasi GPS terlalu rendah. Dekatkan ke lokasi dan coba lagi.',
             ], 422);
         }
 
@@ -501,6 +552,74 @@ class EmployeeAttendanceController extends Controller
         return null; // OK
     }
 
+    private function assertAttendanceAllowed(Request $request): ?\Illuminate\Http\JsonResponse
+    {
+        $user = $request->user();
+        $today = today()->toDateString();
+
+        $leaveToday = LeaveRequest::where('user_id', $user->id)
+            ->where('status', 'approved')
+            ->whereDate('start_date', '<=', $today)
+            ->whereDate('end_date', '>=', $today)
+            ->exists();
+
+        if ($leaveToday) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hari ini Anda sedang cuti/izin yang sudah disetujui.',
+            ], 422);
+        }
+
+        $scheduleToday = ShiftSchedule::where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->first();
+
+        if ($scheduleToday && in_array($scheduleToday->day_type, ['off', 'holiday', 'leave'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hari ini tidak dibuka untuk absensi sesuai jadwal.',
+            ], 422);
+        }
+
+        return null;
+    }
+
+    private function looksLikeFakeGps(Request $request): bool
+    {
+        $accuracy = (float) $request->gps_accuracy;
+        $altitude = $request->filled('gps_altitude') ? (float) $request->gps_altitude : null;
+        $speed    = $request->filled('gps_speed') ? (float) $request->gps_speed : null;
+
+        if ($accuracy > 0 && $accuracy < 1.0) {
+            return true;
+        }
+
+        if ($altitude === 0.0 && $speed === 0.0 && $accuracy > 0 && $accuracy < 10.0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function resolveDefaultShift(): ?Shift
+    {
+        return Shift::where('is_active', true)
+            ->where(function($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%oh%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%office hour%']);
+            })->first()
+            ?? Shift::where('is_active', true)->orderBy('id')->first();
+    }
+
+    private function photoUrl(?string $path): ?string
+    {
+        if (empty($path)) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($path);
+    }
+
     private function shiftData(Shift $shift): array
     {
         return [
@@ -526,8 +645,8 @@ class EmployeeAttendanceController extends Controller
             'work_minutes' => $a->work_minutes,
             'location_in'  => optional($a->locationIn)->name,
             'distance_in'  => $a->distance_in,
-            'photo_in'     => $a->photo_in  ? asset('storage/' . $a->photo_in)  : null,
-            'photo_out'    => $a->photo_out ? asset('storage/' . $a->photo_out) : null,
+            'photo_in'     => $this->photoUrl($a->photo_in),
+            'photo_out'    => $this->photoUrl($a->photo_out),
         ];
     }
 

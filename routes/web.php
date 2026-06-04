@@ -517,6 +517,8 @@ Route::post('/suminvoice/createinvoice','InvoiceController@createinvoice');
 Route::get('/suminvoice','SuminvoiceController@index');
 Route::get('/suminvoice/transaction','SuminvoiceController@transaction');
 Route::post('/suminvoice/transaction','SuminvoiceController@searchtransaction');
+Route::get('/suminvoice/bundle-tracking','SuminvoiceController@bundleTracking');
+Route::post('/suminvoice/bundle-tracking/table','SuminvoiceController@bundleTrackingTable');
 Route::get('/suminvoice/mytransaction','SuminvoiceController@mytransaction');
 Route::post('/suminvoice/mytransaction','SuminvoiceController@searchmytransaction');
 Route::post('/suminvoice/verify/{id}','SuminvoiceController@verify');
@@ -587,6 +589,7 @@ Route::get ('/attendance/schedule',                       'AttendanceAdminContro
 Route::post('/attendance/schedule',                       'AttendanceAdminController@scheduleStore');
 // Rekap & Laporan
 Route::get ('/attendance/report',                         'AttendanceAdminController@report')->name('attendance.report');
+Route::get ('/attendance/report/export',                  'AttendanceAdminController@reportExport')->name('attendance.report.export');
 Route::get ('/attendance/daily',                          'AttendanceAdminController@daily')->name('attendance.daily');
 // Karyawan (supervisor, employee_id)
 Route::get ('/attendance/employees',                      'AttendanceAdminController@employees')->name('attendance.employees');
@@ -605,6 +608,8 @@ Route::post('/my-pengajuan/overtime', 'MyLeaveController@overtimeStore')->name('
 
 // Absensi & jadwal pribadi
 Route::get('/my-attendance', 'MyAttendanceController@index')->name('my.attendance');
+Route::post('/my-attendance/clock-in', 'MyAttendanceController@clockIn')->name('my.attendance.clock-in');
+Route::post('/my-attendance/clock-out', 'MyAttendanceController@clockOut')->name('my.attendance.clock-out');
 
 // My Team — tampilkan bawahan supervisor
 Route::get('/my-team', 'MyTeamController@index')->name('my.team');

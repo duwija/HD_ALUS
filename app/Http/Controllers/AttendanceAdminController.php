@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Attendance;
 use App\AttendanceLocation;
+use App\Exports\AttendanceReportExport;
 use App\LeaveRequest;
 use App\OvertimeRequest;
 use App\Shift;
 use App\ShiftSchedule;
 use App\User;
 use Carbon\Carbon;
+use Maatwebsite\Excel\Facades\Excel;
 
 class AttendanceAdminController extends Controller
 {
@@ -279,29 +281,193 @@ class AttendanceAdminController extends Controller
         [$year, $m] = explode('-', $month);
         $userId    = $request->get('user_id');
 
+        $monthStart = Carbon::parse($month . '-01')->startOfMonth();
+        $monthEnd   = Carbon::parse($month . '-01')->endOfMonth();
+
+        $employees = User::where('is_active_employee', true)->orderBy('name')->get();
+        $targetEmployees = $userId
+            ? $employees->where('id', (int) $userId)->values()
+            : $employees->values();
+        $targetEmployeeIds = $targetEmployees->pluck('id')->all();
+
         $query = Attendance::with(['user','shift','locationIn'])
             ->whereYear('date', $year)
             ->whereMonth('date', $m);
 
-        if ($userId) {
-            $query->where('user_id', $userId);
+        if (!empty($targetEmployeeIds)) {
+            $query->whereIn('user_id', $targetEmployeeIds);
         }
 
         $records    = $query->orderBy('date')->orderBy('user_id')->get();
-        $employees  = User::where('is_active_employee', true)->orderBy('name')->get();
 
-        // Ringkasan per karyawan
-        $summary = $records->groupBy('user_id')->map(function($rows) {
-            return [
-                'present'           => $rows->whereIn('status',['present','late'])->count(),
-                'late'              => $rows->where('status','late')->count(),
-                'absent'            => $rows->where('status','absent')->count(),
-                'leave'             => $rows->where('status','leave')->count(),
-                'total_work_minutes'=> $rows->sum('work_minutes'),
+        $attendanceByUserDate = $records
+            ->groupBy('user_id')
+            ->map(function ($rows) {
+                return $rows->keyBy(function ($row) {
+                    return Carbon::parse($row->date)->toDateString();
+                });
+            });
+
+        $schedulesByUserDate = collect();
+        if (!empty($targetEmployeeIds)) {
+            $schedulesByUserDate = ShiftSchedule::whereBetween('date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                ->whereIn('user_id', $targetEmployeeIds)
+                ->get()
+                ->groupBy('user_id')
+                ->map(function ($rows) {
+                    return $rows->keyBy(function ($row) {
+                        return Carbon::parse($row->date)->toDateString();
+                    });
+                });
+        }
+
+        $leaveDaysByUser = [];
+        if (!empty($targetEmployeeIds)) {
+            $approvedLeaves = LeaveRequest::where('status', 'approved')
+                ->whereIn('user_id', $targetEmployeeIds)
+                ->whereDate('start_date', '<=', $monthEnd->toDateString())
+                ->whereDate('end_date', '>=', $monthStart->toDateString())
+                ->get();
+
+            foreach ($approvedLeaves as $leave) {
+                $from = Carbon::parse($leave->start_date)->startOfDay();
+                $to   = Carbon::parse($leave->end_date)->startOfDay();
+
+                if ($from->lt($monthStart)) {
+                    $from = $monthStart->copy();
+                }
+                if ($to->gt($monthEnd)) {
+                    $to = $monthEnd->copy();
+                }
+
+                for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
+                    $ds = $day->toDateString();
+                    $leaveDaysByUser[$leave->user_id][$ds] = ['type' => $leave->type];
+                }
+            }
+        }
+
+        $calendarUser = !empty($targetEmployeeIds) ? $targetEmployees->first() : null;
+        $calendarDays = [];
+        $summary = collect();
+
+        foreach ($targetEmployees as $employee) {
+            $stats = [
+                'attendance'         => 0,
+                'late'               => 0,
+                'cuti'               => 0,
+                'sakit'              => 0,
+                'izin'               => 0,
+                'libur'              => 0,
+                'tanpa_keterangan'   => 0,
+                'total_work_minutes' => 0,
             ];
-        });
 
-        return view('attendance.report', compact('records','employees','summary','month','userId'));
+            for ($day = $monthStart->copy(); $day->lte($monthEnd); $day->addDay()) {
+                $ds = $day->toDateString();
+                $attendance = optional($attendanceByUserDate->get($employee->id))->get($ds);
+                $schedule = optional($schedulesByUserDate->get($employee->id))->get($ds);
+                $leaveDay = $leaveDaysByUser[$employee->id][$ds] ?? null;
+
+                $statusKey = 'tanpa_keterangan';
+                $label = 'Tanpa keterangan';
+
+                if ($attendance) {
+                    $stats['total_work_minutes'] += (int) ($attendance->work_minutes ?? 0);
+
+                    if (in_array($attendance->status, ['present', 'late'], true)) {
+                        $stats['attendance']++;
+                        $label = $attendance->status === 'late' ? 'Terlambat' : 'Hadir';
+                        $statusKey = 'attendance';
+                        if ($attendance->status === 'late') {
+                            $stats['late']++;
+                        }
+                    } elseif ($attendance->status === 'absent') {
+                        $stats['tanpa_keterangan']++;
+                    } elseif ($attendance->status === 'holiday' || $attendance->status === 'off') {
+                        $stats['libur']++;
+                        $label = 'Libur/Off';
+                        $statusKey = 'libur';
+                    } elseif ($attendance->status === 'leave') {
+                        $leaveType = $leaveDay['type'] ?? null;
+                        if ($leaveType === 'sakit') {
+                            $stats['sakit']++;
+                            $label = 'Sakit';
+                            $statusKey = 'sakit';
+                        } elseif ($leaveType === 'cuti') {
+                            $stats['cuti']++;
+                            $label = 'Cuti';
+                            $statusKey = 'cuti';
+                        } else {
+                            $stats['izin']++;
+                            $label = 'Izin';
+                            $statusKey = 'izin';
+                        }
+                    }
+                } else {
+                    if ($leaveDay) {
+                        if (($leaveDay['type'] ?? null) === 'sakit') {
+                            $stats['sakit']++;
+                            $label = 'Sakit';
+                            $statusKey = 'sakit';
+                        } elseif (($leaveDay['type'] ?? null) === 'cuti') {
+                            $stats['cuti']++;
+                            $label = 'Cuti';
+                            $statusKey = 'cuti';
+                        } else {
+                            $stats['izin']++;
+                            $label = 'Izin';
+                            $statusKey = 'izin';
+                        }
+                    } elseif ($schedule && in_array($schedule->day_type, ['off', 'holiday'], true)) {
+                        $stats['libur']++;
+                        $label = 'Libur/Off';
+                        $statusKey = 'libur';
+                    } elseif ($day->isWeekend()) {
+                        $stats['libur']++;
+                        $label = 'Akhir pekan';
+                        $statusKey = 'libur';
+                    } else {
+                        $stats['tanpa_keterangan']++;
+                    }
+                }
+
+                if ($calendarUser && (int) $calendarUser->id === (int) $employee->id) {
+                    $calendarDays[] = [
+                        'date'      => $ds,
+                        'day'       => $day->day,
+                        'weekday'   => $day->dayOfWeek,
+                        'status'    => $statusKey,
+                        'label'     => $label,
+                        'clock_in'  => $attendance->clock_in ?? null,
+                        'clock_out' => $attendance->clock_out ?? null,
+                    ];
+                }
+            }
+
+            $summary->put($employee->id, $stats);
+        }
+
+        return view('attendance.report', compact(
+            'records',
+            'employees',
+            'summary',
+            'month',
+            'userId',
+            'calendarDays',
+            'calendarUser'
+        ));
+    }
+
+    public function reportExport(Request $request)
+    {
+        $month = $request->get('month', now()->format('Y-m'));
+        $userId = $request->get('user_id');
+
+        return Excel::download(
+            new AttendanceReportExport($month, $userId),
+            'Rekap_Absensi_' . str_replace('-', '', $month) . '.xlsx'
+        );
     }
 
     // ── Detail Absensi Harian ───────────────────────────────────────────────

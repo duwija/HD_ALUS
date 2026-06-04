@@ -162,6 +162,12 @@
             body.dark-mode .dm-info-close { color:#8a8d91; }
             body.dark-mode .dm-info-close:hover { color:#e4e6eb; }
             body.dark-mode .dm-info-item .dm-info-lbl { color:#8a8d91; }
+
+            #distanceMapChart {
+              width: 100% !important;
+              height: 100% !important;
+              display: block;
+            }
           </style>
 
           <div class="card mb-3">

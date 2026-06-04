@@ -27,7 +27,7 @@
           </select>
         </div>
         <button type="submit" class="btn btn-primary mb-2 mr-2"><i class="fas fa-search mr-1"></i>Tampilkan</button>
-        <a href="/attendance/report?month={{ $month }}&export=1" class="btn btn-success mb-2">
+        <a href="{{ route('attendance.report.export', ['month' => $month, 'user_id' => $userId]) }}" class="btn btn-success mb-2">
           <i class="fas fa-file-excel mr-1"></i>Export
         </a>
       </form>
@@ -37,30 +37,162 @@
   {{-- Summary cards --}}
   <div class="row mb-3">
     @php
-      $totalPresent  = $summary->sum('present');
+      $totalPresent  = $summary->sum('attendance');
       $totalLate     = $summary->sum('late');
-      $totalAbsent   = $summary->sum('absent');
-      $totalLeave    = $summary->sum('leave');
+      $totalCuti     = $summary->sum('cuti');
+      $totalSakit    = $summary->sum('sakit');
+      $totalLibur    = $summary->sum('libur');
+      $totalNoInfo   = $summary->sum('tanpa_keterangan');
     @endphp
-    <div class="col-md-3">
+    <div class="col-md-2">
       <div class="info-box shadow-sm"><span class="info-box-icon bg-success"><i class="fas fa-check"></i></span>
-        <div class="info-box-content"><span class="info-box-text">Hadir</span><span class="info-box-number">{{ $totalPresent }}</span></div>
+        <div class="info-box-content"><span class="info-box-text">Absensi</span><span class="info-box-number">{{ $totalPresent }}</span></div>
       </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
       <div class="info-box shadow-sm"><span class="info-box-icon bg-warning"><i class="fas fa-clock"></i></span>
         <div class="info-box-content"><span class="info-box-text">Terlambat</span><span class="info-box-number">{{ $totalLate }}</span></div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="info-box shadow-sm"><span class="info-box-icon bg-danger"><i class="fas fa-times"></i></span>
-        <div class="info-box-content"><span class="info-box-text">Absen</span><span class="info-box-number">{{ $totalAbsent }}</span></div>
+    <div class="col-md-2">
+      <div class="info-box shadow-sm"><span class="info-box-icon bg-info"><i class="fas fa-umbrella-beach"></i></span>
+        <div class="info-box-content"><span class="info-box-text">Cuti</span><span class="info-box-number">{{ $totalCuti }}</span></div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="info-box shadow-sm"><span class="info-box-icon bg-info"><i class="fas fa-file-alt"></i></span>
-        <div class="info-box-content"><span class="info-box-text">Izin/Sakit</span><span class="info-box-number">{{ $totalLeave }}</span></div>
+    <div class="col-md-2">
+      <div class="info-box shadow-sm"><span class="info-box-icon bg-secondary"><i class="fas fa-notes-medical"></i></span>
+        <div class="info-box-content"><span class="info-box-text">Sakit</span><span class="info-box-number">{{ $totalSakit }}</span></div>
       </div>
+    </div>
+    <div class="col-md-2">
+      <div class="info-box shadow-sm"><span class="info-box-icon bg-dark"><i class="fas fa-calendar-day"></i></span>
+        <div class="info-box-content"><span class="info-box-text">Libur</span><span class="info-box-number">{{ $totalLibur }}</span></div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="info-box shadow-sm"><span class="info-box-icon bg-danger"><i class="fas fa-exclamation-triangle"></i></span>
+        <div class="info-box-content"><span class="info-box-text">Tanpa Info</span><span class="info-box-number">{{ $totalNoInfo }}</span></div>
+      </div>
+    </div>
+  </div>
+
+  {{-- Rekap per karyawan --}}
+  <div class="card shadow-sm mb-3">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="fas fa-users mr-1 text-primary"></i>Rekap Per Karyawan</h5>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th>#</th>
+              <th>Karyawan</th>
+              <th>Absensi</th>
+              <th>Terlambat</th>
+              <th>Cuti</th>
+              <th>Sakit</th>
+              <th>Libur</th>
+              <th>Tidak Absen / Tanpa Pemberitahuan</th>
+              <th>Total Jam Kerja</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse($summary as $empId => $stat)
+              @php $emp = $employees->firstWhere('id', $empId); @endphp
+              <tr>
+                <td>{{ $loop->iteration }}</td>
+                <td>{{ $emp->name ?? 'Karyawan #' . $empId }}</td>
+                <td><span class="badge badge-success">{{ $stat['attendance'] ?? 0 }}</span></td>
+                <td><span class="badge badge-warning">{{ $stat['late'] ?? 0 }}</span></td>
+                <td><span class="badge badge-info">{{ $stat['cuti'] ?? 0 }}</span></td>
+                <td><span class="badge badge-secondary">{{ $stat['sakit'] ?? 0 }}</span></td>
+                <td><span class="badge badge-dark">{{ $stat['libur'] ?? 0 }}</span></td>
+                <td><span class="badge badge-danger">{{ $stat['tanpa_keterangan'] ?? 0 }}</span></td>
+                <td>
+                  @php $minutes = (int) ($stat['total_work_minutes'] ?? 0); @endphp
+                  {{ intdiv($minutes, 60) }}j {{ $minutes % 60 }}m
+                </td>
+              </tr>
+            @empty
+              <tr><td colspan="9" class="text-center text-muted py-3">Belum ada data untuk periode ini.</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {{-- Kalender karyawan --}}
+  <div class="card shadow-sm mb-3">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="fas fa-calendar-alt mr-1 text-info"></i>Kalender Absensi {{ $calendarUser ? '- ' . $calendarUser->name : '' }}</h5>
+    </div>
+    <div class="card-body">
+      @if(!$calendarUser)
+        <div class="text-muted">Pilih karyawan untuk menampilkan kalender.</div>
+      @else
+        @php
+          $firstDow = \Carbon\Carbon::parse($month.'-01')->dayOfWeek;
+          $col = 0;
+          $statusStyle = [
+            'attendance' => ['bg' => '#d4edda', 'badge' => 'badge-success', 'text' => 'H'],
+            'sakit' => ['bg' => '#e2e3f9', 'badge' => 'badge-secondary', 'text' => 'S'],
+            'cuti' => ['bg' => '#d1ecf1', 'badge' => 'badge-info', 'text' => 'C'],
+            'izin' => ['bg' => '#d1ecf1', 'badge' => 'badge-info', 'text' => 'I'],
+            'libur' => ['bg' => '#e2e3e5', 'badge' => 'badge-dark', 'text' => 'L'],
+            'tanpa_keterangan' => ['bg' => '#f8d7da', 'badge' => 'badge-danger', 'text' => 'A'],
+          ];
+        @endphp
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm text-center mb-2" style="min-width:560px;">
+            <thead class="thead-light">
+              <tr>
+                <th>Min</th><th>Sen</th><th>Sel</th><th>Rab</th><th>Kam</th><th>Jum</th><th>Sab</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                @for($i = 0; $i < $firstDow; $i++)
+                  <td class="bg-light"></td>
+                  @php $col++; @endphp
+                @endfor
+                @foreach($calendarDays as $day)
+                  @if($col % 7 === 0 && !$loop->first)
+                    </tr><tr>
+                  @endif
+                  @php
+                    $style = $statusStyle[$day['status']] ?? $statusStyle['tanpa_keterangan'];
+                    $title = $day['label'];
+                    if (!empty($day['clock_in']) || !empty($day['clock_out'])) {
+                      $title .= ' | In: ' . ($day['clock_in'] ?: '-') . ' | Out: ' . ($day['clock_out'] ?: '-');
+                    }
+                  @endphp
+                  <td style="background:{{ $style['bg'] }};vertical-align:top;padding:4px 2px;" title="{{ $title }}">
+                    <div class="font-weight-bold">{{ $day['day'] }}</div>
+                    <span class="badge {{ $style['badge'] }}" style="font-size:.65rem;">{{ $style['text'] }}</span>
+                    @if(!empty($day['clock_in']))
+                      <div class="text-muted" style="font-size:.65rem">{{ substr($day['clock_in'], 0, 5) }}</div>
+                    @endif
+                  </td>
+                  @php $col++; @endphp
+                @endforeach
+                @while($col % 7 !== 0)
+                  <td class="bg-light"></td>
+                  @php $col++; @endphp
+                @endwhile
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="d-flex flex-wrap" style="gap:.35rem;">
+          <span class="badge badge-success">H = Absensi</span>
+          <span class="badge badge-secondary">S = Sakit</span>
+          <span class="badge badge-info">C/I = Cuti/Izin</span>
+          <span class="badge badge-dark">L = Libur</span>
+          <span class="badge badge-danger">A = Tanpa keterangan</span>
+        </div>
+      @endif
     </div>
   </div>
 

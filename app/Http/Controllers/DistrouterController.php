@@ -497,6 +497,18 @@ class DistrouterController extends Controller
     {
         $pppoe = trim((string) $request->input('pppoe'));
         $routerId = (int) $request->input('router_id');
+        $fallbackStatus = trim((string) $request->input('fallback_status', ''));
+        if (!in_array($fallbackStatus, ['online', 'enable', 'disabled', 'not-found', 'unknown'], true)) {
+            $fallbackStatus = 'unknown';
+        }
+
+        $secretTimeout = (int) tenant_env('PPPOE_MAP_SECRET_TIMEOUT', tenant_env('PPPOE_MAP_ROUTER_TIMEOUT', 2));
+        if ($secretTimeout < 3) {
+            $secretTimeout = 3;
+        }
+        if ($secretTimeout > 15) {
+            $secretTimeout = 15;
+        }
 
         if ($pppoe === '') {
             return response()->json(['success' => false, 'message' => 'PPPoE is required'], 422);
@@ -517,7 +529,7 @@ class DistrouterController extends Controller
         if (!$router || empty($router->ip)) {
             return response()->json([
                 'success'       => true,
-                'secret_status' => 'unknown',
+                'secret_status' => $fallbackStatus,
                 'router'        => $router ? $router->name : null,
                 'source'        => 'none',
                 'message'       => 'Router not found',
@@ -530,7 +542,7 @@ class DistrouterController extends Controller
                 'user'    => $router->user,
                 'pass'    => $router->password,
                 'port'    => (int) $router->port,
-                'timeout' => (int) tenant_env('PPPOE_MAP_ROUTER_TIMEOUT', 2),
+                'timeout' => $secretTimeout,
             ]);
 
             $secretQuery = (new Query('/ppp/secret/print'))->where('name', $pppoe);
@@ -569,7 +581,7 @@ class DistrouterController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success'       => true,
-                'secret_status' => 'unknown',
+                'secret_status' => $fallbackStatus,
                 'router'        => $router->name,
                 'source'        => 'error',
                 'message'       => $e->getMessage(),

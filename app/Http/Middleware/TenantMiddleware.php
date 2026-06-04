@@ -409,6 +409,14 @@ class TenantMiddleware
         // Set public storage URL path dengan tenant prefix
         $publicUrl = env('APP_URL') . '/storage/' . $tenantId;
         Config::set('filesystems.disks.public.url', $publicUrl);
+
+        $tenantStorageLink = public_path('storage/' . $tenantId);
+        if (!is_dir(public_path('storage'))) {
+            @mkdir(public_path('storage'), 0755, true);
+        }
+        if (!file_exists($tenantStorageLink)) {
+            @symlink($tenantAppPath . '/public', $tenantStorageLink);
+        }
         
         // Update symbolic link configuration
         Config::set('filesystems.links', [

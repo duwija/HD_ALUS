@@ -58,5 +58,13 @@
       </a>
     </li>
   </ul>
+  <ul class="nav nav-treeview">
+    <li class="nav-item">
+      <a href="{{ url ('suminvoice/bundle-tracking')}}" class="nav-link">
+        <i class="far fa-circle nav-icon ml-3"></i>
+        <p>Bundle Tracking</p>
+      </a>
+    </li>
+  </ul>
 
 </li>

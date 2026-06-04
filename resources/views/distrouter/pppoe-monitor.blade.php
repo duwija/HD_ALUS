@@ -185,6 +185,8 @@
 (function(){
   var charts = {};
   var detailChart = null;
+  var detailRouterId = null;
+  var detailHours = 24;
   var monitorDataCache = [];
   var AUTO = 180; // 3 menit
   var countdown = AUTO;
@@ -198,18 +200,60 @@
   };
 
   function buildDataset(label, key, rows){
+    var numericRows = Array.isArray(rows)
+      ? rows.map(function(v) { return Number(v) || 0; })
+      : [];
     return {
       label: label,
       metricKey: key,
-      data: rows,
+      data: numericRows,
       borderColor: COLORS[key].border,
       backgroundColor: COLORS[key].bg,
       borderWidth: 2,
-      pointRadius: 0,
+      pointRadius: 1.5,
       pointHoverRadius: 4,
-      fill: true,
-      tension: 0.4,
+      fill: false,
+      tension: 0.2,
     };
+  }
+
+  function getLastSeriesValue(series){
+    var normalized = toSeriesArray(series);
+    if (!normalized.length) return 0;
+    return Number(normalized[normalized.length - 1]) || 0;
+  }
+
+  function toSeriesArray(series){
+    if (Array.isArray(series)) return series;
+    if (series && typeof series === 'object') {
+      return Object.keys(series)
+        .sort(function(a, b){ return Number(a) - Number(b); })
+        .map(function(k){ return series[k]; });
+    }
+    return [];
+  }
+
+  function normalizeSeriesByLabels(labels, series){
+    var safeLabels = Array.isArray(labels) ? labels : [];
+    var safeSeries = toSeriesArray(series);
+    var normalized = [];
+
+    for (var i = 0; i < safeLabels.length; i++) {
+      normalized.push(Number(safeSeries[i]) || 0);
+    }
+
+    return normalized;
+  }
+
+  function prepareRouterSeries(r){
+    var labels = Array.isArray(r.labels) ? r.labels : [];
+    r.__series = {
+      total: normalizeSeriesByLabels(labels, r.total),
+      active: normalizeSeriesByLabels(labels, r.active),
+      offline: normalizeSeriesByLabels(labels, r.offline),
+      disabled: normalizeSeriesByLabels(labels, r.disabled),
+    };
+    return r;
   }
 
   function getSelectedMetricMap() {
@@ -218,6 +262,33 @@
       selected[el.value] = true;
     });
     return selected;
+  }
+
+  function computeYAxisConfig(datasets) {
+    var maxVal = 0;
+    (datasets || []).forEach(function(ds) {
+      (Array.isArray(ds.data) ? ds.data : []).forEach(function(v) {
+        var n = Number(v) || 0;
+        if (n > maxVal) maxVal = n;
+      });
+    });
+    var pad = maxVal > 0 ? Math.max(1, Math.ceil(maxVal * 0.15)) : 1;
+    var ymax = Math.max(1, maxVal + pad);
+    var step = Math.max(1, Math.ceil(ymax / 6));
+    return { min: 0, max: ymax, stepSize: step };
+  }
+
+  function buildSelectedDatasets(r) {
+    var s = r.__series || { total: [], active: [], offline: [], disabled: [] };
+    var selected = getSelectedMetricMap();
+    var datasets = [];
+
+    if (selected.total) datasets.push(buildDataset('Total', 'total', s.total));
+    if (selected.active) datasets.push(buildDataset('Aktif', 'active', s.active));
+    if (selected.offline) datasets.push(buildDataset('Offline', 'offline', s.offline));
+    if (selected.disabled) datasets.push(buildDataset('Disabled', 'disabled', s.disabled));
+
+    return datasets;
   }
 
   function saveMetricFilterSelection() {
@@ -249,34 +320,30 @@
     }
   }
 
-  function applyMetricVisibilityToChart(chart) {
-    if (!chart || !chart.data || !chart.data.datasets) return;
-    var selectedMap = getSelectedMetricMap();
-    chart.data.datasets.forEach(function(ds, idx) {
-      chart.setDatasetVisibility(idx, !!selectedMap[ds.metricKey]);
-    });
-    chart.update('none');
-  }
-
-  function applyMetricVisibilityToAllCharts() {
-    Object.keys(charts).forEach(function(key) {
-      applyMetricVisibilityToChart(charts[key]);
-    });
-    applyMetricVisibilityToChart(detailChart);
+  function rerenderAllCharts() {
+    monitorDataCache.forEach(function(r) { drawChart(r); });
+    if (detailRouterId !== null) {
+      loadDetailChart(detailRouterId, detailHours);
+    }
   }
 
   function renderCard(r){
     var l = r.latest || {};
+    var s = r.__series || { total: [], active: [], offline: [], disabled: [] };
+    var lastTotal = getLastSeriesValue(s.total);
+    var lastActive = getLastSeriesValue(s.active);
+    var lastOffline = getLastSeriesValue(s.offline);
+    var lastDisabled = getLastSeriesValue(s.disabled);
     var noData = !r.labels || r.labels.length === 0;
 
     var rid = r.id;
     var rname = r.name;
     var badgeHtml = '';
     if(!noData){
-      badgeHtml  = '<span class="mon-badge mb-total" title="Total PPPoE users"><i class="fas fa-circle" style="font-size:7px"></i>Total: '+(l.total||0)+'</span>';
-      badgeHtml += '<span class="mon-badge mb-active show-users" data-router-id="'+rid+'" data-router-name="'+rname+'" data-status="active" title="Klik untuk lihat user aktif"><i class="fas fa-circle" style="font-size:7px"></i>Aktif: '+(l.active||0)+'</span>';
-      badgeHtml += '<span class="mon-badge mb-offline show-users" data-router-id="'+rid+'" data-router-name="'+rname+'" data-status="offline" title="Klik untuk lihat user offline"><i class="fas fa-circle" style="font-size:7px"></i>Offline: '+(l.offline||0)+'</span>';
-      badgeHtml += '<span class="mon-badge mb-disabled show-users" data-router-id="'+rid+'" data-router-name="'+rname+'" data-status="disabled" title="Klik untuk lihat user disabled"><i class="fas fa-circle" style="font-size:7px"></i>Disabled: '+(l.disabled||0)+'</span>';
+      badgeHtml  = '<span class="mon-badge mb-total" title="Total PPPoE users"><i class="fas fa-circle" style="font-size:7px"></i>Total: '+lastTotal+'</span>';
+      badgeHtml += '<span class="mon-badge mb-active show-users" data-router-id="'+rid+'" data-router-name="'+rname+'" data-status="active" title="Klik untuk lihat user aktif"><i class="fas fa-circle" style="font-size:7px"></i>Aktif: '+lastActive+'</span>';
+      badgeHtml += '<span class="mon-badge mb-offline show-users" data-router-id="'+rid+'" data-router-name="'+rname+'" data-status="offline" title="Klik untuk lihat user offline"><i class="fas fa-circle" style="font-size:7px"></i>Offline: '+lastOffline+'</span>';
+      badgeHtml += '<span class="mon-badge mb-disabled show-users" data-router-id="'+rid+'" data-router-name="'+rname+'" data-status="disabled" title="Klik untuk lihat user disabled"><i class="fas fa-circle" style="font-size:7px"></i>Disabled: '+lastDisabled+'</span>';
     }
 
     var chartContent = noData
@@ -301,6 +368,8 @@
 
   function drawChart(r){
     if(!r.labels || r.labels.length === 0) return;
+    var datasets = buildSelectedDatasets(r);
+    var ycfg = computeYAxisConfig(datasets);
     var ctx = document.getElementById('chart-'+r.id);
     if(!ctx) return;
     if(charts[r.id]) { charts[r.id].destroy(); delete charts[r.id]; }
@@ -308,12 +377,7 @@
       type: 'line',
       data: {
         labels: r.labels,
-        datasets: [
-          buildDataset('Total',    'total',    r.total),
-          buildDataset('Aktif',    'active',   r.active),
-          buildDataset('Offline',  'offline',  r.offline),
-          buildDataset('Disabled', 'disabled', r.disabled),
-        ]
+        datasets: datasets
       },
       options: {
         responsive: true,
@@ -325,11 +389,16 @@
         },
         scales: {
           x: { ticks:{ maxTicksLimit:12, color:'#888', font:{size:10} }, grid:{color:'rgba(128,128,128,.1)'} },
-          y: { ticks:{ color:'#888', font:{size:10} }, grid:{color:'rgba(128,128,128,.1)'}, beginAtZero:true },
+          y: {
+            beginAtZero:true,
+            min: ycfg.min,
+            max: ycfg.max,
+            ticks:{ color:'#888', font:{size:10}, stepSize: ycfg.stepSize },
+            grid:{color:'rgba(128,128,128,.1)'}
+          },
         }
       }
     });
-    applyMetricVisibilityToChart(charts[r.id]);
   }
 
   function loadData(){
@@ -345,7 +414,10 @@
         return;
       }
       var html = '';
-      data.forEach(function(r){ html += renderCard(r); });
+      data.forEach(function(r){
+        prepareRouterSeries(r);
+        html += renderCard(r);
+      });
       $('#monitorGrid').html(html);
       monitorDataCache = data;
       data.forEach(function(r){ drawChart(r); });
@@ -355,6 +427,8 @@
   }
 
   $(document).ready(function(){
+    // Restore checkbox state first to avoid first-render race with async data fetch.
+    restoreMetricFilterSelection();
     loadData();
 
     $('#btnRefresh').on('click', function(){
@@ -385,6 +459,8 @@
     });
 
     function loadDetailChart(rid, hours){
+      detailRouterId = rid;
+      detailHours = Number(hours) || 24;
       $.getJSON('/pppoe-monitor/data?hours='+hours, function(data){
         var r = null;
         for(var i=0;i<data.length;i++){ if(data[i].id == rid){ r=data[i]; break; } }
@@ -392,6 +468,10 @@
           $('#detailChartWrap').html('<div class="text-center py-5" style="color:var(--text-muted)">Tidak ada data untuk rentang ini.</div>');
           return;
         }
+        prepareRouterSeries(r);
+        var datasets = buildSelectedDatasets(r);
+        var ycfg = computeYAxisConfig(datasets);
+        var s = r.__series || { total: [], active: [], offline: [], disabled: [] };
         $('#detailChartWrap').html('<canvas id="detailCanvas" style="width:100%;height:320px"></canvas>');
         if(detailChart){ detailChart.destroy(); detailChart=null; }
         var ctx = document.getElementById('detailCanvas');
@@ -399,12 +479,7 @@
           type:'line',
           data:{
             labels: r.labels,
-            datasets:[
-              buildDataset('Total','total',r.total),
-              buildDataset('Aktif','active',r.active),
-              buildDataset('Offline','offline',r.offline),
-              buildDataset('Disabled','disabled',r.disabled),
-            ]
+            datasets: datasets
           },
           options:{
             responsive:true, maintainAspectRatio:false,
@@ -415,18 +490,27 @@
             },
             scales:{
               x:{ticks:{maxTicksLimit:18,color:'#888',font:{size:10}},grid:{color:'rgba(128,128,128,.1)'}},
-              y:{ticks:{color:'#888',font:{size:10}},grid:{color:'rgba(128,128,128,.1)'},beginAtZero:true},
+              y:{
+                beginAtZero:true,
+                min: ycfg.min,
+                max: ycfg.max,
+                ticks:{color:'#888',font:{size:10},stepSize: ycfg.stepSize},
+                grid:{color:'rgba(128,128,128,.1)'}
+              },
             }
           }
         });
-        applyMetricVisibilityToChart(detailChart);
         // Show latest stats in modal footer
         var l = r.latest||{};
+        var lastTotal = getLastSeriesValue(s.total);
+        var lastActive = getLastSeriesValue(s.active);
+        var lastOffline = getLastSeriesValue(s.offline);
+        var lastDisabled = getLastSeriesValue(s.disabled);
         $('#detailStats').html(
-          '<span style="margin-right:8px;font-size:12px">Total: <b>'+(l.total||0)+'</b></span>'
-          +'<span style="color:#10b981;margin-right:8px;font-size:12px">Aktif: <b>'+(l.active||0)+'</b></span>'
-          +'<span style="color:#ef4444;margin-right:8px;font-size:12px">Offline: <b>'+(l.offline||0)+'</b></span>'
-          +'<span style="color:#6b7280;font-size:12px">Disabled: <b>'+(l.disabled||0)+'</b></span>'
+          '<span style="margin-right:8px;font-size:12px">Total: <b>'+lastTotal+'</b></span>'
+          +'<span style="color:#10b981;margin-right:8px;font-size:12px">Aktif: <b>'+lastActive+'</b></span>'
+          +'<span style="color:#ef4444;margin-right:8px;font-size:12px">Offline: <b>'+lastOffline+'</b></span>'
+          +'<span style="color:#6b7280;font-size:12px">Disabled: <b>'+lastDisabled+'</b></span>'
         );
       }).fail(function(){
         $('#detailChartWrap').html('<div class="alert alert-danger">Gagal memuat data.</div>');
@@ -489,12 +573,12 @@
       });
     });
 
-    // Countdown + auto refresh
-    restoreMetricFilterSelection();
+    // Ensure restored filters are reflected after first render.
+    setTimeout(function(){ rerenderAllCharts(); }, 0);
 
     $(document).on('change', '.metricFilter', function(){
       saveMetricFilterSelection();
-      applyMetricVisibilityToAllCharts();
+      rerenderAllCharts();
     });
 
     setInterval(function(){

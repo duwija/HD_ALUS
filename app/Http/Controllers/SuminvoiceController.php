@@ -1777,6 +1777,222 @@ public function transaction()
 
  return view ('suminvoice/transaction',['dailyTransactions' => $dailyTransactions,'suminvoice' =>$suminvoice, 'user'=>$groupedTransactionsUser, 'totalPaymentToday'=>$totalPaymentToday, 'totalTransactionThisWeek'=>$totalTransactionThisWeek, 'totalTransactionThisMonth'=>$totalTransactionThisMonth, 'totalReceivable'=>$totalReceivable, 'groupedTransactions' => $groupedTransactions,'merchant'=>$merchant, 'kasbank'=>$kasbank, 'plans'=>$plans]);
 }
+
+public function bundleTracking(Request $request)
+{
+    $gateway = trim((string) $request->input('gateway', ''));
+    $status  = $request->input('status', '');
+    $dateFrom = trim((string) $request->input('date_from', ''));
+    $dateEnd  = trim((string) $request->input('date_end', ''));
+    $search   = trim((string) $request->input('search', ''));
+
+    $summaryQuery = 
+        DB::table('payment_bundles as pb')
+            ->leftJoin('customers as c', 'c.id', '=', 'pb.id_customer');
+
+    if ($gateway !== '') {
+        $summaryQuery->where('pb.gateway', $gateway);
+    }
+
+    if ($status !== '' && in_array((string) $status, ['0', '1', '2'], true)) {
+        $summaryQuery->where('pb.status', (int) $status);
+    }
+
+    if ($dateFrom !== '') {
+        $summaryQuery->whereDate('pb.created_at', '>=', $dateFrom);
+    }
+
+    if ($dateEnd !== '') {
+        $summaryQuery->whereDate('pb.created_at', '<=', $dateEnd);
+    }
+
+    if ($search !== '') {
+        $summaryQuery->where(function ($q) use ($search) {
+            $q->where('pb.bundle_ref', 'like', '%' . $search . '%')
+                ->orWhere('c.customer_id', 'like', '%' . $search . '%')
+                ->orWhere('c.name', 'like', '%' . $search . '%');
+        });
+    }
+
+    $summaryRows = $summaryQuery
+        ->select('pb.status', DB::raw('COUNT(*) as cnt'), DB::raw('SUM(pb.total_amount) as total_amount'))
+        ->groupBy('pb.status')
+        ->get();
+
+    $stats = [
+        'total_bundles' => 0,
+        'total_amount'  => 0,
+        'pending_count' => 0,
+        'paid_count'    => 0,
+        'expired_count' => 0,
+    ];
+
+    foreach ($summaryRows as $row) {
+        $stats['total_bundles'] += (int) $row->cnt;
+        $stats['total_amount']  += (float) ($row->total_amount ?? 0);
+
+        if ((int) $row->status === 0) {
+            $stats['pending_count'] = (int) $row->cnt;
+        } elseif ((int) $row->status === 1) {
+            $stats['paid_count'] = (int) $row->cnt;
+        } elseif ((int) $row->status === 2) {
+            $stats['expired_count'] = (int) $row->cnt;
+        }
+    }
+
+    return view('suminvoice/bundle_tracking', [
+        'stats'    => $stats,
+        'filters'  => [
+            'gateway'   => $gateway,
+            'status'    => $status,
+            'date_from' => $dateFrom,
+            'date_end'  => $dateEnd,
+            'search'    => $search,
+        ],
+    ]);
+}
+
+public function bundleTrackingTable(Request $request)
+{
+    $gateway = trim((string) $request->input('gateway', ''));
+    $status  = $request->input('status', '');
+    $dateFrom = trim((string) $request->input('date_from', ''));
+    $dateEnd  = trim((string) $request->input('date_end', ''));
+    $searchFilter = trim((string) $request->input('search_filter', ''));
+
+    $aggregated = DB::table('payment_bundles as pb')
+        ->leftJoin('customers as c', 'c.id', '=', 'pb.id_customer')
+        ->leftJoin('payment_bundle_items as pbi', 'pbi.bundle_ref', '=', 'pb.bundle_ref')
+        ->leftJoin('suminvoices as si', 'si.id', '=', 'pbi.suminvoice_id')
+        ->select(
+            'pb.id',
+            'pb.bundle_ref',
+            'pb.gateway',
+            'pb.id_customer',
+            'pb.total_amount',
+            'pb.paid_amount',
+            'pb.status',
+            'pb.tripay_method',
+            'pb.payment_url',
+            'pb.created_at',
+            'pb.updated_at',
+            'c.customer_id',
+            'c.name as customer_name',
+            DB::raw('COUNT(DISTINCT pbi.suminvoice_id) as invoice_count'),
+            DB::raw('SUM(CASE WHEN si.payment_status = 1 THEN 1 ELSE 0 END) as paid_invoice_count'),
+            DB::raw("GROUP_CONCAT(DISTINCT si.number ORDER BY si.date ASC SEPARATOR ', ') as invoice_numbers")
+        )
+        ->groupBy(
+            'pb.id',
+            'pb.bundle_ref',
+            'pb.gateway',
+            'pb.id_customer',
+            'pb.total_amount',
+            'pb.paid_amount',
+            'pb.status',
+            'pb.tripay_method',
+            'pb.payment_url',
+            'pb.created_at',
+            'pb.updated_at',
+            'c.customer_id',
+            'c.name'
+        );
+
+    if ($gateway !== '') {
+        $aggregated->where('pb.gateway', $gateway);
+    }
+
+    if ($status !== '' && in_array((string) $status, ['0', '1', '2'], true)) {
+        $aggregated->where('pb.status', (int) $status);
+    }
+
+    if ($dateFrom !== '') {
+        $aggregated->whereDate('pb.created_at', '>=', $dateFrom);
+    }
+
+    if ($dateEnd !== '') {
+        $aggregated->whereDate('pb.created_at', '<=', $dateEnd);
+    }
+
+    if ($searchFilter !== '') {
+        $aggregated->where(function ($q) use ($searchFilter) {
+            $q->where('pb.bundle_ref', 'like', '%' . $searchFilter . '%')
+                ->orWhere('c.customer_id', 'like', '%' . $searchFilter . '%')
+                ->orWhere('c.name', 'like', '%' . $searchFilter . '%')
+                ->orWhere('si.number', 'like', '%' . $searchFilter . '%');
+        });
+    }
+
+    $query = DB::query()->fromSub($aggregated, 'bt')->orderByDesc('bt.id');
+
+    return DataTables::of($query)
+        ->addIndexColumn()
+        ->filter(function ($q) use ($request) {
+            $keyword = trim((string) data_get($request->all(), 'search.value', ''));
+            if ($keyword === '') {
+                return;
+            }
+
+            $q->where(function ($w) use ($keyword) {
+                $like = '%' . $keyword . '%';
+                $w->where('bt.bundle_ref', 'like', $like)
+                    ->orWhere('bt.gateway', 'like', $like)
+                    ->orWhere('bt.customer_id', 'like', $like)
+                    ->orWhere('bt.customer_name', 'like', $like)
+                    ->orWhere('bt.invoice_numbers', 'like', $like)
+                    ->orWhere('bt.tripay_method', 'like', $like);
+            });
+        })
+        ->editColumn('gateway', function ($row) {
+            return strtoupper((string) $row->gateway);
+        })
+        ->addColumn('customer_info', function ($row) {
+            $cid = e((string) ($row->customer_id ?? '-'));
+            $name = e((string) ($row->customer_name ?? '-'));
+            return '<div>' . $cid . '</div><small class="text-muted">' . $name . '</small>';
+        })
+        ->addColumn('invoice_info', function ($row) {
+            $invoiceCount = (int) ($row->invoice_count ?? 0);
+            $paidInvoiceCount = (int) ($row->paid_invoice_count ?? 0);
+            $numbers = e((string) ($row->invoice_numbers ?: '-'));
+
+            return '<span class="badge badge-info">' . $invoiceCount . ' invoice</span>'
+                . '<br><small>' . $numbers . '</small>'
+                . '<br><small class="text-muted">Paid invoice: ' . $paidInvoiceCount . '</small>';
+        })
+        ->addColumn('status_badge', function ($row) {
+            $status = (int) $row->status;
+            if ($status === 1) {
+                return '<span class="badge badge-success">Paid</span>';
+            }
+            if ($status === 2) {
+                return '<span class="badge badge-secondary">Expired/Canceled</span>';
+            }
+            return '<span class="badge badge-warning">Pending</span>';
+        })
+        ->editColumn('total_amount', function ($row) {
+            return 'Rp ' . number_format((float) ($row->total_amount ?? 0), 0, ',', '.');
+        })
+        ->editColumn('paid_amount', function ($row) {
+            return 'Rp ' . number_format((float) ($row->paid_amount ?? 0), 0, ',', '.');
+        })
+        ->addColumn('payment_url_action', function ($row) {
+            if (empty($row->payment_url)) {
+                return '<span class="text-muted">-</span>';
+            }
+
+            $url = e((string) $row->payment_url);
+            return '<a href="' . $url . '" target="_blank" class="btn btn-xs btn-outline-primary">'
+                . '<i class="fas fa-external-link-alt mr-1"></i>Buka</a>';
+        })
+        ->addColumn('created_info', function ($row) {
+            $createdAt = e((string) ($row->created_at ?? ''));
+            $updatedAt = e((string) ($row->updated_at ?? ''));
+            return '<small>' . $createdAt . '</small><br><small class="text-muted">Upd: ' . $updatedAt . '</small>';
+        })
+        ->rawColumns(['customer_info', 'invoice_info', 'status_badge', 'payment_url_action', 'created_info'])
+        ->make(true);
+}
 //======================================================================================
 
 // public function table_transaction_list(Request $request){

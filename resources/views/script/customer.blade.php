@@ -200,13 +200,22 @@
       console.warn('Chart.js belum dimuat, chart dilewati.');
       return;
     }
-    let percentages = {
-      potensial: ((data.potensial / total) * 100).toFixed(2),
-      active: ((data.active / total) * 100).toFixed(2),
-      inactive: ((data.inactive / total) * 100).toFixed(2),
-      block: ((data.block / total) * 100).toFixed(2),
-      company_Properti: ((data.company_Properti / total) * 100).toFixed(2),
-    };
+    const isDark = document.body.classList.contains('dark-mode');
+    const textColor = isDark ? '#9ba3b2' : '#6b7280';
+    const gridColor = isDark ? '#333845' : '#e5e7eb';
+
+    const safeTotal = total > 0 ? total : 1;
+    const labels = ['Potensial', 'Active', 'Inactive', 'Block', 'C Properti'];
+    const values = [
+      Number(data.potensial || 0),
+      Number(data.active || 0),
+      Number(data.inactive || 0),
+      Number(data.block || 0),
+      Number(data.company_Properti || 0)
+    ];
+    const percentages = values.map(function (value) {
+      return ((value / safeTotal) * 100).toFixed(2);
+    });
 
     let ctx = document.getElementById('customerStatusChart').getContext('2d');
 
@@ -215,26 +224,21 @@
       }
 
       window.customerChart = new Chart(ctx, {
-        type: 'bar',  // Menggunakan chart batang
+        type: 'bar',
         data: {
-          labels: [
-            `Potensial (${percentages.potensial}% | ${data.potensial})`, 
-            `Active (${percentages.active}% | ${data.active})`, 
-            `Inactive (${percentages.inactive}% | ${data.inactive})`, 
-            `Block (${percentages.block}% | ${data.block})`, 
-            `C Properti (${percentages.company_Properti}% | ${data.company_Properti})`
-            ],
+          labels: labels,
           datasets: [{
             label: 'Jumlah Customer',
-            data: [data.potensial, data.active, data.inactive, data.block, data.company_Properti],
+            data: values,
             backgroundColor: ['#FFCC00', '#28A745', '#6C757D', '#DC3545', '#007BFF'],
-            borderColor: '#ddd',
-            borderWidth: 1
+            borderRadius: 6,
+            borderSkipped: false,
+            barPercentage: 0.65,
+            categoryPercentage: 0.7
           }]
         },
         options: {
-           // indexAxis: 'y', // Membuat chart horizontal
-          responsive: false,
+          responsive: true,
           maintainAspectRatio: false,
           plugins: {
             legend: {
@@ -243,20 +247,38 @@
                   tooltip: {
                     callbacks: {
                       label: function (tooltipItem) {
-                        return ` ${tooltipItem.raw} (${percentages[tooltipItem.dataIndex]}%)`;
+                        const index = tooltipItem.dataIndex;
+                        return ` ${tooltipItem.raw} pelanggan (${percentages[index]}%)`;
                       }
                     }
                   }
                 },
                 scales: {
                   x: {
-                    beginAtZero: true
+                    grid: {
+                      display: false
+                    },
+                    ticks: {
+                      color: textColor,
+                      maxRotation: 0,
+                      minRotation: 0
+                    }
                   },
                   y: {
+                    beginAtZero: true,
+                    grid: {
+                      color: gridColor
+                    },
                     ticks: {
+                      color: textColor,
+                      precision: 0,
+                      maxTicksLimit: 8,
                       font: {
                             size: 14 // Ukuran font label
-                          }
+                          },
+                      callback: function(value) {
+                        return Number(value).toLocaleString('id-ID');
+                      }
                         }
                       }
                     }

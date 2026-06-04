@@ -822,7 +822,7 @@ $('#getOnu').click(function() {
             ]
           },
           options: {
-            responsive: false,
+            responsive: true,
             maintainAspectRatio: false,
             plugins: {
               legend: { labels: { color: dmThemeColors().text } },

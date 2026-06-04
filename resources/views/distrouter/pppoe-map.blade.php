@@ -791,6 +791,82 @@ function initPppoeMap() {
   }
 
   // === Offline modal ===
+  function renderSecretStatusForModal(status) {
+    var map = {
+      online:   '<span class="badge badge-success" style="font-size:10px">Online</span>',
+      disabled: '<span class="badge badge-danger" style="font-size:10px">Disable</span>',
+      enable:   '<span class="badge badge-warning" style="font-size:10px">Enable (Offline)</span>',
+      'not-found': '<span class="badge badge-secondary" style="font-size:10px">Tidak ditemukan</span>',
+      unknown:  '<span class="badge badge-secondary" style="font-size:10px">Unknown</span>'
+    };
+    return map[status] || map.unknown;
+  }
+
+  function renderOntStatusForModal(rawHtml) {
+    var wrap = $('<div>').html(rawHtml || '');
+    var firstControl = wrap.find('#powerButton, button.btn, a.badge, a.btn').first();
+    var label = $.trim(firstControl.text() || '');
+    if (!label) {
+      return '<span class="badge badge-secondary" style="font-size:10px">Tidak tersedia</span>';
+    }
+
+    if (/rx\s*:/i.test(label)) {
+      return '<span class="badge badge-success" style="font-size:10px">' + label + '</span>';
+    }
+    if (/los|loss/i.test(label)) {
+      return '<span class="badge badge-danger" style="font-size:10px">Loss</span>';
+    }
+    if (/power\s*down|powerdown|pwr\s*down|dyinggasp/i.test(label)) {
+      return '<span class="badge badge-warning" style="font-size:10px">Off by Power</span>';
+    }
+    if (/working/i.test(label)) {
+      return '<span class="badge badge-success" style="font-size:10px">Working</span>';
+    }
+
+    return '<span class="badge badge-secondary" style="font-size:10px">' + label + '</span>';
+  }
+
+  function hydrateOfflineModalStatuses() {
+    customerData.forEach(function(m, i) {
+      var secretCell = $('#offlineSecret-' + i);
+      var onuCell = $('#offlineOnu-' + i);
+      var baseSecretStatus = (m.secret_status || 'unknown');
+
+      secretCell.html(renderSecretStatusForModal(baseSecretStatus));
+
+      // Hindari request berlebihan ke router: pakai status existing jika sudah jelas.
+      if (m.pppoe && (baseSecretStatus === 'unknown' || baseSecretStatus === 'not-found')) {
+        $.getJSON('/pppoe-map/secret-status', {
+          pppoe: m.pppoe,
+          router_id: (m.id_distrouter || ''),
+          fallback_status: baseSecretStatus
+        }).done(function(res) {
+          secretCell.html(renderSecretStatusForModal((res && res.secret_status) ? res.secret_status : 'unknown'));
+        }).fail(function() {
+          secretCell.html(renderSecretStatusForModal(baseSecretStatus));
+        });
+      }
+
+      if (m.id_olt && m.id_onu) {
+        $.ajax({
+          url: '/olt/ont_status',
+          method: 'POST',
+          data: {
+            _token: '{{ csrf_token() }}',
+            id_olt: m.id_olt,
+            id_onu: m.id_onu
+          }
+        }).done(function(html) {
+          onuCell.html(renderOntStatusForModal(html));
+        }).fail(function() {
+          onuCell.html('<span class="badge badge-secondary" style="font-size:10px">Tidak tersedia</span>');
+        });
+      } else {
+        onuCell.html('<span class="badge badge-secondary" style="font-size:10px">Tidak ada data ONU</span>');
+      }
+    });
+  }
+
   window.openOfflineModal = function() {
     var rows = '';
     if (!customerData.length) {
@@ -803,6 +879,8 @@ function initPppoeMap() {
             + '<th>Nama</th>'
             + '<th>PPPoE</th>'
             + '<th>Router</th>'
+            + '<th>Secret</th>'
+            + '<th>Status ONU OLT</th>'
             + '<th>Offline Sejak</th>'
             + '<th></th>'
             + '</tr></thead><tbody>';
@@ -812,6 +890,8 @@ function initPppoeMap() {
           + '<td><strong>' + (m.name||'-') + '</strong><br><span style="color:var(--text-muted);font-size:11px">' + (m.customer_id||'') + '</span></td>'
           + '<td><code style="font-size:11px">' + (m.pppoe||'-') + '</code></td>'
           + '<td style="font-size:11px">' + (m.router||'-') + '</td>'
+          + '<td id="offlineSecret-' + i + '"><span style="color:var(--text-muted);font-size:11px">checking...</span></td>'
+          + '<td id="offlineOnu-' + i + '"><span style="color:var(--text-muted);font-size:11px">checking...</span></td>'
           + '<td style="color:#f59e0b;font-size:11px">' + (m.last_offline||'-') + '</td>'
           + '<td>' + (m.id ? '<a href="/customer/'+m.id+'" target="_blank" class="btn btn-xs btn-outline-primary" style="font-size:10px;padding:1px 7px;border-radius:20px"><i class="fas fa-external-link-alt"></i></a>' : '') + '</td>'
           + '</tr>';
@@ -821,6 +901,10 @@ function initPppoeMap() {
     document.getElementById('offlineListBody').innerHTML  = rows;
     document.getElementById('offlineModalCount').textContent = customerData.length + ' customer offline';
     $('#offlineListModal').modal('show');
+
+    if (customerData.length) {
+      hydrateOfflineModalStatuses();
+    }
   };
 
   document.getElementById('btnRefreshMap').addEventListener('click', function() {

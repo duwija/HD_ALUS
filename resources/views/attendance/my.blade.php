@@ -3,6 +3,66 @@
 @section('title', 'Absen & Jadwal Saya')
 
 @section('content')
+<style>
+  .attendance-action-buttons {
+    gap: .75rem !important;
+  }
+
+  .attendance-action-btn {
+    min-height: 52px;
+    padding: .75rem 1.1rem;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: .7rem;
+    touch-action: manipulation;
+  }
+
+  .attendance-action-btn i {
+    font-size: 1rem;
+  }
+
+  .attendance-camera-box {
+    min-height: 240px;
+  }
+
+  .attendance-camera-viewport {
+    width: 100%;
+    height: 240px;
+    object-fit: cover;
+  }
+
+  .attendance-camera-placeholder {
+    min-height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @media (max-width: 576px) {
+    .attendance-action-buttons {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      gap: .65rem !important;
+    }
+
+    .attendance-action-btn {
+      width: 100%;
+      min-height: 56px;
+      font-size: 1.05rem;
+    }
+
+    .attendance-camera-box,
+    .attendance-camera-placeholder {
+      min-height: 200px;
+    }
+
+    .attendance-camera-viewport {
+      height: 200px;
+    }
+  }
+</style>
+
 <div class="content-header">
   <div class="container-fluid">
     <div class="row mb-2">
@@ -21,6 +81,131 @@
 
 <section class="content">
 <div class="container-fluid">
+
+@php
+  $clockInDisabled = $attendanceLockReason || ($todayAtt && $todayAtt->clock_in);
+  $clockOutDisabled = (bool) $attendanceLockReason;
+  $clockOutSoftBlocked = null;
+  if (!$attendanceLockReason) {
+    if (!$todayAtt || !$todayAtt->clock_in) {
+      $clockOutSoftBlocked = 'Clock out aktif setelah Anda clock in.';
+    } elseif ($todayAtt->clock_out) {
+      $clockOutSoftBlocked = 'Clock out sudah dilakukan hari ini.';
+    }
+  }
+  $clockOutHint = $attendanceLockReason
+    ? $attendanceLockReason
+    : ($clockOutSoftBlocked ?: 'Clock out siap digunakan.');
+@endphp
+
+<div class="card shadow-sm border-0 mb-3" style="background:linear-gradient(135deg,#7f2515 0%,#c6462c 100%);color:#fff;overflow:hidden">
+  <div class="card-body p-4">
+    <div class="row align-items-center">
+      <div class="col-lg-7">
+        <div class="d-flex flex-wrap align-items-center mb-2" style="gap:.5rem">
+          <span class="badge badge-light text-dark">Absensi Harian</span>
+          @if($attendanceLockReason)
+            <span class="badge badge-warning text-dark">{{ $attendanceLockReason }}</span>
+          @else
+            <span class="badge badge-success">Radius wajib</span>
+            <span class="badge badge-info">Selfie wajib</span>
+          @endif
+        </div>
+        <h3 class="mb-2 font-weight-bold">Clock in dan clock out dengan selfie + GPS</h3>
+        <div class="d-flex flex-wrap" style="gap:.75rem">
+          <div><i class="fas fa-map-marker-alt mr-1"></i>{{ $activeLocations->count() }} titik absen aktif</div>
+          @if($todaySched && $todaySched->shift)
+            <div><i class="fas fa-business-time mr-1"></i>{{ $todaySched->shift->name }}</div>
+          @endif
+          @if($todayAtt)
+            <div><i class="fas fa-clock mr-1"></i>Hari ini: {{ $todayAtt->clock_in ? 'sudah clock-in' : 'belum clock-in' }}{{ $todayAtt->clock_out ? ' · sudah clock-out' : '' }}</div>
+          @endif
+        </div>
+      </div>
+      <div class="col-lg-5 mt-4 mt-lg-0">
+        <form id="attendance-submit-form" method="POST" action="{{ route('my.attendance.clock-in') }}">
+          @csrf
+          <input type="hidden" name="month" value="{{ $month }}">
+          <input type="hidden" name="latitude" id="attendance-latitude">
+          <input type="hidden" name="longitude" id="attendance-longitude">
+          <input type="hidden" name="gps_accuracy" id="attendance-accuracy">
+          <input type="hidden" name="gps_altitude" id="attendance-altitude">
+          <input type="hidden" name="gps_speed" id="attendance-speed">
+          <input type="hidden" name="device_info" id="attendance-device-info">
+          <input type="hidden" name="is_mock" id="attendance-is-mock" value="0">
+          <input type="hidden" name="attendance_action" id="attendance-action" value="clock-in">
+          <input type="hidden" name="photo_base64" id="attendance-photo-base64">
+
+          <div class="p-3" style="background:rgba(255,255,255,.12);border-radius:14px">
+            <div class="row">
+              <div class="col-12">
+                <label class="small font-weight-bold mb-1">Selfie wajib</label>
+                <div class="position-relative text-center attendance-camera-box" style="border:1px dashed rgba(255,255,255,.45);border-radius:12px;overflow:hidden;background:rgba(0,0,0,.15)">
+                  <video id="attendance-camera" autoplay playsinline muted class="attendance-camera-viewport" style="display:none"></video>
+                  <img id="attendance-photo-preview" alt="Preview selfie" class="attendance-camera-viewport" style="display:none">
+                  <div id="attendance-photo-placeholder" class="small attendance-camera-placeholder" style="opacity:.85">
+                    <div>
+                      <i class="fas fa-camera fa-2x d-block mb-1"></i>
+                      Kamera akan dibuka otomatis di depan
+                    </div>
+                  </div>
+                </div>
+                <small class="d-block mt-1" style="opacity:.8">Foto diambil langsung dari kamera depan hp saat absensi.</small>
+              </div>
+            </div>
+
+            <div class="row mt-3 small">
+              <div class="col-md-6 mb-2">
+                <div class="font-weight-bold">Status lokasi</div>
+                <div id="attendance-location-state">Menunggu izin lokasi</div>
+              </div>
+              <div class="col-md-6 mb-2">
+                <div class="font-weight-bold">Akurasi</div>
+                <div id="attendance-accuracy-state">-</div>
+              </div>
+              <div class="col-12">
+                <div class="font-weight-bold">Koordinat</div>
+                <div id="attendance-coordinate-state">-</div>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap mt-3 attendance-action-buttons" style="gap:.5rem">
+              <button type="button" class="btn btn-light btn-sm" id="attendance-retry-location">
+                <i class="fas fa-location-arrow mr-1"></i>Minta Lokasi Ulang
+              </button>
+              <button type="button" class="btn btn-success attendance-action-btn" data-attendance-action="clock-in" data-url="{{ route('my.attendance.clock-in') }}" {{ $clockInDisabled ? 'disabled' : '' }}>
+                <i class="fas fa-sign-in-alt mr-1"></i>Clock In
+              </button>
+              <button
+                type="button"
+                class="btn attendance-action-btn {{ $clockOutDisabled ? 'btn-light' : 'btn-warning text-dark' }}"
+                style="border:1px solid rgba(255,255,255,.65);{{ $clockOutDisabled ? 'color:#6c757d;' : '' }}"
+                data-attendance-action="clock-out"
+                data-url="{{ route('my.attendance.clock-out') }}"
+                {{ $clockOutDisabled ? 'disabled' : '' }}
+              >
+                <i class="fas fa-sign-out-alt mr-1"></i>Clock Out
+              </button>
+            </div>
+            <div class="small mt-2" style="opacity:.95">
+              <i class="fas fa-info-circle mr-1"></i>{{ $clockOutHint }}
+            </div>
+          </div>
+
+          @if($attendanceLockReason)
+            <div class="alert alert-warning mt-3 mb-0 py-2 small">
+              {{ $attendanceLockReason }}
+            </div>
+          @else
+            <div class="alert alert-info mt-3 mb-0 py-2 small">
+              Jika izin lokasi ditolak, klik tombol minta ulang lalu izinkan akses lokasi pada browser.
+            </div>
+          @endif
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 
 {{-- ── Month filter ──────────────────────────────────────────────── --}}
 <div class="row mb-3">
@@ -432,4 +617,210 @@
 
 </div>
 </section>
+
+<script>
+(function() {
+  const form = document.getElementById('attendance-submit-form');
+  if (!form) return;
+
+  const deviceInfo = document.getElementById('attendance-device-info');
+  const actionInput = document.getElementById('attendance-action');
+  const latitudeInput = document.getElementById('attendance-latitude');
+  const longitudeInput = document.getElementById('attendance-longitude');
+  const accuracyInput = document.getElementById('attendance-accuracy');
+  const altitudeInput = document.getElementById('attendance-altitude');
+  const speedInput = document.getElementById('attendance-speed');
+  const mockInput = document.getElementById('attendance-is-mock');
+  const photoBase64Input = document.getElementById('attendance-photo-base64');
+  const locationState = document.getElementById('attendance-location-state');
+  const accuracyState = document.getElementById('attendance-accuracy-state');
+  const coordinateState = document.getElementById('attendance-coordinate-state');
+  const retryButton = document.getElementById('attendance-retry-location');
+  const cameraVideo = document.getElementById('attendance-camera');
+  const photoPreview = document.getElementById('attendance-photo-preview');
+  const photoPlaceholder = document.getElementById('attendance-photo-placeholder');
+  const actionButtons = form.querySelectorAll('[data-attendance-action]');
+
+  let lastPosition = null;
+  let cameraStream = null;
+
+  if (deviceInfo) {
+    deviceInfo.value = navigator.userAgent || '';
+  }
+
+  function setLocationFeedback(state, text) {
+    if (!locationState) return;
+    locationState.textContent = text;
+    locationState.className = state === 'ok' ? 'text-success' : (state === 'warn' ? 'text-warning' : 'text-danger');
+  }
+
+  function fillPosition(position) {
+    lastPosition = position;
+    const coords = position.coords;
+
+    if (latitudeInput) latitudeInput.value = coords.latitude.toFixed(6);
+    if (longitudeInput) longitudeInput.value = coords.longitude.toFixed(6);
+    if (accuracyInput) accuracyInput.value = coords.accuracy.toFixed(2);
+    if (altitudeInput) altitudeInput.value = coords.altitude === null ? '' : coords.altitude.toFixed(2);
+    if (speedInput) speedInput.value = coords.speed === null ? '' : coords.speed.toFixed(2);
+
+    if (accuracyState) accuracyState.textContent = coords.accuracy.toFixed(1) + ' m';
+    if (coordinateState) coordinateState.textContent = coords.latitude.toFixed(6) + ', ' + coords.longitude.toFixed(6);
+    setLocationFeedback('ok', 'Lokasi aktif dan siap divalidasi.');
+  }
+
+  async function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !cameraVideo) {
+      setLocationFeedback('warn', 'Kamera tidak tersedia di browser ini.');
+      return;
+    }
+
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'user' },
+        },
+        audio: false,
+      });
+
+      cameraVideo.srcObject = cameraStream;
+      cameraVideo.style.display = 'block';
+      if (photoPlaceholder) photoPlaceholder.style.display = 'none';
+      if (photoPreview) photoPreview.style.display = 'none';
+      setLocationFeedback('ok', 'Kamera siap. Arahkan wajah ke depan lalu submit absensi.');
+    } catch (error) {
+      setLocationFeedback('error', 'Tidak bisa membuka kamera. Periksa izin kamera pada browser.');
+    }
+  }
+
+  function captureCameraFrame() {
+    if (!cameraVideo || !cameraVideo.videoWidth || !cameraVideo.videoHeight) {
+      return false;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = cameraVideo.videoWidth;
+    canvas.height = cameraVideo.videoHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    if (photoBase64Input) {
+      photoBase64Input.value = dataUrl;
+    }
+    if (photoPreview) {
+      photoPreview.src = dataUrl;
+      photoPreview.style.display = 'block';
+    }
+    if (cameraVideo) {
+      cameraVideo.style.display = 'none';
+    }
+    if (photoPlaceholder) {
+      photoPlaceholder.style.display = 'none';
+    }
+
+    return true;
+  }
+
+  function requestLocation(onSuccess) {
+    if (!navigator.geolocation) {
+      setLocationFeedback('error', 'Browser tidak mendukung GPS.');
+      return;
+    }
+
+    setLocationFeedback('warn', 'Meminta lokasi perangkat...');
+
+    const highAccuracyOptions = {
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 0,
+    };
+
+    const fallbackOptions = {
+      enableHighAccuracy: false,
+      timeout: 20000,
+      maximumAge: 120000,
+    };
+
+    function handleSuccess(position) {
+      fillPosition(position);
+      if (typeof onSuccess === 'function') {
+        onSuccess(position);
+      }
+    }
+
+    function handleError(error) {
+      const messageMap = {
+        1: 'Izin lokasi ditolak. Klik minta ulang lalu izinkan akses lokasi.',
+        2: 'Lokasi perangkat tidak tersedia. Pastikan GPS aktif.',
+        3: 'Permintaan lokasi habis waktu. Coba lagi di area dengan sinyal GPS lebih baik.',
+      };
+
+      if (lastPosition) {
+        fillPosition(lastPosition);
+        setLocationFeedback('warn', 'GPS real-time lambat. Menggunakan lokasi terakhir yang tersedia.');
+        if (typeof onSuccess === 'function') {
+          onSuccess(lastPosition);
+        }
+        return;
+      }
+
+      setLocationFeedback('error', messageMap[error.code] || 'Gagal membaca lokasi perangkat.');
+    }
+
+    navigator.geolocation.getCurrentPosition(handleSuccess, function(error) {
+      if (error.code === 3) {
+        setLocationFeedback('warn', 'GPS presisi timeout, mencoba mode lokasi standar...');
+        navigator.geolocation.getCurrentPosition(handleSuccess, handleError, fallbackOptions);
+        return;
+      }
+      handleError(error);
+    }, highAccuracyOptions);
+  }
+
+  function submitFor(action, url) {
+    actionInput.value = action;
+    form.action = url;
+
+    if (!cameraVideo || !cameraStream) {
+      setLocationFeedback('error', 'Kamera belum aktif. Izinkan akses kamera lalu coba lagi.');
+      startCamera();
+      return;
+    }
+
+    if (!latitudeInput.value || !longitudeInput.value || !accuracyInput.value) {
+      requestLocation(function() {
+        if (!captureCameraFrame()) {
+          setLocationFeedback('error', 'Gagal mengambil foto dari kamera.');
+          return;
+        }
+        if (form.requestSubmit) form.requestSubmit(); else form.submit();
+      });
+      return;
+    }
+
+    if (!captureCameraFrame()) {
+      setLocationFeedback('error', 'Gagal mengambil foto dari kamera.');
+      return;
+    }
+
+    if (form.requestSubmit) form.requestSubmit(); else form.submit();
+  }
+
+  actionButtons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      submitFor(button.dataset.attendanceAction, button.dataset.url);
+    });
+  });
+
+  if (retryButton) {
+    retryButton.addEventListener('click', function() {
+      requestLocation();
+    });
+  }
+
+  startCamera();
+  requestLocation();
+})();
+</script>
 @endsection
