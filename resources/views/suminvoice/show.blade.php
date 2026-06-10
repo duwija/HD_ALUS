@@ -783,16 +783,30 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
           'X-CSRF-TOKEN': '{{ csrf_token() }}'
         },
         body: JSON.stringify({ type: type })
       })
-      .then(response => response.json().then(data => ({ ok: response.ok, data })))
-      .then(({ ok, data }) => {
+      .then(async response => {
+        const contentType = response.headers.get('content-type') || '';
+        let data;
+
+        if (contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          data = { message: text || 'Server mengembalikan respons tidak valid.' };
+        }
+
+        return { ok: response.ok, status: response.status, data };
+      })
+      .then(({ ok, status, data }) => {
         if (ok) {
           Swal.fire('Terkirim!', data.message, 'success');
         } else {
-          Swal.fire('Gagal!', data.message || 'Terjadi kesalahan.', 'warning');
+          Swal.fire('Gagal!', data.message || `Terjadi kesalahan (HTTP ${status}).`, 'warning');
         }
       })
       .catch(error => {

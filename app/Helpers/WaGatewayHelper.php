@@ -186,9 +186,16 @@ if (!preg_match('/^\d{8,15}$/', $hp)) {
 
             self::markSendFailure($hp, $lastError ?: "Semua session gagal setelah {$attempt} percobaan");
 
+            $detail = trim((string) $lastError);
+            if ($detail !== '' && stripos($detail, 'not authenticated') !== false) {
+                $detail = 'Session WhatsApp belum login (not authenticated). Silakan scan QR di WA gateway.';
+            }
+
             return [
                 'status'  => 'error',
-                'message' => "Semua session gagal setelah $attempt percobaan"
+                'message' => $detail !== ''
+                    ? "Semua session gagal setelah $attempt percobaan. Detail: {$detail}"
+                    : "Semua session gagal setelah $attempt percobaan"
             ];
 
         } catch (\Throwable $e) {

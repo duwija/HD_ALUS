@@ -3738,17 +3738,17 @@ public function send_reminder_inv(Request $request, $id)
         $type = $request->input('type');
 
         if (!in_array($type, ['wa', 'email', 'fcm'])) {
-            return redirect()->back()->with('error', 'Invalid notification type.');
+            return response()->json(['message' => 'Invalid notification type.'], 400);
         }
 
         $suminvoice = \App\Suminvoice::find($id);
         if (!$suminvoice) {
-            return redirect()->back()->with('error', 'Invoice not found.');
+            return response()->json(['message' => 'Invoice not found.'], 404);
         }
 
         $customer = \App\Customer::withTrashed()->find($suminvoice->id_customer);
         if (!$customer) {
-            return redirect()->back()->with('error', 'Customer not found.');
+            return response()->json(['message' => 'Customer not found.'], 404);
         }
         $duedate = $suminvoice->due_date ?: 'N/A';
         $encryptedurl = '/invoice/cst/' . Crypt::encryptString($customer->id);
@@ -3866,6 +3866,8 @@ public function send_reminder_inv(Request $request, $id)
                 Mail::to($customer->email)->send(new EmailNotification($data));
                 return response()->json(['message' => 'Email notification sent successfully.']);
             }
+
+            return response()->json(['message' => 'Email pelanggan belum tersedia.'], 400);
         }
 
         // ----------------------------------------------------------------
@@ -3908,7 +3910,12 @@ public function send_reminder_inv(Request $request, $id)
         return response()->json(['message' => 'Invalid notification type.'], 400);
 
     } catch (\Exception $e) {
-        \Log::error('Error sending reminder: ' . $e->getMessage());
+        \Log::error('Error sending reminder: ' . $e->getMessage(), [
+            'invoice_id' => $id,
+            'type' => $request->input('type'),
+            'line' => $e->getLine(),
+            'file' => $e->getFile(),
+        ]);
         return response()->json(['message' => 'Server error while sending notification.'], 500);
     }
 }

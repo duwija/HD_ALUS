@@ -72,7 +72,7 @@ class WaService
      */
     public static function sendText(string $phone, string $message): string
     {
-        $provider = strtolower((string) tenant_config('WA_PROVIDER', tenant_config('wa_provider', 'gateway')));
+        $provider = static::getConfiguredProvider();
 
         try {
             return match ($provider) {
@@ -394,7 +394,7 @@ class WaService
      */
     protected static function resolveReminderProvider(string $templateKey): string
     {
-        $configuredProvider = strtolower((string) tenant_config('WA_PROVIDER', tenant_config('wa_provider', 'gateway')));
+        $configuredProvider = static::getConfiguredProvider();
 
         if (static::hasQontakConfig($templateKey)) {
             return 'qontak';
@@ -410,41 +410,81 @@ class WaService
 
     protected static function getQontakApiUrl(): string
     {
-        return trim((string) tenant_config(
-            'WA_QONTAK_API_URL',
-            tenant_config('WHATSAPP_API_URL', env('WHATSAPP_API_URL', 'https://service-chat.qontak.com/api/open/v1/broadcasts/whatsapp/direct'))
-        ));
+        $apiUrl = static::tenantScopedConfig('WA_QONTAK_API_URL');
+        if ($apiUrl !== '') {
+            return $apiUrl;
+        }
+
+        $apiUrl = static::tenantScopedConfig('WHATSAPP_API_URL');
+        if ($apiUrl !== '') {
+            return $apiUrl;
+        }
+
+        return 'https://service-chat.qontak.com/api/open/v1/broadcasts/whatsapp/direct';
     }
 
     protected static function getQontakToken(): string
     {
-        return trim((string) tenant_config(
-            'WA_QONTAK_TOKEN',
-            tenant_config('ACCESS_TOKEN', env('ACCESS_TOKEN', ''))
-        ));
+        $token = static::tenantScopedConfig('WA_QONTAK_TOKEN');
+        if ($token !== '') {
+            return $token;
+        }
+
+        return static::tenantScopedConfig('ACCESS_TOKEN');
     }
 
     protected static function getQontakChannelId(): string
     {
-        return trim((string) tenant_config(
-            'WA_QONTAK_CHANNEL_ID',
-            tenant_config('WA_CHANNEL_INTEGRATION_ID', env('WA_CHANNEL_INTEGRATION_ID', ''))
-        ));
+        $channelId = static::tenantScopedConfig('WA_QONTAK_CHANNEL_ID');
+        if ($channelId !== '') {
+            return $channelId;
+        }
+
+        return static::tenantScopedConfig('WA_CHANNEL_INTEGRATION_ID');
     }
 
     protected static function getQontakTemplateId(string $templateKey): string
     {
-        $templateId = trim((string) tenant_config($templateKey, env($templateKey, '')));
+        $templateId = static::tenantScopedConfig($templateKey);
         if ($templateId !== '') {
             return $templateId;
         }
 
-        $templateId = trim((string) tenant_config('WA_QONTAK_TEMPLATE_ID', env('WA_QONTAK_TEMPLATE_ID', '')));
+        $templateId = static::tenantScopedConfig('WA_QONTAK_TEMPLATE_ID');
         if ($templateId !== '') {
             return $templateId;
         }
 
-        return trim((string) tenant_config('WA_TAMPLATE_ID_4', env('WA_TAMPLATE_ID_4', '')));
+        return static::tenantScopedConfig('WA_TAMPLATE_ID_4');
+    }
+
+    protected static function getConfiguredProvider(): string
+    {
+        $provider = strtolower(static::tenantScopedConfig('WA_PROVIDER'));
+        if ($provider === '') {
+            $provider = strtolower(static::tenantScopedConfig('wa_provider'));
+        }
+
+        return $provider !== '' ? $provider : 'gateway';
+    }
+
+    protected static function tenantScopedConfig(string $key): string
+    {
+        $tenant = app()->bound('tenant') ? app('tenant') : [];
+        if (is_array($tenant)) {
+            foreach ([$key, strtolower($key), strtoupper($key)] as $k) {
+                if (array_key_exists($k, $tenant) && $tenant[$k] !== null) {
+                    return trim((string) $tenant[$k]);
+                }
+            }
+        }
+
+        $value = config('tenant.' . strtolower($key));
+        if ($value !== null) {
+            return trim((string) $value);
+        }
+
+        return '';
     }
 
     /**
