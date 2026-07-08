@@ -140,7 +140,15 @@ public function create()
    if ((Auth::user()->privilege)=="admin")
    {     
     $groups = \App\Group::all();
-    $akuns = \App\Akun::where('category', 'kas & bank')->get();
+    $parentAkuns = \App\Akun::whereNotNull('parent')->distinct()->pluck('parent')->toArray();
+    if (empty($parentAkuns)) {
+        $parentAkuns = [null];
+    }
+
+    $akuns = \App\Akun::whereNotIn('akun_code', $parentAkuns)
+        ->where('category', 'kas & bank')
+        ->orderBy('akun_code')
+        ->get();
     $supervisors = \App\User::where('is_active', 1)->orderBy('name')->get(['id','name','job_title']);
 
     return view ('user/create', ['groups' => $groups, 'akuns'=>$akuns, 'supervisors'=>$supervisors]);
@@ -351,8 +359,16 @@ else
     public function edit($id)
     {
        if ((Auth::user()->privilege)=="admin")
-         {    $user = \App\User::findOrFail($id);  
-            $akuns = \App\Akun::where('category', 'kas & bank')->get();
+         {    $user = \App\User::findOrFail($id);
+            $parentAkuns = \App\Akun::whereNotNull('parent')->distinct()->pluck('parent')->toArray();
+            if (empty($parentAkuns)) {
+                $parentAkuns = [null];
+            }
+
+            $akuns = \App\Akun::whereNotIn('akun_code', $parentAkuns)
+                ->where('category', 'kas & bank')
+                ->orderBy('akun_code')
+                ->get();
             $userAkunIds = $user->akuns->pluck('id')->toArray();
             $merchants = \App\Merchant::all();
             $groups = \App\Group::all();

@@ -79,6 +79,7 @@
       $('#total_paid').text(fmt.format(json.total_paid));
       $('#unpaid_payment').text(fmt.format(json.unpaid_payment));
       $('#cancel_payment').text(fmt.format(json.cancel_payment));
+      $('#refund').text(fmt.format(json.refund || 0));
       $('#fee_counter').text(json.fee_counter);
 
       // -- Percentages (by amount) --

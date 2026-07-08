@@ -24,7 +24,9 @@
               </div>
             </div>
             <div class="card-body p-2">
-              <canvas id="deletedCustomersChart" height="55"></canvas>
+              <div style="height: 220px; position: relative;">
+                <canvas id="deletedCustomersChart"></canvas>
+              </div>
             </div>
           </div>
         </div>
@@ -345,8 +347,8 @@ $(document).ready(function() {
       }]
     },
     options: {
-      responsive: false,
-      maintainAspectRatio: true,
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: {
           display: true,

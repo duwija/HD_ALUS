@@ -193,6 +193,9 @@
           <div class="font-weight-bold" style="font-size:1.1rem;color:#495057">
             Rp <span id="cancel_payment">0</span>
           </div>
+          <div class="text-muted" style="font-size:.75rem">
+            payment cancel /refund Rp. <span id="refund">0.00</span>
+          </div>
         </div>
       </div>
 

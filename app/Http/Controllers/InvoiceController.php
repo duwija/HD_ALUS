@@ -41,11 +41,11 @@ class InvoiceController extends Controller
         if ((Auth::user()->privilege)=="admin")
 
         {
-// Mendapatkan tanggal hari ini
-            $today = Carbon::today();
+// Mendapatkan waktu saat ini (live)
+            $today = Carbon::now();
 
-// Mendapatkan tanggal 6 bulan yang lalu
-            $sixMonthsAgo = Carbon::today()->subMonths(6);
+// Mendapatkan waktu 6 bulan yang lalu dari waktu saat ini
+            $sixMonthsAgo = (clone $today)->subMonths(6);
 
             $suminvoice = \App\Suminvoice::orderBy('id', 'DESC')
             ->whereBetween('date',[(date('y-m-1')), (date('y-m-d'))])
@@ -426,6 +426,7 @@ class InvoiceController extends Controller
         $unpaid_payment   = $summary->where('status',0)->sum('amount');
         $cancel_payment  = $summary->where('status',2)->sum('amount');
         $recieve_payment = $paid_payment;
+        $refund          = 0;
         $fee_counter     = '*Exclude Payment point fee : '.number_format(0,2,'.',',');
 
     } else {
@@ -436,7 +437,8 @@ class InvoiceController extends Controller
             SUM(CASE WHEN payment_status=1 THEN total_amount ELSE 0 END) as paid,
             SUM(CASE WHEN payment_status=0 THEN total_amount ELSE 0 END) as unpaid,
             SUM(CASE WHEN payment_status=2 THEN total_amount ELSE 0 END) as cancel,
-            SUM(recieve_payment) as receive
+            SUM(CASE WHEN payment_status=1 THEN recieve_payment ELSE 0 END) as receive,
+            SUM(CASE WHEN payment_status=2 THEN recieve_payment ELSE 0 END) as refund
             ')->first();
 
         $total            = $summary->total ?? 0;
@@ -444,6 +446,7 @@ class InvoiceController extends Controller
         $unpaid_payment   = $summary->unpaid ?? 0;
         $cancel_payment  = $summary->cancel ?? 0;
         $recieve_payment = $summary->receive ?? 0;
+        $refund          = $summary->refund ?? 0;
         $fee_counter     = '*Exclude Payment point fee : '.number_format($recieve_payment - $paid_payment,2,'.',',');
     }
 
@@ -514,6 +517,7 @@ class InvoiceController extends Controller
     ->with('total_paid', $paid_payment)
     ->with('unpaid_payment', $unpaid_payment)
     ->with('cancel_payment', $cancel_payment)
+    ->with('refund', $refund)
     ->with('fee_counter', $fee_counter)
 
     ->make(true);
