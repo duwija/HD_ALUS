@@ -1042,26 +1042,27 @@ public function trashData(Request $request)
             return '<small class="text-muted">' . $row->address . '</small>';
         })
         ->addColumn('merchant', function($row) {
-            if ($row->id_merchant) {
-                return $row->merchant_name->name;
+            if ($row->id_merchant && $row->merchant_name) {
+                return e($row->merchant_name->name);
             }
             return '<span class="badge badge-light">No Merchant</span>';
         })
         ->addColumn('plan', function($row) {
-            if ($row->id_plan) {
-                return $row->plan_name->name . ' <small class="text-muted">(Rp ' . number_format($row->plan_name->price) . ')</small>';
+            if ($row->id_plan && $row->plan_name) {
+                return e($row->plan_name->name) . ' <small class="text-muted">(Rp ' . number_format($row->plan_name->price) . ')</small>';
             }
             return '<span class="badge badge-light">No Plan</span>';
         })
         ->addColumn('status', function($row) {
-            if ($row->id_status) {
+            if ($row->id_status && $row->status_name) {
+                $statusName = $row->status_name->name;
                 $badge_sts = "badge-secondary";
-                if ($row->status_name->name == 'Active') $badge_sts = "badge-success";
-                elseif ($row->status_name->name == 'Inactive') $badge_sts = "badge-secondary";
-                elseif ($row->status_name->name == 'Block') $badge_sts = "badge-danger";
-                elseif ($row->status_name->name == 'Company_Properti') $badge_sts = "badge-primary";
+                if ($statusName == 'Active') $badge_sts = "badge-success";
+                elseif ($statusName == 'Inactive') $badge_sts = "badge-secondary";
+                elseif ($statusName == 'Block') $badge_sts = "badge-danger";
+                elseif ($statusName == 'Company_Properti') $badge_sts = "badge-primary";
                 
-                return '<span class="badge ' . $badge_sts . '">' . $row->status_name->name . '</span>';
+                return '<span class="badge ' . $badge_sts . '">' . e($statusName) . '</span>';
             }
             return '<span class="badge badge-light">No Status</span>';
         })
@@ -1094,10 +1095,10 @@ public function trashData(Request $request)
             return '<small>' . e($row->deletion_reason) . '</small>';
         })
         ->addColumn('action', function($row) {
-            $merchant = $row->id_merchant ? $row->merchant_name->name : 'No Merchant';
-            $status = $row->id_status ? $row->status_name->name : 'No Status';
-            $plan = $row->id_plan ? $row->plan_name->name : 'No Plan';
-            $price = $row->id_plan ? number_format($row->plan_name->price) : '0';
+            $merchant = ($row->id_merchant && $row->merchant_name) ? $row->merchant_name->name : 'No Merchant';
+            $status = ($row->id_status && $row->status_name) ? $row->status_name->name : 'No Status';
+            $plan = ($row->id_plan && $row->plan_name) ? $row->plan_name->name : 'No Plan';
+            $price = ($row->id_plan && $row->plan_name) ? number_format($row->plan_name->price) : '0';
             
             return '
             <div class="btn-group btn-group-sm" role="group">
