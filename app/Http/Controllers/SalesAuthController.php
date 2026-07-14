@@ -197,9 +197,15 @@ class SalesAuthController extends Controller
         ]);
 
         $uploadedFile = $request->file('file');
+        if ($this->isBlockedUpload($uploadedFile)) {
+            return redirect()->back()->with('error', 'Tipe file tidak diizinkan demi keamanan.');
+        }
+
         $originalName = $uploadedFile->getClientOriginalName();
-        $safeOriginal = preg_replace('/[^A-Za-z0-9._-]/', '_', $originalName);
-        $filename = time() . '_' . $safeOriginal;
+        $baseName = pathinfo($originalName, PATHINFO_FILENAME);
+        $extension = strtolower($uploadedFile->getClientOriginalExtension());
+        $safeBase = preg_replace('/[^A-Za-z0-9_-]/', '_', $baseName);
+        $filename = time() . '_' . $safeBase . ($extension ? '.' . $extension : '');
 
         $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
         $location = public_path("tenants/{$rescode}/upload/customerfiles");
@@ -221,6 +227,32 @@ class SalesAuthController extends Controller
         ]);
 
         return redirect('/sales/customer/' . $customer->id)->with('success', 'File berhasil diupload.');
+    }
+
+    protected function isBlockedUpload($uploadedFile)
+    {
+        $blockedExtensions = ['php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'phps'];
+
+        $originalName = strtolower((string) $uploadedFile->getClientOriginalName());
+        $nameParts = array_filter(explode('.', $originalName));
+        foreach ($nameParts as $part) {
+            if (in_array($part, $blockedExtensions, true)) {
+                return true;
+            }
+        }
+
+        $clientExtension = strtolower((string) $uploadedFile->getClientOriginalExtension());
+        if (in_array($clientExtension, $blockedExtensions, true)) {
+            return true;
+        }
+
+        $guessedExtension = strtolower((string) $uploadedFile->guessExtension());
+        if ($guessedExtension !== '' && in_array($guessedExtension, $blockedExtensions, true)) {
+            return true;
+        }
+
+        $mime = strtolower((string) $uploadedFile->getClientMimeType());
+        return strpos($mime, 'php') !== false;
     }
 
     /**

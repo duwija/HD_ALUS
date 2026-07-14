@@ -109,13 +109,21 @@ class FileController extends Controller
         try {
             // Validation
             $request->validate([
-                'file' => 'required'
+                'file' => 'required|file|max:10240',
+                'file_name' => 'nullable|string|max:191',
             ]); 
 
             if($request->file('file')) {
                 $file = $request->file('file');
-                $name = str_replace('-', ' ', $file->getClientOriginalName());
-                $filename = time().'_'.$name;
+                if ($this->isBlockedUpload($file)) {
+                    return redirect()->back()->with('error', 'File type is not allowed for security reasons.');
+                }
+
+                $originalName = $file->getClientOriginalName();
+                $baseName = pathinfo($originalName, PATHINFO_FILENAME);
+                $extension = strtolower($file->getClientOriginalExtension());
+                $safeBase = preg_replace('/[^A-Za-z0-9_-]/', '_', $baseName);
+                $filename = time().'_'.$safeBase.($extension ? '.'.$extension : '');
 
                 // Get tenant-specific upload path
                 $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
@@ -147,7 +155,7 @@ class FileController extends Controller
 
                 // Gunakan nama custom jika diisi, fallback ke nama asli file
                 $customName = trim($request->input('file_name', ''));
-                $displayName = $customName !== '' ? $customName : $file->getClientOriginalName();
+                $displayName = $customName !== '' ? $customName : $originalName;
 
                 \App\File::create([
                     'id_customer' => $id_customer,
@@ -163,6 +171,32 @@ class FileController extends Controller
             \Log::error('File upload error: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to upload file: ' . $e->getMessage());
         }
+    }
+
+    protected function isBlockedUpload($uploadedFile)
+    {
+        $blockedExtensions = ['php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'phps'];
+
+        $originalName = strtolower((string) $uploadedFile->getClientOriginalName());
+        $nameParts = array_filter(explode('.', $originalName));
+        foreach ($nameParts as $part) {
+            if (in_array($part, $blockedExtensions, true)) {
+                return true;
+            }
+        }
+
+        $clientExtension = strtolower((string) $uploadedFile->getClientOriginalExtension());
+        if (in_array($clientExtension, $blockedExtensions, true)) {
+            return true;
+        }
+
+        $guessedExtension = strtolower((string) $uploadedFile->guessExtension());
+        if ($guessedExtension !== '' && in_array($guessedExtension, $blockedExtensions, true)) {
+            return true;
+        }
+
+        $mime = strtolower((string) $uploadedFile->getClientMimeType());
+        return strpos($mime, 'php') !== false;
     }
 
     /**

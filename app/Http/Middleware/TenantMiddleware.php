@@ -302,7 +302,7 @@ class TenantMiddleware
             'wa_group_support',
             'wa_group_vendor',
             // WhatsApp provider selector & credentials
-            'wa_provider',           // gateway | qontak | fonnte | wablas
+            'wa_provider',           // gateway | qontak | titiwa | fonnte | wablas
             'wa_fonnte_token',       // Fonnte API token
             'wa_wablas_token',       // Wablas API token
             'wa_wablas_url',         // Wablas server URL (default: https://my.wablas.com)
@@ -310,6 +310,14 @@ class TenantMiddleware
             'wa_qontak_api_url',     // Qontak API endpoint (opsional override)
             'wa_qontak_template_id', // Qontak message_template_id
             'wa_qontak_channel_id',  // Qontak channel_integration_id
+            'wa_titiwa_host',        // Titiwa/WAHub base host, contoh: https://wahub.domain.com
+            'wa_titiwa_api_key',     // Titiwa/WAHub X-API-Key
+            'wa_titiwa_template_1',  // Template Titiwa untuk WA_TAMPLATE_ID_1
+            'wa_titiwa_template_2',  // Template Titiwa untuk WA_TAMPLATE_ID_2 / default umum
+            'wa_titiwa_template_3',  // Template Titiwa untuk WA_TAMPLATE_ID_3
+            'wa_titiwa_template_4',  // Template Titiwa untuk WA_TAMPLATE_ID_4
+            'wahub_host',            // Alias host Titiwa/WAHub
+            'wahub_api_key',         // Alias API key Titiwa/WAHub
             // Company information
             'company_name',
             'company',
@@ -372,6 +380,7 @@ class TenantMiddleware
         // Public folders per tenant
         $tenantPublicPath = $publicBasePath . '/tenants/' . $tenantId;
         $tenantUploadPath = $tenantPublicPath . '/upload';
+        $tenantCustomerFilesPath = $tenantUploadPath . '/customerfiles';
         $tenantBackupPath = $tenantPublicPath . '/backup';
         $tenantUsersPath = $tenantPublicPath . '/users';
         $tenantWaUploadsPath = $tenantPublicPath . '/wa_uploads';
@@ -387,6 +396,7 @@ class TenantMiddleware
         // Create public directories
         $publicDirs = [
             $tenantUploadPath,
+            $tenantCustomerFilesPath,
             $tenantBackupPath,
             $tenantUsersPath,
             $tenantWaUploadsPath,
@@ -397,6 +407,9 @@ class TenantMiddleware
                 @mkdir($dir, 0755, true);
             }
         }
+
+        $this->writeUploadNoExecGuard($tenantUploadPath);
+        $this->writeUploadNoExecGuard($tenantCustomerFilesPath);
         
         // Set logging path
         Config::set('logging.channels.daily.path', $tenantLogPath . '/laravel.log');
@@ -434,5 +447,24 @@ class TenantMiddleware
         Config::set('tenant.full_paths.backup', $tenantBackupPath);
         Config::set('tenant.full_paths.users', $tenantUsersPath);
         Config::set('tenant.full_paths.wa_uploads', $tenantWaUploadsPath);
+    }
+
+    protected function writeUploadNoExecGuard(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        $htaccessPath = $dir . '/.htaccess';
+        $htaccessContent = "<IfModule mod_php.c>\n    php_flag engine off\n</IfModule>\n<IfModule mod_php7.c>\n    php_flag engine off\n</IfModule>\n<IfModule mod_php8.c>\n    php_flag engine off\n</IfModule>\n<FilesMatch \"\\.(php|php[0-9]?|phtml|phar|phps)$\">\n    Require all denied\n</FilesMatch>\nOptions -ExecCGI\n";
+
+        if (!file_exists($htaccessPath)) {
+            @file_put_contents($htaccessPath, $htaccessContent);
+        }
+
+        $indexPath = $dir . '/index.html';
+        if (!file_exists($indexPath)) {
+            @file_put_contents($indexPath, '');
+        }
     }
 }

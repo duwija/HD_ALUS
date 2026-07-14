@@ -13,6 +13,7 @@ use App\Helpers\WaGatewayHelper;
  *
  *   gateway  → WA gateway self-hosted (default)  → config: wa_gateway_url
  *   qontak   → Qontak Official WA Business API   → config: wa_qontak_token, wa_qontak_template_id, wa_qontak_channel_id, wa_qontak_api_url
+ *   titiwa   → Titiwa / WA Hub API               → config: wa_titiwa_host, wa_titiwa_api_key, wa_titiwa_template_1..4
  *   fonnte   → Fonnte (https://fonnte.com)        → config: wa_fonnte_token
  *   wablas   → Wablas (https://wablas.com)        → config: wa_wablas_token, wa_wablas_url
  *
@@ -52,6 +53,7 @@ class WaService
         try {
             return match ($provider) {
                 'qontak'  => static::sendViaQontak($phone, $name, $cid, $encryptedurl, $templateKey, $context),
+                'titiwa'  => static::sendViaTitiwaReminder($phone, $name, $cid, $encryptedurl, $templateKey, $context),
                 'fonnte'  => static::sendViaFonnte($phone, static::buildReminderMessage($name, $cid, $encryptedurl)),
                 'wablas'  => static::sendViaWablas($phone, static::buildReminderMessage($name, $cid, $encryptedurl)),
                 default   => static::sendViaGateway($phone, static::buildReminderMessage($name, $cid, $encryptedurl)),
@@ -76,6 +78,7 @@ class WaService
 
         try {
             return match ($provider) {
+                // Titiwa mendukung template message, tidak cocok untuk plain text bebas.
                 'fonnte'  => static::sendViaFonnte($phone, $message),
                 'wablas'  => static::sendViaWablas($phone, $message),
                 // qontak tidak mendukung plain text (hanya template), fallback ke gateway
@@ -106,6 +109,7 @@ class WaService
         try {
             return match ($provider) {
                 'qontak'  => static::sendViaQontakPaymentConfirmation($phone, $name, $invoiceNo, $cid, (string) $amount, $openUrl),
+                'titiwa'  => static::sendViaTitiwaPaymentConfirmation($phone, $name, $invoiceNo, $cid, (string) $amount, $openUrl),
                 'fonnte'  => static::sendViaFonnte($phone, static::buildPaymentConfirmationMessage($name, $invoiceNo, $cid, (string) $amount, $openUrl, $source)),
                 'wablas'  => static::sendViaWablas($phone, static::buildPaymentConfirmationMessage($name, $invoiceNo, $cid, (string) $amount, $openUrl, $source)),
                 default   => static::sendViaGateway($phone, static::buildPaymentConfirmationMessage($name, $invoiceNo, $cid, (string) $amount, $openUrl, $source)),
@@ -168,6 +172,29 @@ class WaService
             } catch (\Throwable $e) {
                 Log::channel('notif')->error("[WA:qontak] Payment confirmation error CID {$cid}: " . $e->getMessage());
                 // Fallback ke gateway jika Qontak error
+            }
+        }
+
+        if (static::hasTitiwaConfig($templateKey)) {
+            try {
+                $result = static::sendViaTitiwaPaymentConfirmation(
+                    $phone,
+                    $name,
+                    $invoiceNo,
+                    $cid,
+                    (string) $amount,
+                    $openUrl,
+                    $templateKey
+                );
+
+                $status = (is_string($result) && stripos($result, 'error') === false && $result !== '')
+                    ? 'success'
+                    : 'failed';
+
+                return ['status' => $status, 'message' => is_string($result) ? $result : json_encode($result)];
+            } catch (\Throwable $e) {
+                Log::channel('notif')->error("[WA:titiwa] Payment confirmation error CID {$cid}: " . $e->getMessage());
+                // Fallback ke gateway jika Titiwa error
             }
         }
 
@@ -388,8 +415,109 @@ class WaService
     }
 
     /**
+     * Titiwa / WA Hub API (template based).
+     * Endpoint: {host}/api/v1/messages/send
+     * Auth: X-API-Key
+     */
+    protected static function sendViaTitiwaReminder(
+        string $phone,
+        string $name,
+        string $cid,
+        string $encryptedurl,
+        string $templateKey = 'WA_TAMPLATE_ID_4',
+        array $context = []
+    ): string
+    {
+        $template = static::getTitiwaTemplateName($templateKey);
+        if ($template === '') {
+            Log::channel('notif')->warning("[WA:titiwa] Template kosong untuk {$templateKey}.");
+            return 'titiwa: template not set';
+        }
+
+        $domain = tenant_config('domain_name', env('DOMAIN_NAME', ''));
+        $fullUrl = (str_starts_with($encryptedurl, 'http://') || str_starts_with($encryptedurl, 'https://'))
+            ? $encryptedurl
+            : 'https://' . $domain . $encryptedurl;
+
+        $variables = static::buildTitiwaReminderVariables($templateKey, $name, $cid, $fullUrl, $context);
+
+        return static::sendViaTitiwaTemplate($phone, $template, $variables);
+    }
+
+    protected static function sendViaTitiwaPaymentConfirmation(
+        string $phone,
+        string $name,
+        string $invoiceNo,
+        string $cid,
+        string $amount,
+        string $openUrl,
+        string $templateKey = 'WA_TAMPLATE_ID_3'
+    ): string
+    {
+        $template = static::getTitiwaTemplateName($templateKey);
+        if ($template === '') {
+            Log::channel('notif')->warning("[WA:titiwa] Template payment kosong untuk {$templateKey}.");
+            return 'titiwa: template not set';
+        }
+
+        $domain = tenant_config('domain_name', env('DOMAIN_NAME', ''));
+        $fullUrl = (str_starts_with($openUrl, 'http://') || str_starts_with($openUrl, 'https://'))
+            ? $openUrl
+            : 'https://' . $domain . $openUrl;
+
+        $variables = [
+            $name,
+            $invoiceNo,
+            $cid,
+            'Rp ' . number_format((float) $amount, 0, ',', '.'),
+            $fullUrl,
+        ];
+
+        return static::sendViaTitiwaTemplate($phone, $template, $variables);
+    }
+
+    protected static function sendViaTitiwaTemplate(string $phone, string $template, array $variables): string
+    {
+        $host = static::getTitiwaHost();
+        $apiKey = static::getTitiwaApiKey();
+
+        if ($host === '' || $apiKey === '') {
+            Log::channel('notif')->warning('[WA:titiwa] Konfigurasi tidak lengkap (host/api key kosong).');
+            return 'titiwa: config incomplete';
+        }
+
+        $hp = static::formatPhone($phone);
+        $endpoint = rtrim($host, '/') . '/api/v1/messages/send';
+
+        $response = Http::withHeaders([
+            'X-API-Key'   => $apiKey,
+            'Accept'      => 'application/json',
+            'Content-Type'=> 'application/json',
+        ])->timeout(30)->post($endpoint, [
+            'template'  => $template,
+            'to'        => $hp,
+            'variables' => array_values($variables),
+        ]);
+
+        $body = $response->json() ?? [];
+        Log::channel('notif')->info('[WA:titiwa] Response: ' . json_encode($body));
+
+        if (!$response->successful()) {
+            $message = (string) ($body['message'] ?? 'error');
+            return 'error: ' . $message;
+        }
+
+        if (($body['success'] ?? false) !== true) {
+            return 'error: ' . (string) ($body['message'] ?? 'send failed');
+        }
+
+        return (string) (($body['data']['status'] ?? '') ?: 'sent');
+    }
+
+    /**
      * Pilih provider untuk reminder:
      * - Qontak diprioritaskan jika template + token + channel tersedia
+     * - Titiwa diprioritaskan setelah Qontak jika host + api key + template tersedia
      * - Jika tidak, gunakan provider tenant (default gateway)
      */
     protected static function resolveReminderProvider(string $templateKey): string
@@ -400,12 +528,87 @@ class WaService
             return 'qontak';
         }
 
+        if (static::hasTitiwaConfig($templateKey)) {
+            return 'titiwa';
+        }
+
         if ($configuredProvider === 'qontak') {
             Log::channel('notif')->warning("[WA:qontak] Konfigurasi tidak lengkap untuk {$templateKey}, fallback ke gateway.");
             return 'gateway';
         }
 
+        if ($configuredProvider === 'titiwa') {
+            Log::channel('notif')->warning("[WA:titiwa] Konfigurasi tidak lengkap untuk {$templateKey}, fallback ke gateway.");
+            return 'gateway';
+        }
+
         return $configuredProvider;
+    }
+
+    protected static function hasTitiwaConfig(string $templateKey = 'WA_TAMPLATE_ID_4'): bool
+    {
+        return static::getTitiwaHost() !== ''
+            && static::getTitiwaApiKey() !== ''
+            && static::getTitiwaTemplateName($templateKey) !== '';
+    }
+
+    protected static function getTitiwaHost(): string
+    {
+        $host = static::tenantScopedConfig('WA_TITIWA_HOST');
+        if ($host !== '') {
+            return rtrim($host, '/');
+        }
+
+        return rtrim(static::tenantScopedConfig('WAHUB_HOST'), '/');
+    }
+
+    protected static function getTitiwaApiKey(): string
+    {
+        $apiKey = static::tenantScopedConfig('WA_TITIWA_API_KEY');
+        if ($apiKey !== '') {
+            return $apiKey;
+        }
+
+        return static::tenantScopedConfig('WAHUB_API_KEY');
+    }
+
+    protected static function getTitiwaTemplateName(string $templateKey): string
+    {
+        if (preg_match('/(\d+)$/', $templateKey, $match)) {
+            $candidate = static::tenantScopedConfig('WA_TITIWA_TEMPLATE_' . $match[1]);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        $candidate = static::tenantScopedConfig('WA_TITIWA_TEMPLATE_2');
+        if ($candidate !== '') {
+            return $candidate;
+        }
+
+        // Fallback ke key template existing jika mapping khusus Titiwa belum diisi.
+        return static::tenantScopedConfig($templateKey);
+    }
+
+    protected static function buildTitiwaReminderVariables(
+        string $templateKey,
+        string $name,
+        string $cid,
+        string $url,
+        array $context = []
+    ): array
+    {
+        if ($templateKey === 'WA_TAMPLATE_ID_1') {
+            return [
+                $name,
+                $context['invoice_no'] ?? '-',
+                'Rp ' . number_format((float) ($context['amount'] ?? 0), 0, ',', '.'),
+                $context['due_date'] ?? '-',
+                $url,
+            ];
+        }
+
+        return [$name, $cid, $url];
     }
 
     protected static function getQontakApiUrl(): string

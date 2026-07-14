@@ -242,6 +242,7 @@ else
             'groups.*' => 'exists:groups,id',
             'akuns' => 'nullable|array',
             'akuns.*' => 'exists:akuns,id',
+            'dashboard_preference' => 'nullable|in:home-v2,home-v3,home-v4,home-v5,home-admin,attendance/dashboard',
         ]);
 
     // Default foto
@@ -311,6 +312,7 @@ else
                 'description' => $request->description ?? null,
                 'photo' => $imageName,
                 'supervisor_id' => $request->supervisor_id ?: null,
+                'dashboard_preference' => in_array($request->privilege, ['merchant','vendor']) ? null : ($request->dashboard_preference ?: null),
             ]);
 
         // Menyinkronkan groups

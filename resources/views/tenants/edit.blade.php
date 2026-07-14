@@ -365,7 +365,7 @@
                                             <div class="col-md-6 mb-3">
                                                 <h6 class="text-success"><i class="fab fa-whatsapp"></i> WhatsApp Integration</h6>
                                                 <ul class="list-unstyled ml-3 small">
-                                                    <li><code>wa_provider</code> - Provider WA: <code>gateway</code> (default) atau <code>qontak</code></li>
+                                                    <li><code>wa_provider</code> - Provider WA: <code>gateway</code> (default), <code>qontak</code>, <code>titiwa</code>, <code>fonnte</code>, atau <code>wablas</code></li>
                                                     <li><code>WAPISENDER_USER</code> - Username RuangWA</li>
                                                     <li><code>WAPISENDER_KEY</code> - API Key RuangWA</li>
                                                     <li><code>WAPISENDER_GROUPPAYMENT</code> - Group ID Payment</li>
@@ -391,6 +391,15 @@
                                                     <li><code>WA_TAMPLATE_ID_2</code> - Template info invoice baru</li>
                                                     <li><code>WA_TAMPLATE_ID_3</code> - Template konfirmasi pembayaran diterima</li>
                                                     <li><code>WA_TAMPLATE_ID_4</code> - Template job reminder invoice</li>
+                                                    <li class="mt-2"><strong><i class="fas fa-plug"></i> Provider Titiwa / WAHub</strong></li>
+                                                    <li><code>wa_titiwa_host</code> - Base URL Titiwa/WAHub (contoh: <code>https://wahub.domain.com</code>)</li>
+                                                    <li><code>wa_titiwa_api_key</code> - API key untuk header <code>X-API-Key</code></li>
+                                                    <li><code>wa_titiwa_template_1</code> - Nama template Titiwa untuk <code>WA_TAMPLATE_ID_1</code> (invoice baru)</li>
+                                                    <li><code>wa_titiwa_template_2</code> - Nama template default/fallback Titiwa</li>
+                                                    <li><code>wa_titiwa_template_3</code> - Nama template Titiwa untuk <code>WA_TAMPLATE_ID_3</code> (konfirmasi pembayaran)</li>
+                                                    <li><code>wa_titiwa_template_4</code> - Nama template Titiwa untuk <code>WA_TAMPLATE_ID_4</code> (reminder tagihan)</li>
+                                                    <li><code>wahub_host</code> - Alias host untuk kompatibilitas konfigurasi lama</li>
+                                                    <li><code>wahub_api_key</code> - Alias API key untuk kompatibilitas konfigurasi lama</li>
                                                 </ul>
                                             </div>
 

@@ -5,6 +5,11 @@
 
     RewriteEngine On
 
+    # Block direct execution of PHP-like files inside upload/customerfiles paths.
+    RewriteCond %{REQUEST_URI} /(?:upload|customerfiles|tenants/[^/]+/upload)(?:/|$) [NC]
+    RewriteCond %{REQUEST_URI} \.(?:php|php[0-9]?|phtml|phar|phps)$ [NC]
+    RewriteRule .* - [F,L]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

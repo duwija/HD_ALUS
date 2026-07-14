@@ -543,19 +543,19 @@
                 <tbody>
                   @foreach($distrouterList as $i => $dr)
                   @php $s = $distrouterStats[$dr->id] ?? null; @endphp
-                  <tr>
+                  <tr id="distrouter-row-{{ $dr->id }}">
                     <td style="color:#aaa;width:22px">{{ $i+1 }}</td>
                     <td>
                       <a href="{{ url('distrouter/'.$dr->id) }}" style="color:inherit;font-weight:600">{{ $dr->name }}</a>
                     </td>
                     <td><code style="font-size:10px;background:#f5f5f5;padding:1px 4px;border-radius:3px">{{ $dr->ip ?? '-' }}</code></td>
-                    <td class="text-center">
+                    <td class="text-center dr-col-online">
                       <span style="font-weight:700;color:#43a047">{{ $s ? $s->online : 0 }}</span>
                     </td>
-                    <td class="text-center">
+                    <td class="text-center dr-col-offline">
                       <span style="font-weight:700;color:#9e9e9e">{{ $s ? $s->offline : 0 }}</span>
                     </td>
-                    <td class="text-center">
+                    <td class="text-center dr-col-disabled">
                       <span style="font-weight:700;color:#e53935">{{ $s ? $s->disabled : 0 }}</span>
                     </td>
                   </tr>
@@ -691,6 +691,53 @@ $(function () {
 });
 
 // OLT table fetch
+function renderDistrouterRow(id, info) {
+  var $row = $('#distrouter-row-'+id);
+  $row.find('.dr-col-online').html('<span style="font-weight:700;color:#43a047">' + (info.pppActiveCount || 0) + '</span>');
+  $row.find('.dr-col-offline').html('<span style="font-weight:700;color:#9e9e9e">' + (info.pppOfflineCount || 0) + '</span>');
+  $row.find('.dr-col-disabled').html('<span style="font-weight:700;color:#e53935">' + (info.pppDisabledCount || 0) + '</span>');
+}
+
+function fetchDistrouter(id, cb) {
+  var spin = '<i class="fas fa-spinner fa-spin" style="font-size:9px"></i>';
+  var $row = $('#distrouter-row-'+id);
+  $row.find('.dr-col-online').html(spin);
+  $row.find('.dr-col-offline').html(spin);
+  $row.find('.dr-col-disabled').html(spin);
+
+  $.ajax({ url: '/distrouter/getrouterinfo/'+id, method: 'GET', dataType: 'json' })
+    .done(function(r) {
+      if (r && r.success) {
+        renderDistrouterRow(id, r);
+      } else {
+        $row.find('.dr-col-online').html('<span style="color:#c62828" title="Tidak Terhubung"><i class="fas fa-times-circle"></i></span>');
+        $row.find('.dr-col-offline').html('<span style="font-weight:700;color:#9e9e9e">0</span>');
+        $row.find('.dr-col-disabled').html('<span style="font-weight:700;color:#e53935">0</span>');
+      }
+      if (cb) cb();
+    })
+    .fail(function() {
+      $row.find('.dr-col-online').html('<span style="color:#c62828" title="Tidak Terhubung"><i class="fas fa-times-circle"></i></span>');
+      $row.find('.dr-col-offline').html('<span style="font-weight:700;color:#9e9e9e">0</span>');
+      $row.find('.dr-col-disabled').html('<span style="font-weight:700;color:#e53935">0</span>');
+      if (cb) cb();
+    });
+}
+
+@if($distrouterList->isNotEmpty())
+$(function() {
+  function refreshAllDistrouters() {
+    @foreach($distrouterList as $dr)
+      fetchDistrouter({{ $dr->id }});
+    @endforeach
+  }
+
+  // Pull live counters using the same endpoint used by the distrouter page.
+  refreshAllDistrouters();
+  setInterval(refreshAllDistrouters, 60000);
+});
+@endif
+
 function renderOltRow(id, info) {
   var $row = $('#olt-row-'+id);
   $row.find('.olt-col-total').text(info.onuCount||0);

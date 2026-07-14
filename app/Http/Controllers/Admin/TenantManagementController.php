@@ -181,6 +181,25 @@ class TenantManagementController extends Controller
                 }
             }
 
+            // Guard upload folders so PHP files cannot be executed even if uploaded.
+            $uploadGuardContent = "<IfModule mod_php.c>\n    php_flag engine off\n</IfModule>\n<IfModule mod_php7.c>\n    php_flag engine off\n</IfModule>\n<IfModule mod_php8.c>\n    php_flag engine off\n</IfModule>\n<FilesMatch \"\\.(php|php[0-9]?|phtml|phar|phps)$\">\n    Require all denied\n</FilesMatch>\nOptions -ExecCGI\n";
+            $guardDirectories = [
+                "{$basePath}/public/tenants/{$rescode}/upload",
+                "{$basePath}/public/tenants/{$rescode}/upload/customerfiles",
+            ];
+            foreach ($guardDirectories as $guardDir) {
+                if (is_dir($guardDir)) {
+                    $guardFile = $guardDir . '/.htaccess';
+                    if (!file_exists($guardFile)) {
+                        @file_put_contents($guardFile, $uploadGuardContent);
+                    }
+                    $indexFile = $guardDir . '/index.html';
+                    if (!file_exists($indexFile)) {
+                        @file_put_contents($indexFile, '');
+                    }
+                }
+            }
+
             // Create log file
             $logFile = "{$basePath}/storage/tenants/{$rescode}/logs/laravel.log";
             if (!file_exists($logFile)) {
