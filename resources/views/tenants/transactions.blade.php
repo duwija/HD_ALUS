@@ -65,7 +65,7 @@
                                 <div class="card-header bg-light">
                                     <h5 class="card-title mb-0"><i class="fas fa-chart-line"></i> Daily Transaction Chart</h5>
                                 </div>
-                                <div class="card-body" style="height: 300px;">
+                                <div class="card-body daily-chart-wrap">
                                     <canvas id="dailyTransactionChart"></canvas>
                                 </div>
                             </div>
@@ -398,6 +398,23 @@
     .dt-button:hover {
         background-color: #0056b3 !important;
     }
+
+    .daily-chart-wrap {
+        height: 340px;
+        min-height: 260px;
+    }
+
+    .daily-chart-wrap canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    @media (max-width: 991.98px) {
+        .daily-chart-wrap {
+            height: 280px;
+            min-height: 220px;
+        }
+    }
 </style>
 @endsection
 
@@ -470,8 +487,9 @@ $(document).ready(function() {
             ]
         },
         options: {
-            responsive: false,
+            responsive: true,
             maintainAspectRatio: false,
+            resizeDelay: 150,
             interaction: {
                 mode: 'index',
                 intersect: false,
