@@ -238,7 +238,7 @@
   <div class="form-group col-sm-4">
     <label for="dashboard_preference">Dashboard Preference</label>
     <select name="dashboard_preference" id="dashboard_preference" class="form-control">
-      <option value="" {{ old('dashboard_preference') === '' ? 'selected' : '' }}>— Default (/) —</option>
+      <!-- <option value="" {{ old('dashboard_preference') === '' ? 'selected' : '' }}>— Default (/) —</option> -->
       <option value="home-v2" {{ old('dashboard_preference') === 'home-v2' ? 'selected' : '' }}>Dashboard V2 (Teknisi)</option>
       <option value="home-v3" {{ old('dashboard_preference') === 'home-v3' ? 'selected' : '' }}>Dashboard V3 (NOC + Network)</option>
       <option value="home-v4" {{ old('dashboard_preference') === 'home-v4' ? 'selected' : '' }}>Dashboard V4 (Marketing)</option>

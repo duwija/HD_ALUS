@@ -157,7 +157,7 @@
         <i class="fas fa-tachometer-alt mr-1 text-primary"></i>Dashboard Default
       </label>
       <select name="dashboard_preference" id="dashboard_preference" class="form-control">
-        <option value="" {{ !$user->dashboard_preference ? 'selected' : '' }}>— Default (/) —</option>
+        <!-- <option value="" {{ !$user->dashboard_preference ? 'selected' : '' }}>— Default (/) —</option> -->
         <option value="home-v2" {{ $user->dashboard_preference === 'home-v2' ? 'selected' : '' }}>Dashboard V2 (Teknisi)</option>
         <option value="home-v3" {{ $user->dashboard_preference === 'home-v3' ? 'selected' : '' }}>Dashboard V3 (NOC + Network)</option>
         <option value="home-v4" {{ $user->dashboard_preference === 'home-v4' ? 'selected' : '' }}>Dashboard V4 (Marketing)</option>

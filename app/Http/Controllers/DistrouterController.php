@@ -14,8 +14,8 @@ class DistrouterController extends Controller
  public function __construct()
  {
     $this->middleware('auth');
-    $this->middleware('checkPrivilege:admin,noc,user')->except(['client_monitor']);
-    $this->middleware('checkPrivilege:admin,noc,user,accounting')->only(['client_monitor']);
+    $this->middleware('checkPrivilege:admin,noc')->except(['client_monitor']);
+    $this->middleware('checkPrivilege:admin,noc,accounting')->only(['client_monitor']);
 }
 
     /**
