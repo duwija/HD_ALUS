@@ -345,10 +345,25 @@
 <div class="card-footer col-md-12 mt-4 mb-4 px-0">
   <div class="d-flex flex-wrap justify-content-between align-items-start" style="gap:14px;">
     <div class="d-flex flex-wrap" style="gap:8px;">
-      <a href="/customer/{{ $customer->id }}/edit" title="edit" class="btn btn-primary btn-sm"> <i class="fa fa-edit"></i> Edit </a>
+      @php
+        $isUserPrivilege = Auth::check() && Auth::user()->privilege === 'user';
+      @endphp
+      @if($isUserPrivilege)
+        <a href="#" class="btn btn-primary btn-sm disabled" title="Tidak diizinkan untuk user" style="cursor: not-allowed; opacity: 0.65;"> <i class="fa fa-edit"></i> Edit </a>
+      @else
+        <a href="/customer/{{ $customer->id }}/edit" title="edit" class="btn btn-primary btn-sm"> <i class="fa fa-edit"></i> Edit </a>
+      @endif
       <a href="/customer/log/{{ $customer->id }}" title="log" class="btn btn-info btn-sm"> <i class="fa fa-history"></i> log </a>
-      <button type="button" class="btn btn-warning btn-sm" data-toggle="modal" data-target="#modal-reset-password" title="Reset Password Portal"> <i class="fas fa-key"></i> Reset Password </button>
-      <button type="button" class="btn bg-success btn-sm" data-toggle="modal" data-target="#modal-wa"> <i class="fab fa-whatsapp"></i> WA</button>
+      @if($isUserPrivilege)
+        <button type="button" class="btn btn-warning btn-sm disabled" title="Tidak diizinkan untuk user" style="cursor: not-allowed; opacity: 0.65;" disabled> <i class="fas fa-key"></i> Reset Password </button>
+      @else
+        <button type="button" class="btn btn-warning btn-sm" data-toggle="modal" data-target="#modal-reset-password" title="Reset Password Portal"> <i class="fas fa-key"></i> Reset Password </button>
+      @endif
+      @if($isUserPrivilege)
+        <button type="button" class="btn bg-success btn-sm disabled" title="Tidak diizinkan untuk user" style="cursor: not-allowed; opacity: 0.65;" disabled> <i class="fab fa-whatsapp"></i> WA</button>
+      @else
+        <button type="button" class="btn bg-success btn-sm" data-toggle="modal" data-target="#modal-wa"> <i class="fab fa-whatsapp"></i> WA</button>
+      @endif
       @if($customer->fcm_token || $customer->app_token)
       <button type="button" class="btn btn-danger btn-sm" data-toggle="modal" data-target="#modal-app-logout" title="Logout Aplikasi Mobile">
         <i class="fas fa-mobile-alt mr-1"></i><i class="fas fa-sign-out-alt mr-1"></i> Logout App
