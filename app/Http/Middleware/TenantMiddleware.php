@@ -419,8 +419,10 @@ class TenantMiddleware
         Config::set('filesystems.disks.local.root', $tenantAppPath);
         Config::set('filesystems.disks.public.root', $tenantAppPath . '/public');
         
-        // Set public storage URL path dengan tenant prefix
-        $publicUrl = env('APP_URL') . '/storage/' . $tenantId;
+        // Set public storage URL path dengan tenant prefix using active request host.
+        $requestHost = request() ? request()->getSchemeAndHttpHost() : null;
+        $baseUrl = $requestHost ?: rtrim((string) env('APP_URL'), '/');
+        $publicUrl = rtrim($baseUrl, '/') . '/storage/' . $tenantId;
         Config::set('filesystems.disks.public.url', $publicUrl);
 
         $tenantStorageLink = public_path('storage/' . $tenantId);

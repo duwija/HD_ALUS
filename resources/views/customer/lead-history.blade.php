@@ -6,6 +6,7 @@ $typeConfig = [
   'expected_close_date'    => ['icon'=>'fa-calendar-alt',   'color'=>'#6610f2',      'bg'=>'rgba(102,16,242,.12)', 'label'=>'Expected Close'],
   'conversion_probability' => ['icon'=>'fa-chart-line',     'color'=>'#fd7e14',      'bg'=>'rgba(253,126,20,.12)', 'label'=>'Probability'],
   'lead_notes'             => ['icon'=>'fa-sticky-note',    'color'=>'#20c997',      'bg'=>'rgba(32,201,151,.12)', 'label'=>'Notes'],
+  'update_notes'           => ['icon'=>'fa-comment-alt',    'color'=>'#6c757d',      'bg'=>'rgba(108,117,125,.12)', 'label'=>'Update Note'],
 ];
 $defaultCfg = ['icon'=>'fa-pencil-alt', 'color'=>'var(--text-muted)', 'bg'=>'var(--bg-surface-2)', 'label'=>'Update'];
 @endphp

@@ -36,6 +36,72 @@ class CustomerController extends Controller
         return Schema::hasTable('customer_tag_definitions') && Schema::hasTable('customer_tag_map');
     }
 
+    private function processLeadUpdateNoteImages(?string $html): ?string
+    {
+        if ($html === null || trim($html) === '') {
+            return null;
+        }
+
+        $content = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
+        $dom = new \DomDocument();
+
+        libxml_use_internal_errors(true);
+        $dom->loadHtml($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+
+        $images = $dom->getElementsByTagName('img');
+        $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
+        $uploadDir = public_path("tenants/{$rescode}/lead-history");
+
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        foreach ($images as $key => $img) {
+            $src = (string) $img->getAttribute('src');
+
+            // Keep existing URLs untouched; only persist new base64 images.
+            if (strpos($src, 'data:') !== 0 || strpos($src, 'base64,') === false) {
+                continue;
+            }
+
+            [$type, $data] = explode(';', $src, 2);
+            [, $data] = explode(',', $data, 2);
+            $binary = base64_decode($data);
+
+            if ($binary === false) {
+                continue;
+            }
+
+            $extension = 'png';
+            if (strpos($type, 'image/') === 0) {
+                $mimeExtension = strtolower(substr($type, 6));
+                if (in_array($mimeExtension, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                    $extension = $mimeExtension === 'jpeg' ? 'jpg' : $mimeExtension;
+                }
+            }
+
+            $filename = 'lead_update_' . time() . '_' . $key . '_' . uniqid() . '.' . $extension;
+            $path = $uploadDir . '/' . $filename;
+            $imageUrl = "/tenants/{$rescode}/lead-history/{$filename}";
+
+            file_put_contents($path, $binary);
+            $img->setAttribute('src', $imageUrl);
+        }
+
+        return trim((string) $dom->saveHTML());
+    }
+
+    private function hasLeadUpdateNoteContent(?string $html): bool
+    {
+        if ($html === null || trim($html) === '') {
+            return false;
+        }
+
+        $plainText = trim(strip_tags($html));
+        return $plainText !== '' || stripos($html, '<img') !== false;
+    }
+
     // Update workflow stage
     public function updateWorkflow(Request $request, $id)
     {
@@ -3244,6 +3310,7 @@ public function updateLead(Request $request, $id)
 {
     try {
         $customer = Customer::findOrFail($id);
+        $updateNotes = $this->processLeadUpdateNoteImages($request->input('update_notes'));
 
         // Verify customer is in Potensial status
         if ($customer->id_status != 1) {
@@ -3278,10 +3345,22 @@ public function updateLead(Request $request, $id)
                         'field_changed' => $field,
                         'old_value' => $oldValue,
                         'new_value' => $newValue,
-                        'notes' => $request->input('update_notes'), // Optional notes dari form
+                        'notes' => $this->hasLeadUpdateNoteContent($updateNotes) ? $updateNotes : null,
                     ]);
                 }
             }
+        }
+
+        if (!$hasChanges && $this->hasLeadUpdateNoteContent($updateNotes)) {
+            \App\LeadUpdate::create([
+                'id_customer' => $customer->id,
+                'updated_by' => Auth::user()->name,
+                'field_changed' => 'update_notes',
+                'old_value' => null,
+                'new_value' => null,
+                'notes' => $updateNotes,
+            ]);
+            $hasChanges = true;
         }
 
         // Update lead information
