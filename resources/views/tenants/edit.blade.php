@@ -499,6 +499,7 @@
                                                 <ul class="list-unstyled ml-3 small">
                                                     <li><code>COMPANY_ADDRESS1</code> - Alamat baris 1 <span class="badge badge-info badge-sm">multiline</span></li>
                                                     <li><code>COMPANY_ADDRESS2</code> - Alamat baris 2 <span class="badge badge-info badge-sm">multiline</span></li>
+                                                    <li><code>CITY</code> - Nama kota untuk area tanda tangan PDF formulir pendaftaran (contoh: <code>Tabanan</code>)</li>
                                                     <li><code>SIGNATURE</code> - Signature untuk invoice <span class="badge badge-info badge-sm">multiline</span></li>
                                                     <li><code>INV_NOTE</code> - Catatan invoice footer <span class="badge badge-info badge-sm">multiline</span></li>
                                                     <li class="mt-1">

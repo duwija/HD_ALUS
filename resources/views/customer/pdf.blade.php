@@ -48,7 +48,7 @@
     /* Reset dan dasar font */
     body {
       font-family: Arial, sans-serif;
-      font-size: 12px;
+      font-size: 11px;
       color: #333;
       margin: 0 20px;
     }
@@ -56,7 +56,7 @@
     /* Header logo & title */
     .header-table {
       width: 100%;
-      margin-bottom: 20px;
+      margin-bottom: 1px;
       border-collapse: collapse;
     }
     .header-table td {
@@ -138,7 +138,7 @@
 
     /* Syarat & ketentuan */
     .terms {
-      font-size: 11px;
+      font-size: 9px;
       color: #444;
       margin-bottom: 1px;
     }
@@ -152,7 +152,7 @@
       color: #333;
     }
     .terms-list li {
-      margin-bottom: 3px;
+      margin-bottom: 1px;
       text-align: justify;
     }
     .agreement-text {
@@ -203,7 +203,7 @@
   <table class="header-table">
     <tr>
       <td class="header-logo">
-        <img src="{{ $invoiceLogoPath }}" alt="Logo {{ tenant_config('company_name', config('app.name')) }}" style="max-width: 140px;">
+        <img src="{{ $invoiceLogoPath }}" alt="Logo {{ tenant_config('company_name', config('app.name')) }}" style="max-width: 120px;">
       </td>
       <td>
         <div class="header-title">Formulir Berlangganan Internet {{  config('app.name') }}</div>
@@ -218,7 +218,7 @@
 
   <table style="width: 100%; margin-bottom: 30px;">
     <tr>
-      <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+      <td style="width: 36%; vertical-align: top; padding-right: 10px;">
         <h4>Data Pelanggan</h4>
         <div class="field-label">CID:</div>
         <div class="field-value">{{ $customer->customer_id}}</div>
@@ -234,7 +234,7 @@
         <div class="field-label">Alamat:</div>
         <div class="field-value">{{ $customer->address }}</div>
       </td>
-      <td style="width: 50%; vertical-align: top; padding-left: 10px;">
+      <td style="width: 33%; vertical-align: top; padding-left: 10px;">
         <h4>Informasi Layanan</h4>
         <div class="field-label">Paket:</div>
         <div class="field-value">
@@ -244,6 +244,16 @@
         <div class="field-value">{{ $data['tanggal_pendaftaran'] ?? '-'   }}</div>
         <div class="field-label">Biaya Registrasi:</div>
         <div class="field-value">{{ $data['biaya_registrasi'] ?? '-' }}</div>
+
+        
+        
+      </td>
+         <td style="width: 30%; vertical-align: top; padding-left: 10px;">
+        <h4>Link Pembayaran</h4>
+       
+ 
+ <img src="data:image/png;base64,{{ $qrcode }}" style="width: 170px;" alt="QR Code">
+
 
         
         
@@ -292,26 +302,24 @@
 
   <p class="agreement-text">{{ $termsAgreement }}</p>
   
-
-  
   <div class="signature signature-section">
 
-
-
-   <table style="width: 100%; margin-bottom: 30px;">
+ 
+   <table style="width: 100%; margin-bottom: 10px;">
     <tr>
+      <td>
+        <label style="display:block; margin-bottom: 14px;">{{ tenant_env('CITY', tenant_config('city', 'Tabanan')) }}, {{ now()->format('d-m-Y') }} </label>
+    <tr>
+      
       <td style="width: 30%; vertical-align: top; padding-right: 10px; text-align: center;">
-        <label style="display: block; font-weight: bold; margin-bottom: 60px;">{{ tenant_config('city', 'Tabanan') }}, {{ now()->format('d-m-Y') }} <br> {{ config('app.name') }}</label>
+      <label style="display: block; font-weight: bold; margin-bottom: 36px;"> {{ config('app.name') }}</label> 
 <p><strong>{{ $data['ttd_nama'] ?? '-' }}</strong></p>
 </td>
 <td style="width: 30%; vertical-align: top; padding-right: 10px; text-align: center;">
-  <label style="display: block; font-weight: bold; margin-bottom: 75px;">Pelanggan</label>
+  <label style="display: block; font-weight: bold; margin-bottom: 36px;">Pelanggan</label>
   <p><strong>{{ $customer->name }}</strong></p>
 </td>
-<td style="width: 30%; vertical-align: top; padding-right: 10px; text-align: center;">
- <div class="field-label">Link Pembayaran:</div>
- <img src="data:image/png;base64,{{ $qrcode }}" style="width: 150px;" alt="QR Code">
-</td>
+
 </tr>
 </table>
 </div>
