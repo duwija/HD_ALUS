@@ -55,6 +55,19 @@
           </select>
         </div>
 
+        <div class="form-group col-md-3">
+          <label for="hutang_akun_code">Akun Hutang Merchant</label>
+          <select name="hutang_akun_code" id="hutang_akun_code" class="form-control select2">
+            <option value="">none</option>
+            @foreach($hutangAkuns as $akun)
+            <option value="{{ $akun->akun_code }}"
+              {{ $merchant->hutang_akun_code == $akun->akun_code ? 'selected' : '' }}>
+              {{ $akun->akun_code }} - {{ $akun->name }}
+            </option>
+            @endforeach
+          </select>
+        </div>
+
 
         <div class="form-group col-md-2">
           <label for="address">Payment Point?</label>

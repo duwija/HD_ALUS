@@ -179,12 +179,17 @@
 
 },
 {
-  "targets": 12, // status
+  "targets": 12, // gateway diff
+  "className": "text-right font-weight-bold",
+
+},
+{
+  "targets": 13, // status
   "className": "text-center",
 
 },
 {
-  "targets": 13, // kasbank
+  "targets": 14, // kasbank
   "className": "text-center",
 
 },
@@ -202,6 +207,7 @@
     {data: 'period', name: 'period'},
     {data: 'total_amount', name: 'total_amount'},
     {data: 'payment_fee', name: 'payment_fee'},
+    {data: 'gateway_diff', name: 'gateway_diff'},
     {data: 'status', name: 'status'},
     {data: 'kasbank', name: 'kasbank'},
     {data: 'updated_by', name: 'updated_by'},

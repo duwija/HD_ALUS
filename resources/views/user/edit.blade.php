@@ -24,8 +24,8 @@
 
           <div class="form-group col-sm-3" >
             <label for="nama">full Name</label>
-            <input type="text" class="form-control @error('name') is-invalid @enderror " name="full_name" id="full_name"  placeholder="Employe Full Name" value="{{$user->full_name}}">
-            @error('name')
+            <input type="text" class="form-control @error('full_name') is-invalid @enderror " name="full_name" id="full_name"  placeholder="Employe Full Name" value="{{$user->full_name}}">
+            @error('full_name')
             <div class="error invalid-feedback">{{ $message }}</div>
             @enderror
           </div>
@@ -216,6 +216,21 @@
       @endforeach
     </select>
     @error('akuns')
+    <div class="invalid-feedback d-block">{{ $message }}</div>
+    @enderror
+  </div>
+
+  <div class="form-group col-sm-3" id="hutangAkunInput" style="display: none;">
+    <label for="hutang_akun_code">Akun Hutang Fee (Kasir)</label>
+    <select name="hutang_akun_code" id="hutang_akun_code" class="form-control select2">
+      <option value="">-- None --</option>
+      @foreach ($hutangAkuns as $akun)
+      <option value="{{ $akun->akun_code }}" {{ $user->hutang_akun_code == $akun->akun_code ? 'selected' : '' }}>
+        {{ $akun->akun_code }} | {{ $akun->name }}
+      </option>
+      @endforeach
+    </select>
+    @error('hutang_akun_code')
     <div class="invalid-feedback d-block">{{ $message }}</div>
     @enderror
   </div>
@@ -433,6 +448,8 @@ document.addEventListener('DOMContentLoaded', function() {
     var dashboardPrefInput = document.getElementById("dashboardPrefInput");
     var adminFeeInputGroup = document.getElementById("adminFeeInput");
     var adminFeeInput = document.getElementById("admin_fee");
+    var hutangAkunInputGroup = document.getElementById("hutangAkunInput");
+    var hutangAkunInput = document.getElementById("hutang_akun_code");
 
     // Show merchant selector only for merchant privilege
     if (privilege === "merchant") {
@@ -455,6 +472,15 @@ document.addEventListener('DOMContentLoaded', function() {
       adminFeeInputGroup.style.display = "none";
       adminFeeInput.required = false;
       adminFeeInput.value = "";
+    }
+
+    if (hutangAkunInputGroup && hutangAkunInput) {
+      if (privilege === "merchant") {
+        hutangAkunInputGroup.style.display = "block";
+      } else {
+        hutangAkunInputGroup.style.display = "none";
+        hutangAkunInput.value = "";
+      }
     }
   }
 

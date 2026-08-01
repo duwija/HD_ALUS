@@ -843,9 +843,36 @@ return("ACCEPTED");
 
         DB::beginTransaction();
         try {
-            foreach ($unpaidInvoices as $invoice) {
+            $totalUnpaidAmount = (int) round((float) $unpaidInvoices->sum('total_amount'));
+            $allocatablePaidAmount = (int) min(max((float) $paidAmount, 0), max($totalUnpaidAmount, 0));
+            $remainingTotalAmount = $totalUnpaidAmount;
+            $remainingPaidAmount = $allocatablePaidAmount;
+            $invoiceRows = $unpaidInvoices->values();
+            $unpaidCount = $invoiceRows->count();
+
+            foreach ($invoiceRows as $index => $invoice) {
+                $invoiceTotal = (int) round((float) $invoice->total_amount);
+
+                $isLast = ($index === ($unpaidCount - 1));
+
+                if ($totalUnpaidAmount <= 0 || $allocatablePaidAmount <= 0) {
+                    $receivedAmount = 0;
+                } elseif ($isLast) {
+                    $receivedAmount = max(min($remainingPaidAmount, $invoiceTotal), 0);
+                } else {
+                    if ($remainingTotalAmount <= 0 || $remainingPaidAmount <= 0) {
+                        $receivedAmount = 0;
+                    } else {
+                        $receivedAmount = (int) floor(($invoiceTotal / $remainingTotalAmount) * $remainingPaidAmount);
+                        $receivedAmount = max(min($receivedAmount, $invoiceTotal), 0);
+                    }
+                }
+
+                $remainingTotalAmount = max($remainingTotalAmount - $invoiceTotal, 0);
+                $remainingPaidAmount = max($remainingPaidAmount - $receivedAmount, 0);
+
                 $invoice->update([
-                    'recieve_payment' => $invoice->total_amount,
+                    'recieve_payment' => $receivedAmount,
                     'payment_point'   => $paymentPoint,
                     'note'            => $noteStr . ' | bundle:' . $bundle->bundle_ref,
                     'updated_by'      => $source,
@@ -863,10 +890,25 @@ return("ACCEPTED");
                         'description' => 'Receive Payment #' . $invoice->number . ' | ' . $customer->name,
                         'note'        => 'Receive Payment ' . $source . ' BUNDLE #' . $invoice->number . ' | ' . $customer->customer_id . ' | ' . $customer->name,
                         'id_akun'     => $paymentPoint,
-                        'debet'       => $invoice->total_amount,
+                        'debet'       => $receivedAmount,
                         'contact_id'  => $customer->id,
                         'code'        => $code,
                     ]);
+
+                    if ($receivedAmount < $invoiceTotal) {
+                        \App\Jurnal::create([
+                            'date'        => $date,
+                            'reff'        => $reff,
+                            'type'        => 'jumum',
+                            'description' => 'Receive Payment #' . $invoice->number . ' | ' . $customer->name,
+                            'note'        => 'Selisih fee gateway bundle',
+                            'id_akun'     => '6-60249',
+                            'debet'       => ($invoiceTotal - $receivedAmount),
+                            'contact_id'  => $customer->id,
+                            'code'        => $code,
+                        ]);
+                    }
+
                     \App\Jurnal::create([
                         'date'        => $date,
                         'reff'        => $reff,

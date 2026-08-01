@@ -21,8 +21,8 @@
           </div>
           <div class="form-group col-sm-3" >
             <label for="nama">full Name</label>
-            <input type="text" class="form-control @error('name') is-invalid @enderror " name="full_name" id="full_name"  placeholder="Employee Full Name" value="{{old('full_name')}}">
-            @error('name')
+            <input type="text" class="form-control @error('full_name') is-invalid @enderror " name="full_name" id="full_name"  placeholder="Employee Full Name" value="{{old('full_name')}}">
+            @error('full_name')
             <div class="error invalid-feedback">{{ $message }}</div>
             @enderror
           </div>
@@ -170,6 +170,21 @@
       @enderror
     </div>
 
+    <div class="form-group col-sm-3" id="hutang-akun-group" style="display: none;">
+      <label for="hutang_akun_code">Akun Hutang Fee (Kasir)</label>
+      <select name="hutang_akun_code" id="hutang_akun_code" class="form-control select2">
+        <option value="">-- None --</option>
+        @foreach ($hutangAkuns as $akun)
+        <option value="{{ $akun->akun_code }}" {{ old('hutang_akun_code') == $akun->akun_code ? 'selected' : '' }}>
+          {{ $akun->akun_code }} | {{ $akun->name }}
+        </option>
+        @endforeach
+      </select>
+      @error('hutang_akun_code')
+      <div class="invalid-feedback d-block">{{ $message }}</div>
+      @enderror
+    </div>
+
 
   </div>
 
@@ -285,6 +300,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const privilegeSelect = document.getElementById('privilege');
   const adminFeeGroup = document.getElementById('admin-fee-group');
   const adminFeeInput = document.getElementById('admin_fee');
+  const hutangAkunGroup = document.getElementById('hutang-akun-group');
+  const hutangAkunInput = document.getElementById('hutang_akun_code');
   const photoInput = document.getElementById('photo');
   const imagePreview = document.getElementById('image-preview');
   const previewContainer = document.getElementById('preview-container');
@@ -301,6 +318,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const isMerchant = privilegeSelect.value === 'merchant';
     adminFeeGroup.style.display = isMerchant ? 'block' : 'none';
     adminFeeInput.required = isMerchant;
+    if (hutangAkunGroup && hutangAkunInput) {
+      hutangAkunGroup.style.display = isMerchant ? 'block' : 'none';
+      if (!isMerchant) {
+        hutangAkunInput.value = '';
+      }
+    }
 
     if (!isMerchant) {
       adminFeeInput.value = '';

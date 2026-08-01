@@ -23,44 +23,226 @@
    </div>
 
    <div class="card-body">  {{-- Line Chart --}}
-    
 
-    {{-- Filter Form + Chart --}}
-    <div class="row mb-4 align-items-start">
-      {{-- Kolom kiri: Filter Form --}}
-      <div class="col-md-6">
+    {{-- Filter paling atas --}}
+    <div class="card card-outline card-warning mb-3">
+      <div class="card-body py-3">
         <form method="post" action="{{ url('payment/mytransaction') }}">
           @csrf
           <div class="row align-items-end">
-            <div class="col-md-5">
+            <div class="col-md-4">
               <label>From:</label>
-              <input type="date" name="date_from" class="form-control"
-              value="{{ $date_from->format('Y-m-d') }}">
+              <input type="date" name="date_from" class="form-control" value="{{ $date_from->format('Y-m-d') }}">
             </div>
 
-            <div class="col-md-5">
+            <div class="col-md-4">
               <label>To:</label>
-              <input type="date" name="date_end" class="form-control"
-              value="{{ $date_end->format('Y-m-d') }}">
+              <input type="date" name="date_end" class="form-control" value="{{ $date_end->format('Y-m-d') }}">
             </div>
 
-            <div class="col-md-2">
-              <button type="submit" class="btn btn-warning mt-4 w-100">Show</button>
+            <div class="col-md-4">
+              <button type="submit" class="btn btn-warning w-100">Show</button>
             </div>
           </div>
         </form>
       </div>
+    </div>
 
-      {{-- Kolom kanan: Chart --}}
-      <div class="col-md-6">
-        <div class="card border-0 shadow-sm">
-          <div class="card-body">
-            <canvas id="paymentLineChart" height="100"></canvas>
+    {{-- Summary --}}
+        <div class="row mb-3">
+          <div class="col-md-3 col-6 mb-2">
+            <div class="small-box bg-info mb-0">
+              <div class="inner">
+                <h3>{{ number_format($transactionCount, 0, ',', '.') }}</h3>
+                <p>Total Transaksi</p>
+              </div>
+              <div class="icon"><i class="fas fa-receipt"></i></div>
+            </div>
+          </div>
+          <div class="col-md-3 col-6 mb-2">
+            <div class="small-box bg-success mb-0">
+              <div class="inner">
+                <h3>Rp {{ number_format($totalReceivePayment, 0, ',', '.') }}</h3>
+                <p>Total Pembayaran (Periode)</p>
+              </div>
+              <div class="icon"><i class="fas fa-money-bill-wave"></i></div>
+            </div>
+          </div>
+          <div class="col-md-3 col-6 mb-2">
+            <div class="small-box bg-warning mb-0">
+              <div class="inner">
+                <h3>Rp {{ number_format($totalMerchantFee, 0, ',', '.') }}</h3>
+                <p>Total Admin Fee (Periode)</p>
+              </div>
+              <div class="icon"><i class="fas fa-coins"></i></div>
+            </div>
+          </div>
+          <div class="col-md-3 col-6 mb-2">
+            <div class="small-box bg-primary mb-0">
+              <div class="inner">
+                <h3>Rp {{ number_format($merchantCashValue, 0, ',', '.') }}</h3>
+                <p>Total Saldo Kas Merchant</p>
+              </div>
+              <div class="icon"><i class="fas fa-wallet"></i></div>
+            </div>
+          </div>
+        </div>
+
+    @if(Auth::user()->privilege === 'merchant')
+    {{-- 3 kolom: kas merchant, hutang fee merchant, tren volume harian --}}
+    <div class="row mb-4">
+      <div class="col-lg-4 col-md-6 mb-3">
+        <div class="card card-outline card-primary h-100 mb-0">
+          <div class="card-header py-2">
+            <strong>Saldo Per Kas Merchant</strong>
+          </div>
+          <div class="card-body p-0">
+            @if($merchantCashBreakdown->isNotEmpty())
+            <div class="table-responsive mb-0">
+              <table class="table table-sm table-striped table-bordered mb-0">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">#</th>
+                    <th>Kode Akun</th>
+                    <th>Nama Akun</th>
+                    <th class="text-right">Nominal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @foreach($merchantCashBreakdown as $idx => $cash)
+                  <tr>
+                    <td>{{ $idx + 1 }}</td>
+                    <td>{{ $cash['akun_code'] }}</td>
+                    <td>{{ $cash['akun_name'] }}</td>
+                    <td class="text-right">Rp {{ number_format($cash['saldo'], 0, ',', '.') }}</td>
+                  </tr>
+                  @endforeach
+                </tbody>
+                <tfoot>
+                  <tr class="bg-light">
+                    <th colspan="3" class="text-right">Total Nilai Kas</th>
+                    <th class="text-right">Rp {{ number_format($merchantCashValue, 0, ',', '.') }}</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            @else
+            <div class="p-3 text-muted">Belum ada akun kas merchant yang terhubung.</div>
+            @endif
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 mb-3">
+        <div class="card card-outline card-danger h-100 mb-0">
+          <div class="card-header py-2">
+            <strong>Fee Merchant</strong>
+          </div>
+          <div class="card-body p-0">
+            @if($merchantLiabilityBreakdown->isNotEmpty())
+            <div class="table-responsive mb-0">
+              <table class="table table-sm table-striped table-bordered mb-0">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">#</th>
+                    <th>Sumber</th>
+                    <th>Kode Akun</th>
+                    <th class="text-right">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @foreach($merchantLiabilityBreakdown as $idx => $item)
+                  <tr>
+                    <td>{{ $idx + 1 }}</td>
+                    <td>{{ $item['source'] }}</td>
+                    <td>{{ $item['akun_code'] }}</td>
+                    <td class="text-right">Rp {{ number_format($item['saldo'], 0, ',', '.') }}</td>
+                  </tr>
+                  @endforeach
+                </tbody>
+                <tfoot>
+                  <tr class="bg-light">
+                    <th colspan="3" class="text-right">Total</th>
+                    <th class="text-right">Rp {{ number_format($merchantLiabilityValue, 0, ',', '.') }}</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            @else
+            <div class="p-3 text-muted">Belum ada mapping akun hutang fee untuk user/merchant ini.</div>
+            @endif
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-12 mb-3">
+        <div class="card card-outline card-info h-100 mb-0">
+          <div class="card-header py-2">
+            <strong>Tren Volume Harian</strong>
+          </div>
+          <div class="card-body" style="min-height: 300px;">
+            <canvas id="paymentLineChart" height="220"></canvas>
           </div>
         </div>
       </div>
     </div>
 
+    @else
+    <div class="row mb-4">
+      <div class="col-md-6 mb-3">
+        <div class="card card-outline card-primary h-100 mb-0">
+          <div class="card-header py-2">
+            <strong>Saldo Per Kas Merchant</strong>
+          </div>
+          <div class="card-body p-0">
+            @if($merchantCashBreakdown->isNotEmpty())
+            <div class="table-responsive mb-0">
+              <table class="table table-sm table-striped table-bordered mb-0">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">#</th>
+                    <th>Kode Akun</th>
+                    <th>Nama Akun</th>
+                    <th class="text-right">Nominal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @foreach($merchantCashBreakdown as $idx => $cash)
+                  <tr>
+                    <td>{{ $idx + 1 }}</td>
+                    <td>{{ $cash['akun_code'] }}</td>
+                    <td>{{ $cash['akun_name'] }}</td>
+                    <td class="text-right">Rp {{ number_format($cash['saldo'], 0, ',', '.') }}</td>
+                  </tr>
+                  @endforeach
+                </tbody>
+                <tfoot>
+                  <tr class="bg-light">
+                    <th colspan="3" class="text-right">Total Nilai Kas</th>
+                    <th class="text-right">Rp {{ number_format($merchantCashValue, 0, ',', '.') }}</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            @else
+            <div class="p-3 text-muted">Belum ada akun kas merchant yang terhubung.</div>
+            @endif
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6 mb-3">
+        <div class="card card-outline card-info h-100 mb-0">
+          <div class="card-header py-2">
+            <strong>Tren Volume Harian</strong>
+          </div>
+          <div class="card-body" style="min-height: 300px;">
+            <canvas id="paymentLineChart" height="220"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    @endif
 
     <hr>
 
@@ -107,14 +289,15 @@
           <td class="text-center"><span class="badge {{ $status[1] }}">{{ $status[0] }}</span></td>
         </tr>
         @endforeach
-
+      </tbody>
+      <tfoot>
         <tr class="bg-light">
           <td colspan="7" class="text-right"><strong>Total :</strong></td>
           <td class="text-right"><strong>Rp {{ number_format($total_merchant_fee, 0, ',', '.') }}</strong></td>
           <td class="text-right"><strong>Rp {{ number_format($total_amount, 0, ',', '.') }}</strong></td>
           <td></td>
         </tr>
-      </tbody>
+      </tfoot>
     </table>
     </div>
   </div>
@@ -128,10 +311,10 @@
   const paymentLineChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: {!! json_encode($chartData->keys()) !!},
+      labels: {!! json_encode($chartLabels) !!},
       datasets: [{
-        label: 'Volume Pembayaran (Rp)',
-        data: {!! json_encode($chartData->values()) !!},
+        label: 'Volume Pembayaran Harian (Transaksi)',
+        data: {!! json_encode($chartVolumes) !!},
         fill: true,
         tension: 0.3,
         backgroundColor: 'rgba(54, 162, 235, 0.2)',
@@ -143,13 +326,18 @@
       }]
     },
     options: {
-      responsive: false,
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         title: { display: true, text: 'Tren Volume Pembayaran Harian' }
       },
       scales: {
-        y: { beginAtZero: true, title: { display: true, text: 'Jumlah (Rp)' } },
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 },
+          title: { display: true, text: 'Jumlah Transaksi' }
+        },
         x: { title: { display: true, text: 'Tanggal' } }
       }
     }

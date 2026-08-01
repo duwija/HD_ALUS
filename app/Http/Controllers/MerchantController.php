@@ -97,8 +97,11 @@ class MerchantController extends Controller
         ->Where('category','kas & bank')
 
         ->get();
+        $hutangAkuns = \App\Akun::where('category', 'akun hutang')
+            ->orderBy('akun_code', 'asc')
+            ->get();
 
-        return view ('merchant/create',['map' => $map, 'akuns'=>$akuns]);
+        return view ('merchant/create',['map' => $map, 'akuns'=>$akuns, 'hutangAkuns' => $hutangAkuns]);
     }
 
     /**
@@ -120,6 +123,9 @@ class MerchantController extends Controller
         'address' => 'nullable',
         'coordinate' => 'nullable',
         'description' => 'nullable',
+        'akun_code' => 'nullable|exists:akuns,akun_code',
+        'hutang_akun_code' => 'nullable|exists:akuns,akun_code',
+        'payment_point' => 'nullable|in:0,1',
 
     ]);
 
@@ -229,10 +235,13 @@ class MerchantController extends Controller
         ->Where('category','kas & bank')
 
         ->get();
+        $hutangAkuns = \App\Akun::where('category', 'akun hutang')
+        ->orderBy('akun_code', 'asc')
+        ->get();
 
 
         $merchant = \App\Merchant::findOrFail($id);
-        return view ('merchant/edit',['merchant' =>$merchant, 'map' =>$map, 'akuns'=>$akuns]);
+        return view ('merchant/edit',['merchant' =>$merchant, 'map' =>$map, 'akuns'=>$akuns, 'hutangAkuns' => $hutangAkuns]);
     }
 
     /**
@@ -252,7 +261,10 @@ class MerchantController extends Controller
             'phone' => 'required|numeric',
             'address' => 'nullable',
             'coordinate' => 'nullable',
-            'description' =>'nullable'
+            'description' =>'nullable',
+            'akun_code' => 'nullable|exists:akuns,akun_code',
+            'hutang_akun_code' => 'nullable|exists:akuns,akun_code',
+            'payment_point' => 'nullable|in:0,1',
         ]);
 
     // Cek apakah merchant dengan nama yang sama sudah ada
@@ -272,6 +284,7 @@ class MerchantController extends Controller
             'coordinate' => $request->coordinate,
             'description' => $request->description,                                   
             'akun_code' => $request->akun_code,
+            'hutang_akun_code' => $request->hutang_akun_code,
             'payment_point'=> $request->payment_point,
         ]);
 

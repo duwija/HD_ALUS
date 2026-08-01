@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Tenant;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
 class TenantManagementController extends Controller
@@ -13,6 +14,16 @@ class TenantManagementController extends Controller
     public function __construct()
     {
         $this->middleware('auth:admin');
+    }
+
+    /**
+     * Keep compatibility with existing user edit flow:
+     * - If value looks like an existing hash, store as-is.
+     * - Otherwise hash plain text password.
+     */
+    private function normalizePasswordForStorage(string $password): string
+    {
+        return strlen($password) >= 50 ? $password : Hash::make($password);
     }
 
     /**
@@ -1284,7 +1295,7 @@ class TenantManagementController extends Controller
             'email'              => $request->email,
             'privilege'          => $request->privilege,
             'phone'              => $request->phone,
-            'password'           => bcrypt($request->password),
+            'password'           => $this->normalizePasswordForStorage((string) $request->password),
             'is_active_employee' => 1,
             'created_at'         => now(),
             'updated_at'         => now(),
@@ -1410,7 +1421,7 @@ class TenantManagementController extends Controller
         \DB::connection('tenant_temp')->table('users')
             ->where('id', $userId)
             ->update([
-                'password'   => bcrypt($request->password),
+                'password'   => $this->normalizePasswordForStorage((string) $request->password),
                 'updated_at' => now(),
             ]);
 

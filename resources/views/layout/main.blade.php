@@ -598,6 +598,28 @@
       padding: 8px 12px;
     }
 
+    .global-back-wrap {
+      display: flex;
+      justify-content: flex-end;
+      padding: 8px 10px 0;
+    }
+
+    .btn-global-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border) !important;
+      background: var(--bg-surface) !important;
+      color: var(--text-secondary) !important;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-global-back:hover {
+      background: var(--bg-surface-2) !important;
+      color: var(--text-primary) !important;
+      text-decoration: none;
+    }
+
     @keyframes glowing {
       0%   { background-color: #ffd700; box-shadow: 0 0 4px #2ba805; }
       50%  { background-color: #ffd966; box-shadow: 0 0 8px #49e819; }
@@ -1122,6 +1144,13 @@
 
   <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
+    <div class="global-back-wrap" id="globalBackWrap">
+      <a href="{{ url()->previous() }}" class="btn btn-sm btn-global-back" id="globalBackButton">
+        <i class="fas fa-arrow-left"></i>
+        <span>Back</span>
+      </a>
+    </div>
+
     <div class="row">
 
       <div class="col-12 p-1 float-sm-right">
@@ -1147,6 +1176,47 @@
   <!-- /.control-sidebar -->
 </div>
 <!-- ./wrapper -->
+
+<script>
+(function() {
+  var backWrap = document.getElementById('globalBackWrap');
+  var backButton = document.getElementById('globalBackButton');
+
+  if (!backWrap || !backButton) {
+    return;
+  }
+
+  var fallbackUrl = '{{ url('/home') }}';
+  var previousUrl = backButton.getAttribute('href') || '';
+  var currentUrl = window.location.href;
+
+  var hasReferrer = !!document.referrer;
+  var hasHistory = window.history.length > 1;
+  var previousIsSamePage = previousUrl === currentUrl;
+  var isDirectOpen = !hasReferrer && !hasHistory;
+
+  if (isDirectOpen && previousIsSamePage) {
+    backWrap.style.display = 'none';
+    return;
+  }
+
+  backButton.addEventListener('click', function(e) {
+    e.preventDefault();
+
+    if (hasHistory) {
+      window.history.back();
+      return;
+    }
+
+    if (previousUrl && !previousIsSamePage) {
+      window.location.href = previousUrl;
+      return;
+    }
+
+    window.location.href = fallbackUrl;
+  });
+})();
+</script>
 
 <!-- ============================================================ -->
 <!-- JS CDN Libraries (dipindah dari <head> agar tidak block render) -->

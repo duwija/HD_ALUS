@@ -281,7 +281,7 @@
       </div>
       <div class="col-md-4 mb-2">
         <div class="p-3 rounded" style="background:#d1ecf1;border:1px solid #bee5eb">
-          <div class="small mb-1" style="color:#0c5460"><i class="fas fa-percent mr-1"></i>Total Payment Point Fee</div>
+          <div class="small mb-1" style="color:#0c5460"><i class="fas fa-percent mr-1"></i>Total Merchant Fee</div>
           <div class="font-weight-bold" style="font-size:1.1rem;color:#0c5460">
             Rp <span id="fee_counter">0</span>
           </div>
@@ -314,6 +314,7 @@
             <th>Period</th>
             <th class="text-right">Total Amount</th>
             <th class="text-right">Payment Fee</th>
+            <th class="text-right">Selisih</th>
             <th class="text-center">Status</th>
             <th class="text-center">Kasbank</th>
             <th>Received By</th>

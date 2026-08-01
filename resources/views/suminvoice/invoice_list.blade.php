@@ -166,7 +166,6 @@
           <div class="font-weight-bold" style="font-size:1.1rem;color:#155724">
             Rp <span id="total_paid">0</span>
           </div>
-          <div id="fee_counter" class="text-muted" style="font-size:.75rem"></div>
         </div>
       </div>
 

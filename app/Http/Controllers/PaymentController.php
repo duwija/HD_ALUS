@@ -14,6 +14,7 @@ use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Exports\MyTransactionExport;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 class PaymentController extends Controller
 {
     /**
@@ -429,14 +430,121 @@ public function mytransaction(Request $request)
     ->orderBy('payment_date', 'ASC')
     ->get();
 
-        // Data untuk grafik (group by tanggal)
+    $transactionCount = (int) $suminvoices->count();
+    $totalReceivePayment = (float) $suminvoices->sum('recieve_payment');
+    $totalMerchantFee = (float) $suminvoices->sum('merchant_fee');
+
+    $merchantCashValue = 0.0;
+    $merchantCashAccounts = collect();
+    $merchantCashBreakdown = collect();
+    $merchantLiabilityBreakdown = collect();
+    $merchantLiabilityValue = 0.0;
+
+    $user = auth()->user();
+    if ($user) {
+        $merchantCashAccounts = $user->akuns()
+            ->where('category', 'kas & bank')
+            ->orderBy('akun_code', 'asc')
+            ->get(['akuns.akun_code', 'akuns.name']);
+
+        $cashAccountCodes = $merchantCashAccounts->pluck('akun_code')->filter()->values();
+        if ($cashAccountCodes->isNotEmpty()) {
+            $saldoByAccount = DB::table('jurnals')
+                ->whereIn('id_akun', $cashAccountCodes)
+                ->select('id_akun', DB::raw('COALESCE(SUM(debet - kredit), 0) as saldo'))
+                ->groupBy('id_akun')
+                ->pluck('saldo', 'id_akun');
+
+            $merchantCashBreakdown = $merchantCashAccounts->map(function ($account) use ($saldoByAccount) {
+                $saldo = (float) ($saldoByAccount[$account->akun_code] ?? 0);
+
+                return [
+                    'akun_code' => $account->akun_code,
+                    'akun_name' => $account->name,
+                    'saldo' => $saldo,
+                ];
+            });
+
+            $merchantCashValue = (float) DB::table('jurnals')
+                ->whereIn('id_akun', $cashAccountCodes)
+                ->selectRaw('COALESCE(SUM(debet - kredit), 0) as saldo')
+                ->value('saldo');
+        }
+
+        $liabilityCodes = collect();
+
+        if (!empty($user->hutang_akun_code)) {
+            $liabilityCodes->push($user->hutang_akun_code);
+        }
+
+        if (!empty($user->id_merchant)) {
+            $merchant = \App\Merchant::find($user->id_merchant);
+            if (!empty($merchant?->hutang_akun_code)) {
+                $liabilityCodes->push($merchant->hutang_akun_code);
+            }
+        }
+
+        $liabilityCodes = $liabilityCodes->filter()->unique()->values();
+        if ($liabilityCodes->isNotEmpty()) {
+            $liabilityAccounts = DB::table('akuns')
+                ->whereIn('akun_code', $liabilityCodes)
+                ->select('akun_code', 'name')
+                ->orderBy('akun_code', 'asc')
+                ->get();
+
+            $liabilitySaldoByAccount = DB::table('jurnals')
+                ->whereIn('id_akun', $liabilityCodes)
+                ->select('id_akun', DB::raw('COALESCE(SUM(kredit - debet), 0) as saldo_hutang'))
+                ->groupBy('id_akun')
+                ->pluck('saldo_hutang', 'id_akun');
+
+            $merchantLiabilityBreakdown = collect($liabilityAccounts)->map(function ($account) use ($liabilitySaldoByAccount, $user) {
+                $source = (!empty($user->hutang_akun_code) && $user->hutang_akun_code === $account->akun_code)
+                    ? 'Kasir User'
+                    : 'Merchant';
+
+                return [
+                    'akun_code' => $account->akun_code,
+                    'akun_name' => $account->name,
+                    'saldo' => (float) ($liabilitySaldoByAccount[$account->akun_code] ?? 0),
+                    'source' => $source,
+                ];
+            });
+
+            $merchantLiabilityValue = (float) $merchantLiabilityBreakdown->sum('saldo');
+        }
+    }
+
+    // Data grafik tren volume pembayaran harian (jumlah transaksi per hari)
     $chartData = $suminvoices->groupBy(function ($item) {
         return Carbon::parse($item->payment_date)->format('Y-m-d');
     })->map(function ($group) {
-        return $group->sum('recieve_payment');
+        return $group->count();
     });
 
-    return view('payment.mytransaction', compact('suminvoices', 'date_from', 'date_end', 'chartData'));
+    $chartLabels = [];
+    $chartVolumes = [];
+    for ($date = $date_from->copy(); $date->lte($date_end); $date->addDay()) {
+        $label = $date->format('Y-m-d');
+        $chartLabels[] = $label;
+        $chartVolumes[] = (int) ($chartData[$label] ?? 0);
+    }
+
+    return view('payment.mytransaction', compact(
+        'suminvoices',
+        'date_from',
+        'date_end',
+        'chartLabels',
+        'chartVolumes',
+        'transactionCount',
+        'totalReceivePayment',
+        'totalMerchantFee',
+        'merchantCashValue',
+        'merchantCashAccounts',
+        'merchantCashBreakdown',
+        'merchantLiabilityBreakdown',
+        'merchantLiabilityValue'
+    ));
 }
 
 // ✅ Export PDF (mengikuti filter tanggal)

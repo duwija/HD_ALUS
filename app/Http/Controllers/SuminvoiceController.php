@@ -2301,16 +2301,26 @@ public function table_transaction_list(Request $request)
     $kasbank     = $request->kasbank;
     $id_plan     = $request->id_plan;
 
+    $gatewayDiffMap = DB::table('jurnals')
+    ->selectRaw("REPLACE(reff, 'receive', '') as tempcode_ref")
+    ->selectRaw("SUM(CASE WHEN id_akun = '6-60249' THEN (debet - kredit) ELSE 0 END) as gateway_diff")
+    ->where('reff', 'like', '%receive')
+    ->groupBy('tempcode_ref');
+
     /** ================= BASE QUERY ================= **/
     $baseQuery = \App\Suminvoice::query()
     ->whereBetween('suminvoices.payment_date', [$dateStart, $dateEnd])
     ->where('suminvoices.payment_status', 1)
     ->leftJoin('customers', 'suminvoices.id_customer', '=', 'customers.id')
+    ->leftJoinSub($gatewayDiffMap, 'gateway_map', function ($join) {
+        $join->on('suminvoices.tempcode', '=', 'gateway_map.tempcode_ref');
+    })
     ->select(
         'suminvoices.*',
         'customers.name',
         'customers.customer_id',
-        'customers.id_merchant'
+        'customers.id_merchant',
+        DB::raw('COALESCE(gateway_map.gateway_diff, 0) as gateway_diff')
     )
     ->with([
         'customer.merchant_name',
@@ -2345,19 +2355,20 @@ public function table_transaction_list(Request $request)
 
     /** ================= HITUNG TOTAL ================= **/
     $summary = (clone $baseQuery)
-    ->selectRaw('SUM(suminvoices.total_amount) as total, SUM(suminvoices.recieve_payment) as receive')
+    ->selectRaw('SUM(suminvoices.total_amount) as total, SUM(COALESCE(suminvoices.merchant_fee, 0)) as merchant_fee_total')
     ->first();
 
     $total = $summary->total ?? 0;
-    $fee_counter = ($summary->receive ?? 0) - $total;
+    $fee_counter = $summary->merchant_fee_total ?? 0;
 
 
     /** ================= GROUP USER ================= **/
     $groupedTransactionsUser = (clone $baseQuery)
     ->select(
         'suminvoices.updated_by',
-        DB::raw('SUM(suminvoices.recieve_payment) as total_payment'),
-        DB::raw('SUM(suminvoices.total_amount) as total_amount')
+        DB::raw('SUM(suminvoices.recieve_payment + COALESCE(suminvoices.merchant_fee, 0)) as total_payment'),
+        DB::raw('SUM(suminvoices.total_amount) as total_amount'),
+        DB::raw('SUM(COALESCE(suminvoices.merchant_fee, 0)) as merchant_fee_total')
     )
     ->groupBy('suminvoices.updated_by')
     ->get()
@@ -2365,7 +2376,7 @@ public function table_transaction_list(Request $request)
         if (is_numeric($t->updated_by)) {
             $t->updated_by = optional($t->user)->name;
         }
-        $t->payment_fee = $t->total_payment - $t->total_amount;
+        $t->payment_fee = (float) ($t->merchant_fee_total ?? 0);
         return $t;
     });
 
@@ -2374,7 +2385,7 @@ public function table_transaction_list(Request $request)
     $groupedTransactionsMerchant = (clone $baseQuery)
     ->select(
         'customers.id_merchant',
-        DB::raw('SUM(suminvoices.recieve_payment) as total_payment'),
+        DB::raw('SUM(suminvoices.recieve_payment + COALESCE(suminvoices.merchant_fee, 0)) as total_payment'),
         DB::raw('SUM(suminvoices.total_amount) as total_amount')
     )
     ->groupBy('customers.id_merchant')
@@ -2394,7 +2405,7 @@ public function table_transaction_list(Request $request)
         'suminvoices.payment_point',
         'akuns_map.akun_name',
         DB::raw('COUNT(suminvoices.id) as total_transactions'),
-        DB::raw('SUM(suminvoices.recieve_payment) as total_payment'),
+        DB::raw('SUM(suminvoices.recieve_payment + COALESCE(suminvoices.merchant_fee, 0)) as total_payment'),
         DB::raw('SUM(suminvoices.total_amount) as total_amount')
     )
     ->groupBy('suminvoices.payment_point', 'akuns_map.akun_name')
@@ -2449,7 +2460,9 @@ public function table_transaction_list(Request $request)
 
     ->editColumn('total_amount', fn($s)=> number_format($s->total_amount, 2, '.', ','))
 
-    ->addColumn('payment_fee', fn($s)=> number_format($s->recieve_payment - $s->total_amount, 2, '.', ','))
+    ->addColumn('payment_fee', fn($s)=> number_format((float) ($s->merchant_fee ?? 0), 2, '.', ','))
+
+    ->addColumn('gateway_diff', fn($s)=> number_format((float) ($s->gateway_diff ?? 0), 2, '.', ','))
 
     ->addColumn('status', function($s){
         if ($s->payment_status == 1){ $badge="success"; $text="PAID"; }
@@ -2549,12 +2562,13 @@ public function searchmytransaction(Request $request)
         'subtotal' => 'required|numeric|min:0',
 
         'invoice_item' => 'required|array|min:1',
+        'invoice_item.*' => 'required|integer|distinct|exists:invoices,id',
     ]);
 
      $msg="";  
         //$array="";  
      $tempcode=sha1(time().rand());
-     $id = $request->invoice_item;
+    $id = array_values(array_unique($request->invoice_item));
      $latest_number=uniqid();
      $code = substr(md5(uniqid('', true)), 0, 10);
      $customers = \App\Customer::Where('id',$request['id_customer'])->withTrashed()->first();
@@ -2580,11 +2594,27 @@ public function searchmytransaction(Request $request)
     DB::beginTransaction();
 
     try{
-            // Step 1 : Set current invoice item to parent Suminvoice
-        \App\Invoice::whereIn('id', $id)->update([
+            // Step 1 : validate and set current invoice items to parent Suminvoice
+        $validInvoiceItemCount = \App\Invoice::whereIn('id', $id)
+            ->where('id_customer', $request['id_customer'])
+            ->where('payment_status', 0)
+            ->count();
+
+        if ($validInvoiceItemCount !== count($id)) {
+            throw new \RuntimeException('Sebagian item invoice tidak valid/sudah diproses. Muat ulang halaman lalu coba lagi.');
+        }
+
+        $updatedInvoiceItemCount = \App\Invoice::whereIn('id', $id)
+            ->where('id_customer', $request['id_customer'])
+            ->where('payment_status', 0)
+            ->update([
             'payment_status' => 3,
             'tempcode' => $tempcode,
         ]);
+
+        if ($updatedInvoiceItemCount !== count($id)) {
+            throw new \RuntimeException('Gagal mengunci item invoice secara konsisten. Silakan ulangi proses invoice.');
+        }
 
 
             //Step 2 : Create Suminvoice
@@ -2724,7 +2754,7 @@ return redirect ('invoice/'.$request->id_customer)->with('info',$msg);
 
     DB::rollback();
     session()->forget('invoice_locked');
-    return redirect ('invoice/'.$request->id_customer)->with('info','Failed to Create Invoice'.$e);
+    return redirect ('invoice/'.$request->id_customer)->with('info','Failed to Create Invoice: '.$e->getMessage());
 }
 
 
@@ -3284,6 +3314,8 @@ public function edit($id)
  {
      DB::beginTransaction();
      $merchant_fee = $request->merchant_fee ?? 0;
+     $receivePayment = (float) ($request->recieve_payment ?? 0);
+     $merchantFeeValue = (float) $merchant_fee;
 
      try {
        $code = substr(md5(uniqid('', true)), 0, 10);
@@ -3350,18 +3382,40 @@ public function edit($id)
 
             ];
 
-
+            // Jika ada merchant fee, kas yang diterima adalah pokok + fee.
+            $cashInAmount = $receivePayment + max($merchantFeeValue, 0);
             $data['id_akun'] = $normalizedPaymentPoint;
-            $data['debet'] = $request->recieve_payment;
+            $data['debet'] = $cashInAmount;
             \App\Jurnal::create($data);
             $invstatus="";
 
     unset($data['debet']); // Remove debet key for the credit entry
 
-// Create credit entry
-    $data['id_akun'] = '1-10100';
-    $data['kredit'] = $request->recieve_payment;
-    \App\Jurnal::create($data);
+            // Credit pokok pembayaran ke akun piutang/default existing.
+            $data['id_akun'] = '1-10100';
+            $data['kredit'] = $receivePayment;
+            \App\Jurnal::create($data);
+
+            // Credit merchant fee ke akun hutang merchant jika tersedia.
+            if ($merchantFeeValue > 0) {
+                $userLiabilityAkun = null;
+                $receiverUserId = $request->updated_by ?: auth()->id();
+                if (!empty($receiverUserId)) {
+                    $receiverUser = \App\User::find($receiverUserId);
+                    $userLiabilityAkun = $receiverUser->hutang_akun_code ?? null;
+                }
+
+                $merchantLiabilityAkun = null;
+                if (!empty($customers->id_merchant)) {
+                    $merchant = \App\Merchant::find($customers->id_merchant);
+                    $merchantLiabilityAkun = $merchant->hutang_akun_code ?? null;
+                }
+
+                $selectedLiabilityAkun = $userLiabilityAkun ?: $merchantLiabilityAkun;
+                $data['id_akun'] = !empty($selectedLiabilityAkun) ? $selectedLiabilityAkun : '2-2010100';
+                $data['kredit'] = $merchantFeeValue;
+                \App\Jurnal::create($data);
+            }
 }
 
 Xendit::setApiKey(env('XENDIT_KEY'));

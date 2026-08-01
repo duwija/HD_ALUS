@@ -11,7 +11,7 @@ class Merchant extends Model
     use HasFactory;
     use softDeletes;
     protected $fillable = [
-        'name', 'contact_name', 'phone', 'address', 'coordinate', 'description','created_at','akun_code','payment_point'
+        'name', 'contact_name', 'phone', 'address', 'coordinate', 'description','created_at','akun_code','hutang_akun_code','payment_point'
     ];
 
     public function customer()
@@ -29,6 +29,11 @@ class Merchant extends Model
 public function akun_name()
 {
     return $this->belongsTo(\App\Akun::class, 'akun_code', 'akun_code');
+}
+
+public function hutang_akun_name()
+{
+    return $this->belongsTo(\App\Akun::class, 'hutang_akun_code', 'akun_code');
 }
 
 }

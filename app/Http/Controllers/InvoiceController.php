@@ -976,7 +976,18 @@ public function edit($tempcode)
     public function destroy($id, $cid)
     {
         $id=\App\Invoice::dencrypt($id);
-        \App\Invoice::destroy($id);
+        $invoice = \App\Invoice::find($id);
+
+        if (!$invoice) {
+            return redirect('/invoice/'.$cid.'/create')->with('error', 'Item invoice tidak ditemukan.');
+        }
+
+        // Only draft/uninvoiced items are allowed to be deleted.
+        if ((int) $invoice->payment_status !== 0 || !empty($invoice->tempcode)) {
+            return redirect('/invoice/'.$cid.'/create')->with('error', 'Item invoice sudah diproses dan tidak bisa dihapus.');
+        }
+
+        $invoice->delete();
         return redirect ('/invoice/'.$cid.'/create')->with('success','Item deleted successfully!');
     }
 

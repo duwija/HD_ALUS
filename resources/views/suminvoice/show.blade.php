@@ -680,15 +680,9 @@
                    <div class="form-group m-0 col-md-6">
                     <label for="invoice_type">  Amount </label>
                     <div class="input-group mb-3">
-                      @if (Auth::user()->privilege == 'admin' || Auth::user()->privilege == 'accounting')
-                      <input type="text" class="form-control @error('recieve_payment') is-invalid @enderror" 
-                      name="recieve_payment" id="recieve_payment"  
-                      placeholder="Rp. XXXX.XXXX" value="{{ $total }}">
-                      @else
                       <input type="text" class="form-control @error('recieve_payment') is-invalid @enderror" 
                       name="recieve_payment" id="recieve_payment"  
                       placeholder="Rp. XXXX.XXXX" value="{{ $total }}" readonly>
-                      @endif
                       @error('recieve_payment')
                       <div class="error invalid-feedback">{{ $message }}</div>
                       @enderror

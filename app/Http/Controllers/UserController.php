@@ -149,9 +149,13 @@ public function create()
         ->where('category', 'kas & bank')
         ->orderBy('akun_code')
         ->get();
+    $hutangAkuns = \App\Akun::whereNotIn('akun_code', $parentAkuns)
+        ->where('category', 'akun hutang')
+        ->orderBy('akun_code')
+        ->get();
     $supervisors = \App\User::where('is_active', 1)->orderBy('name')->get(['id','name','job_title']);
 
-    return view ('user/create', ['groups' => $groups, 'akuns'=>$akuns, 'supervisors'=>$supervisors]);
+    return view ('user/create', ['groups' => $groups, 'akuns'=>$akuns, 'hutangAkuns' => $hutangAkuns, 'supervisors'=>$supervisors]);
 }
 else
 {
@@ -241,9 +245,19 @@ else
             'groups' => 'required|array',
             'groups.*' => 'exists:groups,id',
             'akuns' => 'nullable|array',
-            'akuns.*' => 'exists:akuns,id',
+            'akuns.*' => 'exists:akuns,akun_code',
+            'hutang_akun_code' => 'nullable|exists:akuns,akun_code',
             'dashboard_preference' => 'nullable|in:home-v2,home-v3,home-v4,home-v5,home-admin,attendance/dashboard',
         ]);
+
+        if (!empty($request->hutang_akun_code)) {
+            $isParentAkun = \App\Akun::where('parent', $request->hutang_akun_code)->exists();
+            if ($isParentAkun) {
+                return redirect()->back()
+                    ->withInput()
+                    ->withErrors(['hutang_akun_code' => 'Akun parent tidak boleh dipilih. Pilih akun level detail (child).']);
+            }
+        }
 
     // Default foto
         $imageName = 'user.png';
@@ -309,6 +323,7 @@ else
                 'phone' => $request->phone,
                 'privilege' => $request->privilege,
                 'admin_fee' => $request->privilege === 'merchant' ? $request->admin_fee : null,
+                'hutang_akun_code' => $request->hutang_akun_code ?: null,
                 'description' => $request->description ?? null,
                 'photo' => $imageName,
                 'supervisor_id' => $request->supervisor_id ?: null,
@@ -371,12 +386,16 @@ else
                 ->where('category', 'kas & bank')
                 ->orderBy('akun_code')
                 ->get();
+            $hutangAkuns = \App\Akun::whereNotIn('akun_code', $parentAkuns)
+                ->where('category', 'akun hutang')
+                ->orderBy('akun_code')
+                ->get();
             $userAkunIds = $user->akuns->pluck('id')->toArray();
             $merchants = \App\Merchant::all();
             $groups = \App\Group::all();
             $userGroupIds = $user->groups->pluck('id')->toArray();
             $supervisors = \App\User::where('is_active', 1)->where('id','!=',$id)->orderBy('name')->get(['id','name','job_title']);
-            return view ('user.edit',['user' => $user, 'groups' => $groups, 'userGroupIds'=>$userGroupIds, 'akuns' =>$akuns, 'userAkunIds'=>$userAkunIds, 'merchants' =>$merchants, 'supervisors'=>$supervisors]);
+            return view ('user.edit',['user' => $user, 'groups' => $groups, 'userGroupIds'=>$userGroupIds, 'akuns' =>$akuns, 'userAkunIds'=>$userAkunIds, 'merchants' =>$merchants, 'hutangAkuns' => $hutangAkuns, 'supervisors'=>$supervisors]);
         }
         else
         {
@@ -425,7 +444,17 @@ else
             'akuns' => 'nullable|array',
             'akuns.*' => 'exists:akuns,akun_code',
             'id_merchant' =>'nullable',
+            'hutang_akun_code' => 'nullable|exists:akuns,akun_code',
         ]);
+
+        if (!empty($request->hutang_akun_code)) {
+            $isParentAkun = \App\Akun::where('parent', $request->hutang_akun_code)->exists();
+            if ($isParentAkun) {
+                return redirect()->back()
+                    ->withInput()
+                    ->withErrors(['hutang_akun_code' => 'Akun parent tidak boleh dipilih. Pilih akun level detail (child).']);
+            }
+        }
 
     // Start DB Transaction
         DB::beginTransaction();
@@ -507,6 +536,7 @@ else
                 'admin_fee' => $request->privilege === 'merchant' ? $request->admin_fee : null,
                 'description' => $request->description,
                 'id_merchant' => $request->id_merchant,
+                'hutang_akun_code' => $request->hutang_akun_code ?: null,
                 'supervisor_id' => $request->supervisor_id ?: null,
                 'dashboard_preference' => in_array($request->privilege, ['merchant','vendor']) ? null : ($request->dashboard_preference ?: null),
             ]);
