@@ -12,6 +12,11 @@
 
   <div class="card-body">
 
+    <div class="mb-3">
+      <i class="fas fa-user mr-1"></i> <strong>Dibuat oleh:</strong>
+      {{ $createdByName ?? '-' }}
+    </div>
+
     {{-- ======== VIEW MODE ======== --}}
     <div id="view-mode">
       @if($jurnals->isEmpty())

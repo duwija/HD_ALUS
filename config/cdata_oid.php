@@ -1,7 +1,10 @@
 <?php
 
-// CDATA FD-LT/FD-OLT OID Configuration (enterprise: 1.3.6.1.4.1.34592)
+// CDATA EPON OID Configuration (enterprise: 1.3.6.1.4.1.34592)
+// MIB: FD-OLT-MIB (llid table), for CDATA EPON-family OLTs (e.g. FD11xx/FD12xx/FD13xx).
 // Based on FD-OLT-MIB indexes: {ponCardSlotId, oltId, linkId}
+// For CDATA GPON-family OLTs, see config/cdata_gpon_oid.php (CDATA-GPON-MIB) instead —
+// selection is automatic via get_olt_oid_config() based on the OLT's type/name field.
 
 return [
     // OLT system information

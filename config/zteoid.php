@@ -1,7 +1,30 @@
 <?php
 
 // Multi-Vendor OLT OID Configuration System
-// Supports: ZTE (C300/C320/C600/C620/C650), CDATA, HSGQ, Huawei, Fiberhome
+// Supports: ZTE (C300/C320/C600/C620/C650), CDATA (EPON/GPON), HSGQ, Huawei, Fiberhome
+
+/**
+ * Detect whether a CDATA OLT is the EPON family (FD-OLT-MIB / llid table) as opposed
+ * to GPON (CDATA-GPON-MIB). The `type`/`name` fields on the olts table are free text
+ * entered by admins, so this is a best-effort keyword match, not a hardware fingerprint —
+ * it is only reached after 'cdata' has already matched on vendor/type/name.
+ * Known CDATA EPON model prefixes: FD11xx/FD12xx/FD13xx/FD14xx.
+ * Defaults to GPON when no EPON hint is found, since GPON is the more common deployment
+ * today and short/ambiguous type labels (e.g. "G008", "CDATA8PORT") tend to be GPON units.
+ */
+if (!function_exists('is_cdata_epon')) {
+    function is_cdata_epon($oltType, $oltName) {
+        if (str_contains($oltType, 'epon') || str_contains($oltName, 'epon')) {
+            return true;
+        }
+        foreach (['fd11', 'fd12', 'fd13', 'fd14'] as $eponPrefix) {
+            if (str_contains($oltType, $eponPrefix) || str_contains($oltName, $eponPrefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
 
 /**
  * Get OID configuration based on OLT object
@@ -19,12 +42,23 @@ if (!function_exists('get_olt_oid_config')) {
         $isHsgqG02id = str_contains($oltType, 'g02id') || str_contains($oltType, 'g-02id') ||
                    str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
         
-        // CDATA Detection
+        // CDATA Detection (EPON vs GPON — see is_cdata_epon() above)
         if (str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd')) {
+            if (is_cdata_epon($oltType, $oltName)) {
+                if (config('cdata_oid')) return config('cdata_oid');
+                \Log::warning("CDATA EPON OLT detected but config/cdata_oid.php not found");
+            }
+            if (config('cdata_gpon_oid')) return config('cdata_gpon_oid');
+            \Log::warning("CDATA GPON OLT detected but config/cdata_gpon_oid.php not found");
             if (config('cdata_oid')) return config('cdata_oid');
-            \Log::warning("CDATA OLT detected but config/cdata_oid.php not found");
         }
-        
+
+        // VSOL Detection (see config/vsol_oid.php for the reverse-engineered OID map)
+        if (str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol')) {
+            if (config('vsol_oid')) return config('vsol_oid');
+            \Log::warning("VSOL OLT detected but config/vsol_oid.php not found");
+        }
+
         // HSGQ Detection (EPON vs GPON)
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
             // HSGQ-G02ID family (uses .3320 branch)
@@ -124,9 +158,13 @@ if (!function_exists('get_olt_status_config')) {
                    str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
 
         if (str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd')) {
+            if (is_cdata_epon($oltType, $oltName)) {
+                if (config('cdata_onustatus')) return config('cdata_onustatus');
+            }
+            if (config('cdata_gpon_onustatus')) return config('cdata_gpon_onustatus');
             if (config('cdata_onustatus')) return config('cdata_onustatus');
         }
-        
+
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
             if ($isHsgqG02id) {
                 if (config('hsgq_g02id_onustatus')) return config('hsgq_g02id_onustatus');
@@ -173,9 +211,13 @@ if (!function_exists('get_olt_vendor')) {
                    str_contains($oltName, 'g02id') || str_contains($oltName, 'g-02id');
 
         if (str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd')) {
-            return 'CDATA';
+            return is_cdata_epon($oltType, $oltName) ? 'CDATA EPON' : 'CDATA GPON';
         }
-        
+
+        if (str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol')) {
+            return 'VSOL GPON';
+        }
+
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
             if ($isHsgqG02id) {
                 return 'HSGQ G02ID';
@@ -316,6 +358,42 @@ if (!function_exists('decode_hsgq_epon_index')) {
         $pon = (int)floor($index / 1000000);
         $onu = $index % 1000000;
         return ['pon' => $pon, 'onu' => $onu];
+    }
+}
+
+/**
+ * Encode PON/ONU to the CDATA-GPON "enterprise 17409" OEM index format.
+ * Verified live against OLT id 8 (FD1608Y-B1, 172.30.10.13:1611) — 389 real ONUs
+ * decoded across 8 GPON ports with zero mismatches. See config/cdata_gpon_17409_oid.php
+ * for the full writeup of how this was reverse-engineered (no public MIB documents it).
+ *
+ * Formula: 0x480000 + ((port - 1) << 12) + onu
+ *
+ * @param int $port GPON port number (1-based)
+ * @param int $onu ONU id (1-based)
+ * @return int Encoded index
+ */
+if (!function_exists('encode_cdata17409_index')) {
+    function encode_cdata17409_index($port, $onu) {
+        return 0x480000 + (($port - 1) << 12) + $onu;
+    }
+}
+
+/**
+ * Decode a CDATA-GPON "enterprise 17409" index back to port/onu.
+ *
+ * @param int $index Encoded index (e.g., 4718593 -> port 1, onu 1)
+ * @return array ['port' => 1, 'onu' => 1]
+ */
+if (!function_exists('decode_cdata17409_index')) {
+    function decode_cdata17409_index($index) {
+        $offset = $index - 0x480000;
+        if ($offset < 1) {
+            return ['port' => 0, 'onu' => 0];
+        }
+        $port = intdiv($offset - 1, 4096) + 1;
+        $onu = (($offset - 1) % 4096) + 1;
+        return ['port' => $port, 'onu' => $onu];
     }
 }
 

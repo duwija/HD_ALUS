@@ -464,9 +464,67 @@ class OltController extends Controller
             
             $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
             $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+            $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
             $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                             str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
-            
+
+            if ($isVSOL) {
+                // VSOL only exposes a plain online/offline flag (see config/vsol_oid.php) —
+                // no los/powerdown/dyinggasp/etc buckets like ZTE/CDATA. $includeOptical is
+                // false here: this overview card only needs counts + offline SN list, not
+                // RX/TX, and skipping it keeps a full-device scan well under this tenant's
+                // nginx proxy_read_timeout (see collectVsolOnuMetrics()'s doc comment).
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                $rows = $this->collectVsolOnuMetrics($snmp, $customers, null, null, false);
+
+                $onuCount = count($rows);
+                foreach ($rows as $row) {
+                    $entryBase = [
+                        'onuName' => (string) ($row['name'] ?? ''),
+                        'Id'      => ((string) ($row['pon'] ?? '')) . ':' . ((string) ($row['onu_id'] ?? '')),
+                        'sn'      => (string) ($row['sn'] ?? ''),
+                        'model'   => (string) ($row['model'] ?? ''),
+                    ];
+
+                    if (($row['status'] ?? '') === 'online') {
+                        $working++;
+                    } else {
+                        $offline++;
+                        $offlinelist[] = $entryBase;
+                    }
+                }
+
+                $oltInfo = [
+                    'oltName' => str_replace(['STRING: ', '"'], '', (string) $this->safeSnmpGet($snmp, $oidOltName)),
+                    'oltUptime' => str_replace(['Timeticks: ', '"'], '', (string) $this->safeSnmpGet($snmp, $oidOltUptime)),
+                    'oltVersion' => str_replace(['STRING: ', '"'], '', (string) $this->safeSnmpGet($snmp, $oidOltVersion)),
+                    'oltDesc' => str_replace(['STRING: ', '"'], '', (string) $this->safeSnmpGet($snmp, $oidOltDesc)),
+                    'onuUnConfg' => $onuUncfgValue,
+                    'onuCount' => $onuCount,
+                    'logging' => $logging,
+                    'los' => $los,
+                    'powerdown' => $powerdown,
+                    'synMib' => $synMib,
+                    'working' => $working,
+                    'dyinggasp' => $dyinggasp,
+                    'authFailed' => $authFailed,
+                    'offline' => $offline,
+                    'unknown' => $unknow,
+                ];
+
+                $snmp->close();
+
+                return response()->json([
+                    'success' => true,
+                    'oltInfo' => $oltInfo,
+                    'dyinggasplist' => $dyinggasplist,
+                    'loslist' => $loslist,
+                    'powerdownlist' => $powerdownlist,
+                    'offlinelist' => $offlinelist,
+                    'unknowlist' => $unknowlist,
+                ]);
+            }
+
             // Select OID based on vendor
             if ($isHSGQ) {
                 $onuName = $zteoid['oidIfDescr'];       // IF-MIB for HSGQ
@@ -1204,10 +1262,49 @@ public function onudelete($oltId, $oltPonIndex, $onuId)
     $timeout = 10;
 
     // Detect C600 / C620 / C650 — uses gpon_olt-F/S/P naming and slash-format PON path.
+    $oltVendor = strtolower((string) ($olt->vendor ?? ''));
     $oltType = strtolower((string) ($olt->type ?? ''));
     $oltName = strtolower((string) ($olt->name ?? ''));
+    $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+    $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
     $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                     str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+    if ($isVSOL) {
+        // VSOL: read-only SNMP support only so far — no confirmed Telnet CLI syntax for
+        // delete/reboot/factory-reset on this OEM stack yet, so we deliberately don't
+        // guess at commands against production hardware.
+        return redirect('/olt/' . $oltId)->with('warning', 'Delete ONU VSOL belum didukung — perlu contoh command CLI Telnet OLT ini.');
+    }
+
+    if ($isCDATA) {
+        // CDATA GPON: Telnet CLI method (SNMP has no write/action support for this OEM stack).
+        // oltPonIndex is a plain PON number (1-8) for CDATA — no slash/underscore encoding needed.
+        try {
+            $processDelete = new Process(["python3", env("PHYTON_DIR") . "delete_cdata_ont.py",
+                $ip, $login, $password, (string) ($port ?? 23), (string) $timeout,
+                (string) $oltPonIndex, (string) $onuId]);
+            $processDelete->setTimeout(60);
+            $processDelete->run();
+
+            if (!$processDelete->isSuccessful()) {
+                throw new ProcessFailedException($processDelete);
+            }
+
+            $message = trim($processDelete->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect('/olt/' . $oltId)->with('warning', 'Delete command sent: ' . $lastLine);
+            }
+            return redirect('/olt/' . $oltId)->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Delete error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Delete error: ' . $e->getMessage());
+        }
+    }
 
     // C600 PON index sent with underscores via URL (to avoid Laravel route slash splitting).
     if ($isC600Series && str_contains($oltPonIndex, '_') && !str_contains($oltPonIndex, '/')) {
@@ -1274,8 +1371,57 @@ public function onureboot($oltId, $oltPonIndex, $onuId)
     $oltName = strtolower($olt->name ?? '');
     
     $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+    $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+    $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
     $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                     str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+    if ($isVSOL) {
+        // VSOL: read-only SNMP support only so far — no confirmed Telnet CLI syntax for
+        // delete/reboot/factory-reset on this OEM stack yet, so we deliberately don't
+        // guess at commands against production hardware.
+        return redirect('/olt/' . $oltId)->with('warning', 'Reboot ONU VSOL belum didukung — perlu contoh command CLI Telnet OLT ini.');
+    }
+
+    if ($isCDATA) {
+        // CDATA GPON: Telnet CLI method. oltPonIndex is a plain PON number (1-8).
+        try {
+            $ip = $olt->ip;
+            $login = $olt->user;
+            $password = $olt->password;
+            $port = (string) ($olt->port ?? 23);
+            $timeout = '10';
+
+            $processReboot = new Process(["python3", env("PHYTON_DIR") . "reboot_cdata_ont.py",
+                $ip, $login, $password, $port, $timeout,
+                (string) $oltPonIndex, (string) $onuId]);
+            $processReboot->setTimeout(60);
+            $processReboot->run();
+
+            \Log::info('[REBOOT][CDATA] Python script finished', [
+                'exitCode' => $processReboot->getExitCode(),
+                'output' => $processReboot->getOutput(),
+                'errorOutput' => $processReboot->getErrorOutput(),
+            ]);
+
+            if (!$processReboot->isSuccessful()) {
+                throw new ProcessFailedException($processReboot);
+            }
+
+            $message = trim($processReboot->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect()->back()->with('warning', 'Reboot command sent: ' . $lastLine);
+            }
+            return redirect()->back()->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect()->back()->with('error', 'Reboot error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Reboot error: ' . $e->getMessage());
+        }
+    }
 
     // C600/C620/C650 PON index may be sent with underscores to avoid route slash splitting.
     if ($isC600Series && str_contains($oltPonIndex, '_') && !str_contains($oltPonIndex, '/')) {
@@ -1473,13 +1619,136 @@ public function onu_detail(Request $request)
     $oltType = strtolower($olt->type ?? '');
     $oltName = strtolower($olt->name ?? '');
     $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+    $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+    $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+
+    if ($isVSOL) {
+        // VSOL: SNMP-only detail (no confirmed CLI method yet) — reuse the ONU list collector.
+        try {
+            $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
+
+            list($ponNum, $onuIdNum) = explode(':', $id_onu);
+            $ponNum = (string) (int) $ponNum;
+            $onuIdNum = (string) (int) $onuIdNum;
+
+            $customers = \App\Customer::where('id_olt', $olt->id)->get();
+            $rows = $this->collectVsolOnuMetrics($snmp, $customers, $ponNum, $onuIdNum);
+            $row = null;
+            foreach ($rows as $r) {
+                if ((string) ($r['pon'] ?? '') === $ponNum && (string) ($r['onu_id'] ?? '') === $onuIdNum) {
+                    $row = $r;
+                    break;
+                }
+            }
+
+            if (!$row) {
+                echo '<div class="alert alert-warning">ONU PON' . e($ponNum) . '/' . e($onuIdNum) . ' tidak ditemukan di OLT.</div>';
+                return;
+            }
+
+            $isOnline = $row['status'] === 'online';
+            $ifStatus = $isOnline
+                ? '<span class="badge badge-success">Online</span>'
+                : '<span class="badge badge-danger">Offline</span>';
+
+            $html = '<table class="table table-sm table-bordered mb-0" style="table-layout:fixed;">';
+            $html .= '<colgroup><col style="width:42%"><col style="width:58%"></colgroup>';
+            $html .= '<tr><th colspan="2" class="bg-primary text-white">ONU Information - VSOL GPON</th></tr>';
+            $html .= '<tr><td><strong>ONU ID</strong></td><td>PON' . e($ponNum) . '/' . e($onuIdNum) . '</td></tr>';
+            $html .= '<tr><td><strong>Status</strong></td><td>' . $ifStatus . '</td></tr>';
+            $html .= '<tr><td><strong>Vendor</strong></td><td>' . e($row['vendor'] ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Model</strong></td><td>' . e($row['model'] ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Serial Number</strong></td><td>' . e($row['sn'] ?: '-') . '</td></tr>';
+            $html .= '<tr><th colspan="2" class="bg-info text-white">Optical Information</th></tr>';
+            $html .= '<tr><td><strong>ONU RX Power</strong></td><td>' . ($row['rx_dbm'] !== null ? e($row['rx_dbm']) . ' dBm' : '-') . '</td></tr>';
+            $html .= '<tr><td><strong>ONU TX Power</strong></td><td>' . ($row['tx_dbm'] !== null ? e($row['tx_dbm']) . ' dBm' : '-') . '</td></tr>';
+            $html .= '<tr><th colspan="2" class="bg-secondary text-white">Registration</th></tr>';
+            $html .= '<tr><td><strong>Firmware Version</strong></td><td>' . e($row['firmware_version'] ?: '-') . '</td></tr>';
+            $html .= '</table>';
+
+            echo $html;
+            return;
+        } catch (\Exception $e) {
+            echo '<div class="alert alert-danger">Error fetching VSOL ONU detail: ' . e($e->getMessage()) . '</div>';
+            return;
+        }
+    }
+
+    if ($isCDATA) {
+        // CDATA: Use SNMP to get ONU detail (no working CLI detail command mapped yet),
+        // same approach as HSGQ below — reuse the already-verified ONU list collector.
+        try {
+            $zteoid = get_olt_oid_config($olt);
+            $ontStatuses = get_olt_status_config($olt);
+            $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
+
+            list($ponNum, $onuIdNum) = explode(':', $id_onu);
+            $ponNum = (string) (int) $ponNum;
+            $onuIdNum = (string) (int) $onuIdNum;
+
+            $customers = \App\Customer::where('id_olt', $olt->id)->get();
+            $rows = $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt);
+            $row = null;
+            foreach ($rows as $r) {
+                if ((string) ($r['pon'] ?? '') === $ponNum && (string) ($r['onu_id'] ?? '') === $onuIdNum) {
+                    $row = $r;
+                    break;
+                }
+            }
+
+            if (!$row) {
+                echo '<div class="alert alert-warning">ONU PON' . e($ponNum) . '/' . e($onuIdNum) . ' tidak ditemukan di OLT.</div>';
+                return;
+            }
+
+            $isOnline = in_array($row['status'], ['online', 'working'], true);
+            $ifStatus = $isOnline
+                ? '<span class="badge badge-success">Online</span>'
+                : '<span class="badge badge-danger">' . e($row['last_offline_reason'] ?: 'Offline') . '</span>';
+
+            $uptimeVal = '-';
+            if (!empty($row['last_online_at'])) {
+                try {
+                    $uptimeVal = \Carbon\Carbon::parse($row['last_online_at'])->diffForHumans(null, true);
+                } catch (\Exception $e) {
+                    $uptimeVal = '-';
+                }
+            }
+
+            $html = '<table class="table table-sm table-bordered mb-0" style="table-layout:fixed;">';
+            $html .= '<colgroup><col style="width:42%"><col style="width:58%"></colgroup>';
+            $html .= '<tr><th colspan="2" class="bg-primary text-white">ONU Information - CDATA GPON</th></tr>';
+            $html .= '<tr><td><strong>ONU ID</strong></td><td>PON' . e($ponNum) . '/' . e($onuIdNum) . '</td></tr>';
+            $html .= '<tr><td><strong>Status</strong></td><td>' . $ifStatus . '</td></tr>';
+            $html .= '<tr><td><strong>Name/Description</strong></td><td>' . e($row['name'] ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Vendor</strong></td><td>' . e($row['vendor'] ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Model</strong></td><td>' . e($row['model'] ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Serial Number</strong></td><td>' . e($row['sn'] ?: '-') . '</td></tr>';
+            $html .= '<tr><th colspan="2" class="bg-info text-white">Optical Information</th></tr>';
+            $html .= '<tr><td><strong>ONU RX Power</strong></td><td>' . ($row['rx_dbm'] !== null ? e($row['rx_dbm']) . ' dBm' : '-') . '</td></tr>';
+            $html .= '<tr><td><strong>ONU TX Power</strong></td><td>' . ($row['tx_dbm'] !== null ? e($row['tx_dbm']) . ' dBm' : '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Distance</strong></td><td>' . ($row['distance_m'] !== null ? e($row['distance_m']) . ' m' : '-') . '</td></tr>';
+            $html .= '<tr><th colspan="2" class="bg-secondary text-white">Registration</th></tr>';
+            $html .= '<tr><td><strong>Firmware Version</strong></td><td>' . e($row['firmware_version'] ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Uptime</strong></td><td>' . e($uptimeVal) . '</td></tr>';
+            $html .= '<tr><td><strong>Last Online</strong></td><td>' . e($row['last_online_at'] ?: '-') . '</td></tr>';
+            $html .= '<tr><td><strong>Last Offline</strong></td><td>' . e($row['last_offline_at'] ?: '-') . '</td></tr>';
+            $html .= '</table>';
+
+            echo $html;
+            return;
+        } catch (\Exception $e) {
+            echo '<div class="alert alert-danger">Error fetching CDATA ONU detail: ' . e($e->getMessage()) . '</div>';
+            return;
+        }
+    }
 
     if ($isHSGQ) {
         // HSGQ: Use SNMP to get ONU detail (no CLI command available for detail)
         try {
             $zteoid = get_olt_oid_config($olt);
             $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
-            
+
             // Parse id_onu format "PON:ONU" (e.g., "2:1")
             list($ponNum, $onuIdNum) = explode(':', $id_onu);
             $ponNum = (int)$ponNum;
@@ -1619,6 +1888,49 @@ public function onureset($oltId, $oltPonIndex, $onuId)
     $oltName = strtolower($olt->name ?? '');
     
     $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+    $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+    $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+
+    if ($isVSOL) {
+        // VSOL: read-only SNMP support only so far — no confirmed Telnet CLI syntax for
+        // delete/reboot/factory-reset on this OEM stack yet, so we deliberately don't
+        // guess at commands against production hardware.
+        return redirect('/olt/' . $oltId)->with('warning', 'Factory reset ONU VSOL belum didukung — perlu contoh command CLI Telnet OLT ini.');
+    }
+
+    if ($isCDATA) {
+        // CDATA GPON: Telnet CLI method. oltPonIndex is a plain PON number (1-8).
+        try {
+            $ip = $olt->ip;
+            $login = $olt->user;
+            $password = $olt->password;
+            $port = $olt->port ?? 23;
+            $timeout = 10;
+
+            $processReset = new Process(["python3", env("PHYTON_DIR") . "reset_cdata_ont.py",
+                $ip, $login, $password, $port, $timeout,
+                (string) $oltPonIndex, (string) $onuId]);
+            $processReset->setTimeout(45);
+            $processReset->run();
+
+            if (!$processReset->isSuccessful()) {
+                throw new ProcessFailedException($processReset);
+            }
+
+            $message = trim($processReset->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect('/olt/' . $oltId)->with('warning', 'Factory reset command sent: ' . $lastLine);
+            }
+            return redirect('/olt/' . $oltId)->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Reset error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Reset error: ' . $e->getMessage());
+        }
+    }
 
     if ($isHSGQ) {
         // HSGQ: Use CLI/Telnet method for factory reset
@@ -1859,8 +2171,33 @@ public function getOltPon($id)
         $oltName = strtolower($olt->name ?? '');
         
         $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+        $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+        $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
         $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                         str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+        if ($isCDATA || $isVSOL) {
+            // CDATA (EPON or GPON, auto-dispatched inside collectCdataOnuMetrics) and
+            // VSOL both use the PON number itself as a usable suffix — no frame/slot
+            // encoding needed.
+            $rows = $isVSOL
+                // Only the PON list is needed here — skip optical AND the identity walks.
+                ? $this->collectVsolOnuMetrics($snmp, collect(), null, null, false, true)
+                : $this->collectCdataOnuMetrics($snmp, $zteoid, [], collect(), $olt);
+            $seenPon = [];
+            $data = [];
+            foreach ($rows as $row) {
+                $pon = (string) ($row['pon'] ?? '');
+                if ($pon === '' || isset($seenPon[$pon])) {
+                    continue;
+                }
+                $seenPon[$pon] = true;
+                $data[] = ['olt_pon' => $pon, 'suffix' => $pon];
+            }
+            usort($data, fn($a, $b) => (int) $a['suffix'] <=> (int) $b['suffix']);
+            $snmp->close();
+            return response()->json(['data' => $data]);
+        }
 
         // OID yang digunakan untuk mengambil nama ONU
         if ($isHSGQ) {
@@ -2475,6 +2812,12 @@ public function getOltPon($id)
 
     private function collectCdataOnuMetrics($snmp, array $oidConfig, array $ontStatuses, $customers, $olt = null): array
     {
+        $oltType = strtolower($olt->type ?? '');
+        $oltName = strtolower($olt->name ?? '');
+        if ($olt && !is_cdata_epon($oltType, $oltName)) {
+            return $this->collectCdataGponOnuMetrics($snmp, $oidConfig, $ontStatuses, $customers);
+        }
+
         $nameOid = $oidConfig['oidOnuName'] ?? null;
         $statusOid = $oidConfig['oidOnuStatus'] ?? null;
         $snOid = $oidConfig['oidOnuSn'] ?? null;
@@ -2557,6 +2900,467 @@ public function getOltPon($id)
                 'rx_dbm' => null,
                 'tx_dbm' => null,
                 'distance_m' => null,
+                'customer' => $customer ? ($customer->name ?? '') : '',
+                'customer_id' => $customer ? ($customer->id ?? null) : null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * CDATA GPON ONU collector — dispatches to whichever proprietary tree the device
+     * actually implements. Real hardware in this fleet (verified live, e.g. OLT id 8
+     * FD1608Y-B1) reports sysObjectID under enterprise 17409 with its own undocumented
+     * table layout, NOT CDATA's officially registered enterprise 34592 that the public
+     * LibreNMS CDATA-GPON-MIB describes — the two are mutually exclusive on a given unit.
+     * Try the empirically-verified 17409 path first since it matches real deployed units;
+     * fall back to the 34592/official-MIB path for any unit that turns out to implement that
+     * tree instead (e.g. genuine CDATA-brand firmware rather than this OEM stack).
+     */
+    private function collectCdataGponOnuMetrics($snmp, array $oidConfig, array $ontStatuses, $customers): array
+    {
+        $rows = $this->collectCdataGpon17409OnuMetrics($snmp, $ontStatuses, $customers);
+        if (!empty($rows)) {
+            return $rows;
+        }
+
+        return $this->collectCdataGpon34592OnuMetrics($snmp, $oidConfig, $ontStatuses, $customers);
+    }
+
+    /**
+     * CDATA GPON ONU collector for the enterprise-17409 OEM tree (reverse-engineered
+     * live — see config/cdata_gpon_17409_oid.php for the full writeup). Index format:
+     * 0x480000 + ((port-1) << 12) + onuId — decoded via decode_cdata17409_index().
+     * Live run-state comes from column 101 (verified against real "show ont info all"
+     * CLI output — see oidOnuRunState in config/cdata_gpon_17409_oid.php for the full
+     * cross-check). Column 103 ("last down-cause") is a historical field that stays set
+     * to the last disconnect reason even once the ONU is back online — it is NOT current
+     * status, despite looking like one; kept separately as 'last_offline_reason'.
+     */
+    private function collectCdataGpon17409OnuMetrics($snmp, array $ontStatuses, $customers): array
+    {
+        $cfg = config('cdata_gpon_17409_oid') ?: [];
+        $nameOid = $cfg['oidOnuName'] ?? null;
+        $snOid = $cfg['oidOnuSn'] ?? null;
+        $modelOid = $cfg['oidOnuModel'] ?? null;
+        $vendorOid = $cfg['oidOnuVendor'] ?? null;
+        $versionOid = $cfg['oidOnuVersion'] ?? null;
+        $runStateOid = $cfg['oidOnuRunState'] ?? null;
+        $lastDownCauseOid = $cfg['oidOnuLastDownCause'] ?? null;
+        $lastChangeOid = $cfg['oidOnuLastChange'] ?? null;
+        $distanceOid = $cfg['oidOnuDistance'] ?? null;
+        $rxOid = $cfg['oidOnuRxPower'] ?? null;
+        $txOid = $cfg['oidOnuTxPowerOnu'] ?? null;
+        $rxDivisor = $cfg['rx_power_divisor'] ?? 100;
+        $opticalSuffix = $cfg['optical_index_suffix'] ?? '.0.0';
+        $opticalSuffixParts = count(array_filter(explode('.', $opticalSuffix), fn($p) => $p !== ''));
+        $sentinelRx = $cfg['optical_sentinel_rx'] ?? null;
+        $sentinelTx = $cfg['optical_sentinel_tx'] ?? null;
+
+        if (empty($nameOid) || empty($runStateOid)) {
+            return [];
+        }
+
+        $nameWalk = @$snmp->walk($nameOid) ?: [];
+        if (empty($nameWalk)) {
+            return [];
+        }
+
+        $snByIndex = $snOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($snOid) ?: [], 1) : [];
+        $modelByIndex = $modelOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($modelOid) ?: [], 1) : [];
+        $vendorByIndex = $vendorOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($vendorOid) ?: [], 1) : [];
+        $versionByIndex = $versionOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($versionOid) ?: [], 1) : [];
+        $runStateByIndex = $this->reindexSnmpWalkByTail(@$snmp->walk($runStateOid) ?: [], 1);
+        $lastDownCauseByIndex = $lastDownCauseOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($lastDownCauseOid) ?: [], 1) : [];
+        $lastChangeByIndex = $lastChangeOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($lastChangeOid) ?: [], 1) : [];
+        $distanceByIndex = $distanceOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($distanceOid) ?: [], 1) : [];
+        // RX/TX optical readings are indexed as "<onuIndex>.0.0" — re-key by the last
+        // (opticalSuffixParts + 1) components, then strip the trailing ".0.0" ourselves.
+        $rxByIndex = [];
+        if ($rxOid) {
+            foreach ($this->reindexSnmpWalkByTail(@$snmp->walk($rxOid) ?: [], $opticalSuffixParts + 1) as $tailKey => $val) {
+                $rxByIndex[(string) strtok($tailKey, '.')] = $val;
+            }
+        }
+        $txByIndex = [];
+        if ($txOid) {
+            foreach ($this->reindexSnmpWalkByTail(@$snmp->walk($txOid) ?: [], $opticalSuffixParts + 1) as $tailKey => $val) {
+                $txByIndex[(string) strtok($tailKey, '.')] = $val;
+            }
+        }
+
+        $rows = [];
+
+        foreach ($nameWalk as $oidKey => $rawName) {
+            $parts = explode('.', (string) $oidKey);
+            $index = (int) end($parts);
+            if ($index <= 0) {
+                continue;
+            }
+
+            $decoded = decode_cdata17409_index($index);
+            $portId = (string) $decoded['port'];
+            $onuId = (string) $decoded['onu'];
+            if ($decoded['port'] <= 0) {
+                continue;
+            }
+
+            $nameVal = trim($this->stripSnmpPrefix((string) $rawName), " \t\"'");
+
+            $snRaw = $snByIndex[(string) $index] ?? null;
+            $snVal = $snRaw !== null ? trim($this->normalizeOnuSerial((string) $snRaw), " \t\"'") : '';
+
+            if ($nameVal === '') {
+                $nameVal = $snVal !== '' ? $snVal : ('ONU-' . $portId . '-' . $onuId);
+            }
+
+            $runStateRaw = $runStateByIndex[(string) $index] ?? null;
+            $statusText = 'online';
+            if ($runStateRaw !== null && preg_match('/(\d+)/', (string) $runStateRaw, $m) && (int) $m[1] === 0) {
+                $statusText = 'offline';
+            }
+
+            $modelRaw = $modelByIndex[(string) $index] ?? null;
+            $modelVal = $modelRaw !== null ? trim($this->stripSnmpPrefix((string) $modelRaw), " \t\"'") : '';
+
+            $vendorRaw = $vendorByIndex[(string) $index] ?? null;
+            $vendorVal = $vendorRaw !== null ? trim($this->stripSnmpPrefix((string) $vendorRaw), " \t\"'") : '';
+
+            $versionRaw = $versionByIndex[(string) $index] ?? null;
+            $versionVal = $versionRaw !== null ? trim($this->stripSnmpPrefix((string) $versionRaw), " \t\"'") : '';
+
+            $lastDownCauseRaw = $lastDownCauseByIndex[(string) $index] ?? null;
+            $lastOfflineReason = $lastDownCauseRaw !== null
+                ? trim($this->stripSnmpPrefix((string) $lastDownCauseRaw), " \t\"'")
+                : null;
+
+            // Column 102 is a single "last run-state transition" timestamp — it means
+            // "became online at" while the ONU is online, or "went offline at" while it's
+            // offline. It gets overwritten on every transition, so it can't tell us the
+            // *other* direction's timestamp (e.g. an online ONU's last offline time isn't
+            // available anywhere in this table — only the reason string persists, above).
+            $lastChangeRaw = $lastChangeByIndex[(string) $index] ?? null;
+            $lastChangeVal = $lastChangeRaw !== null
+                ? trim($this->stripSnmpPrefix((string) $lastChangeRaw), " \t\"'")
+                : null;
+            $lastOnlineAt = ($statusText === 'online') ? $lastChangeVal : null;
+            $lastOfflineAt = ($statusText === 'offline') ? $lastChangeVal : null;
+
+            $distanceRaw = $distanceByIndex[(string) $index] ?? null;
+            $distanceM = null;
+            if ($distanceRaw !== null && preg_match('/-?\d+/', (string) $distanceRaw, $m) && (int) $m[0] > 0) {
+                $distanceM = (int) $m[0];
+            }
+
+            $rxRaw = $rxByIndex[(string) $index] ?? null;
+            $rxDbm = null;
+            if ($rxRaw !== null && preg_match('/-?\d+/', (string) $rxRaw, $m) && (int) $m[0] !== $sentinelRx) {
+                $rxDbm = ((int) $m[0]) / $rxDivisor;
+            }
+
+            $txRaw = $txByIndex[(string) $index] ?? null;
+            $txDbm = null;
+            if ($txRaw !== null && preg_match('/-?\d+/', (string) $txRaw, $m) && (int) $m[0] !== $sentinelTx) {
+                $txDbm = ((int) $m[0]) / $rxDivisor;
+            }
+
+            $customer = $customers ? $customers->firstWhere('id_onu', $portId . ':' . $onuId) : null;
+
+            $rows[] = [
+                'pon' => $portId,
+                'onu_id' => $onuId,
+                'sn' => $snVal,
+                'name' => $nameVal,
+                'model' => $modelVal,
+                'vendor' => $vendorVal,
+                'firmware_version' => $versionVal,
+                'status' => $statusText,
+                'last_offline_reason' => $lastOfflineReason,
+                'last_online_at' => $lastOnlineAt,
+                'last_offline_at' => $lastOfflineAt,
+                'rx_dbm' => $rxDbm,
+                'tx_dbm' => $txDbm,
+                'distance_m' => $distanceM,
+                'customer' => $customer ? ($customer->name ?? '') : '',
+                'customer_id' => $customer ? ($customer->id ?? null) : null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Normalize the literal status string returned by the CDATA enterprise-17409 GPON
+     * ONU table onto this app's existing status vocabulary (see the switch-case in
+     * getOltInfo()). Observed real values: "--" (no active alarm), "dying-gasp",
+     * "LOS". Anything else is passed through lowercased/de-hyphenated so it still
+     * displays as readable text even if not one of the counted buckets.
+     */
+    /**
+     * PHP's SNMP class returns walk() keys in symbolic form (e.g.
+     * "SNMPv2-SMI::enterprises.17409.2.8.4.1.1.103.4718593"), NOT the numeric OID string
+     * that was passed in — so reconstructing "$oid.$index" and indexing into the walk
+     * array directly never matches. Re-key by the trailing N dot-components instead,
+     * which is stable regardless of how the prefix gets rendered.
+     */
+    private function reindexSnmpWalkByTail(array $walk, int $tailParts): array
+    {
+        $result = [];
+        foreach ($walk as $oidKey => $value) {
+            $parts = explode('.', (string) $oidKey);
+            if (count($parts) < $tailParts) {
+                continue;
+            }
+            $tail = implode('.', array_slice($parts, -$tailParts));
+            $result[$tail] = $value;
+        }
+        return $result;
+    }
+
+    /**
+     * V-SOL GPON ONU collector — see config/vsol_oid.php for the full writeup of the
+     * reverse-engineered enterprise-37950 tree. Index is a plain two-level
+     * {ponPort}.{onuId} tuple (no bit-packed encoding, unlike CDATA/ZTE C600), so rows
+     * are keyed by "<port>.<onu>" straight from reindexSnmpWalkByTail(..., 2).
+     * Status comes from oidOnuStatus (1=online, 2=offline) — the only explicit status
+     * field this firmware exposes; RX/TX/model additionally read back "N/A"/"unknown"
+     * while offline, corroborating it.
+     *
+     * Optical (RX/TX) is expensive on this device: its GETBULK responses for the
+     * STRING-heavy optical table come back empty ("No response"), so each value has to
+     * be fetched with an individual GET — confirmed live to cost ~130ms/OID. Worse, a
+     * plain full-table walk() of ANY column (even cheap INTEGER ones) across all 323
+     * ONUs measured anywhere from ~4s to ~45s live, seemingly proportional to how much
+     * of the device's tree it has to scan — unpredictable enough to risk this tenant's
+     * 90s nginx proxy_read_timeout on its own, before optical is even considered.
+     *
+     * The fix that actually matters: every table here is a genuine two-level SNMP
+     * table shaped "<table>.<col>.<port>.<onu>", which means "<table>.<col>.<port>" is
+     * itself a valid subtree root — walking that instead of the whole column restricts
+     * the walk at the *protocol* level (confirmed live: full-column walk ~45s → single
+     * port ~0.4-2.8s depending on port size). So $ponFilter is applied as an OID suffix
+     * before walking, not as a PHP-side post-filter. $onuFilter goes one step further
+     * and skips walk() entirely in favor of direct GETs for that one row.
+     *   - getOltPon()  needs only the PON list  → no filters, $includeOptical = false,
+     *     $identityOnly = true (skips sn/model/vendor/version too — only the status
+     *     walk's keys are needed to enumerate which ports exist).
+     *   - getOltOnu()  needs one port's ONUs    → $ponFilter (subtree-scoped walk, then
+     *     per-onu optical GETs bounded to that port's count — worst case ~127 × 2 ×
+     *     ~130ms ≈ 33s).
+     *   - onu_detail()/ont_status() need one ONU → both filters (7 direct GETs, near
+     *     instant, no walk at all).
+     */
+    private function collectVsolOnuMetrics($snmp, $customers, $ponFilter = null, $onuFilter = null, bool $includeOptical = true, bool $identityOnly = false): array
+    {
+        $cfg = config('vsol_oid') ?: [];
+        $statusOid = $cfg['oidOnuStatus'] ?? null;
+        $snOid = $cfg['oidOnuSn'] ?? null;
+        $modelOid = $cfg['oidOnuModel'] ?? null;
+        $vendorOid = $cfg['oidOnuVendor'] ?? null;
+        $versionOid = $cfg['oidOnuVersion'] ?? null;
+        $rxOid = $cfg['oidOnuRxPower'] ?? null;
+        $txOid = $cfg['oidOnuTxPowerOnu'] ?? null;
+
+        if (empty($statusOid) || empty($snOid)) {
+            return [];
+        }
+
+        $ponFilter = $ponFilter !== null ? (string) $ponFilter : null;
+        $onuFilter = $onuFilter !== null ? (string) $onuFilter : null;
+
+        if ($ponFilter !== null && $onuFilter !== null) {
+            // Single known ONU: skip walk() entirely, just GET the 7 fields directly.
+            $key = $ponFilter . '.' . $onuFilter;
+            $statusRaw = $this->safeSnmpGet($snmp, $statusOid . '.' . $key);
+            if ($statusRaw === null) {
+                return [];
+            }
+            $statusByKey = [$key => $statusRaw];
+            $snByKey = [$key => $this->safeSnmpGet($snmp, $snOid . '.' . $key)];
+            $modelByKey = [$key => $modelOid ? $this->safeSnmpGet($snmp, $modelOid . '.' . $key) : null];
+            $vendorByKey = [$key => $vendorOid ? $this->safeSnmpGet($snmp, $vendorOid . '.' . $key) : null];
+            $versionByKey = [$key => $versionOid ? $this->safeSnmpGet($snmp, $versionOid . '.' . $key) : null];
+        } else {
+            // Subtree-scope the walk to just this port when given — restricts the walk
+            // at the protocol level, not just post-filtering PHP-side (see doc comment).
+            $portSuffix = $ponFilter !== null ? '.' . $ponFilter : '';
+
+            $statusWalk = @$snmp->walk($statusOid . $portSuffix) ?: [];
+            if (empty($statusWalk)) {
+                return [];
+            }
+            $statusByKey = $this->reindexSnmpWalkByTail($statusWalk, 2);
+
+            if ($identityOnly) {
+                // PON-listing only needs to know which {port,onu} keys exist — the
+                // status walk alone already gives us that, so skip the other 4 walks.
+                $snByKey = $modelByKey = $vendorByKey = $versionByKey = [];
+            } else {
+                $snByKey = $this->reindexSnmpWalkByTail(@$snmp->walk($snOid . $portSuffix) ?: [], 2);
+                $modelByKey = $modelOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($modelOid . $portSuffix) ?: [], 2) : [];
+                $vendorByKey = $vendorOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($vendorOid . $portSuffix) ?: [], 2) : [];
+                $versionByKey = $versionOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($versionOid . $portSuffix) ?: [], 2) : [];
+            }
+        }
+
+        $rxByKey = [];
+        $txByKey = [];
+        if ($includeOptical && $rxOid && $txOid) {
+            foreach (array_keys($statusByKey) as $key) {
+                $rxRaw = $this->safeSnmpGet($snmp, $rxOid . '.' . $key);
+                if ($rxRaw !== null && preg_match('/-?\d+(\.\d+)?/', (string) $rxRaw, $m)) {
+                    $rxByKey[$key] = (float) $m[0];
+                }
+                $txRaw = $this->safeSnmpGet($snmp, $txOid . '.' . $key);
+                if ($txRaw !== null && preg_match('/-?\d+(\.\d+)?/', (string) $txRaw, $m)) {
+                    $txByKey[$key] = (float) $m[0];
+                }
+            }
+        }
+
+        $rows = [];
+
+        foreach ($statusByKey as $key => $statusRaw) {
+            $parts = explode('.', $key);
+            if (count($parts) < 2) {
+                continue;
+            }
+            [$portId, $onuId] = $parts;
+
+            $isOnline = (bool) preg_match('/\b1\b/', (string) $statusRaw);
+
+            $snRaw = $snByKey[$key] ?? null;
+            $snVal = $snRaw !== null ? trim($this->normalizeOnuSerial((string) $snRaw), " \t\"'") : '';
+
+            $modelRaw = $modelByKey[$key] ?? null;
+            $modelVal = $modelRaw !== null ? trim($this->stripSnmpPrefix((string) $modelRaw), " \t\"'") : '';
+            if (strcasecmp($modelVal, 'unknown') === 0) {
+                $modelVal = '';
+            }
+
+            $vendorRaw = $vendorByKey[$key] ?? null;
+            $vendorVal = $vendorRaw !== null ? trim($this->stripSnmpPrefix((string) $vendorRaw), " \t\"'") : '';
+
+            $versionRaw = $versionByKey[$key] ?? null;
+            $versionVal = $versionRaw !== null ? trim($this->stripSnmpPrefix((string) $versionRaw), " \t\"'") : '';
+
+            $rows[] = [
+                'pon' => (string) $portId,
+                'onu_id' => (string) $onuId,
+                'sn' => $snVal,
+                'name' => $snVal !== '' ? $snVal : ('ONU-' . $portId . '-' . $onuId),
+                'model' => $modelVal,
+                'vendor' => $vendorVal,
+                'firmware_version' => $versionVal,
+                'status' => $isOnline ? 'online' : 'offline',
+                'last_offline_reason' => null,
+                'last_online_at' => null,
+                'last_offline_at' => null,
+                'rx_dbm' => $rxByKey[$key] ?? null,
+                'tx_dbm' => $txByKey[$key] ?? null,
+                'distance_m' => null,
+                'customer' => $customers ? optional($customers->firstWhere('id_onu', $portId . ':' . $onuId))->name ?? '' : '',
+                'customer_id' => $customers ? optional($customers->firstWhere('id_onu', $portId . ':' . $onuId))->id : null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * CDATA GPON ONU collector for CDATA's officially registered enterprise 34592
+     * (CDATA-GPON-MIB, per the public LibreNMS reference). Index format is a plain
+     * 4-level tuple {gponOltDeviceId}.{gponOltCardId}.{gponOltPortId}.{gponOnuId} — no
+     * bit-shift encoding needed, unlike ZTE's C600 .500 branch. PON label uses the port
+     * id only (assumes a single-card/standalone chassis). Used as a fallback for any
+     * CDATA GPON unit that doesn't implement the enterprise-17409 OEM tree instead.
+     */
+    private function collectCdataGpon34592OnuMetrics($snmp, array $oidConfig, array $ontStatuses, $customers): array
+    {
+        $snOid = $oidConfig['oidOnuSn'] ?? null;
+        $nameOid = $oidConfig['oidOnuDescription'] ?? ($oidConfig['oidOnuName'] ?? null);
+        $statusOid = $oidConfig['oidOnuStatus'] ?? null;
+        $distOid = $oidConfig['oidOnuDistance'] ?? null;
+        $rxOid = $oidConfig['oidOnuRxPower'] ?? null;
+        $txOid = $oidConfig['oidOnuTxPowerOnu'] ?? null;
+
+        if (empty($snOid) || empty($statusOid)) {
+            return [];
+        }
+
+        $snWalkRaw = @$snmp->walk($snOid) ?: [];
+        $nameByTail = $nameOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($nameOid) ?: [], 4) : [];
+        $statusByTail = $this->reindexSnmpWalkByTail(@$snmp->walk($statusOid) ?: [], 4);
+        $distByTail = $distOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($distOid) ?: [], 4) : [];
+        $rxByTail = $rxOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($rxOid) ?: [], 4) : [];
+        $txByTail = $txOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($txOid) ?: [], 4) : [];
+
+        if (empty($snWalkRaw)) {
+            return [];
+        }
+
+        $rows = [];
+
+        foreach ($snWalkRaw as $oidKey => $rawSn) {
+            $parts = explode('.', (string) $oidKey);
+            if (count($parts) < 4) {
+                continue;
+            }
+
+            $tail = array_slice($parts, -4); // {device, card, port, onuId}
+            $portId = (string) $tail[2];
+            $onuId = (string) $tail[3];
+            $tailKey = implode('.', $tail);
+
+            $statusRaw = $statusByTail[$tailKey] ?? null;
+            $statusText = 'Unknown';
+            if ($statusRaw !== null && $statusRaw !== '' && preg_match('/(\d+)/', (string) $statusRaw, $m)) {
+                $statusText = $ontStatuses[$m[1]]
+                    ?? $ontStatuses[(int) $m[1]]
+                    ?? $ontStatuses['INTEGER: ' . $m[1]]
+                    ?? 'Unknown';
+            }
+
+            $snVal = trim($this->normalizeOnuSerial((string) $rawSn), " \t\"'");
+
+            $nameVal = '';
+            if (isset($nameByTail[$tailKey])) {
+                $nameVal = trim($this->stripSnmpPrefix((string) $nameByTail[$tailKey]), " \t\"'");
+            }
+            if ($nameVal === '') {
+                $nameVal = $snVal !== '' ? $snVal : ('ONU-' . $portId . '-' . $onuId);
+            }
+
+            $distRaw = $distByTail[$tailKey] ?? null;
+            $distanceM = null;
+            if ($distRaw !== null && preg_match('/-?\d+/', (string) $distRaw, $m)) {
+                $distanceM = (int) $m[0];
+            }
+
+            $rxRaw = $rxByTail[$tailKey] ?? null;
+            $rxDbm = null;
+            if ($rxRaw !== null && preg_match('/-?\d+(\.\d+)?/', (string) $rxRaw, $m)) {
+                $rxDbm = (float) $m[0];
+            }
+
+            $txRaw = $txByTail[$tailKey] ?? null;
+            $txDbm = null;
+            if ($txRaw !== null && preg_match('/-?\d+(\.\d+)?/', (string) $txRaw, $m)) {
+                $txDbm = (float) $m[0];
+            }
+
+            $customer = $customers ? $customers->firstWhere('id_onu', $portId . ':' . $onuId) : null;
+
+            $rows[] = [
+                'pon' => (string) $portId,
+                'onu_id' => (string) $onuId,
+                'sn' => (string) $snVal,
+                'name' => (string) $nameVal,
+                'status' => (string) $statusText,
+                'rx_dbm' => $rxDbm,
+                'tx_dbm' => $txDbm,
+                'distance_m' => $distanceM,
                 'customer' => $customer ? ($customer->name ?? '') : '',
                 'customer_id' => $customer ? ($customer->id ?? null) : null,
             ];
@@ -3325,8 +4129,108 @@ public function getOltPon($id)
                                 $oltName = strtolower($olt->name ?? '');
                                 
                                 $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+                                $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+                                $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
                                 $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                                                 str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+                                if ($isCDATA || $isVSOL) {
+                                    $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
+                                    $rows = [];
+
+                                    try {
+                                        $rows = $isVSOL
+                                            // Scope the (slow) optical fetch to just this PON's ONUs — see
+                                            // collectVsolOnuMetrics()'s doc comment for why that matters here.
+                                            ? $this->collectVsolOnuMetrics($snmp, $customers, $oltPonIndex)
+                                            : $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt);
+                                    } catch (\Throwable $e) {
+                                        $rows = [];
+                                    }
+
+                                    $requestedPon = (string) ($oltPonIndex ?? '');
+                                    if ($requestedPon !== '') {
+                                        $rows = array_values(array_filter($rows, fn($r) => (string) ($r['pon'] ?? '') === $requestedPon));
+                                    }
+
+                                    $data = [];
+                                    foreach ($rows as $row) {
+                                        $onuId = (string) ($row['onu_id'] ?? '');
+                                        $statusRaw = (string) ($row['status'] ?? 'Unknown');
+                                        $isOnline = in_array($statusRaw, ['online', 'working'], true);
+
+                                        if ($isOnline && $row['rx_dbm'] !== null && $row['tx_dbm'] !== null) {
+                                            // Match the ZTE ONU list style: green pill showing live Rx/Tx.
+                                            $onu_ststus = '<span class="badge badge-success">Rx: ' . e($row['rx_dbm']) . ' | Tx: ' . e($row['tx_dbm']) . '</span>';
+                                        } elseif ($isOnline) {
+                                            $onu_ststus = '<span class="badge badge-success">ONLINE</span>';
+                                        } else {
+                                            // Offline: show the last known down-cause as the label (e.g. "dying-gasp"),
+                                            // same convention as ZTE's status word badge, since CDATA only reports a
+                                            // plain online/offline flag live — the reason is the more useful label.
+                                            $label = !empty($row['last_offline_reason']) ? $row['last_offline_reason'] : 'offline';
+                                            $onu_ststus = '<span class="badge badge-warning">' . e($label) . '</span>';
+                                        }
+
+                                        $customerLink = !empty($row['customer_id'])
+                                            ? '<a href="/customer/' . $row['customer_id'] . '" class="btn btn-primary btn-sm">' . e($row['sn'] ?? '') . '</a>'
+                                            : e($row['sn'] ?? '');
+
+                                        // "Last offline" only has a real timestamp while the ONU is currently
+                                        // offline (column 102 gets overwritten on every transition — see
+                                        // config/cdata_gpon_17409_oid.php). Unlike ZTE, CDATA doesn't retain a
+                                        // separate last-offline timestamp once the ONU is back online, so show
+                                        // "-" rather than inventing a value (per explicit decision, not omission).
+                                        $onuLastOffline = $row['last_offline_at'] ?? '-';
+                                        $onuLastOnline = $row['last_online_at'] ?? 'N/A';
+                                        $onuUptime = 'N/A';
+                                        if (!empty($row['last_online_at'])) {
+                                            try {
+                                                $onuUptime = \Carbon\Carbon::parse($row['last_online_at'])->diffForHumans(null, true);
+                                            } catch (\Exception $e) {
+                                                $onuUptime = 'N/A';
+                                            }
+                                        }
+
+                                        // Same 3-button pattern as ZTE's ONU list (delete/reboot/factory-reset),
+                                        // routed through the same /olt/delete|reboot|reset endpoints — those now
+                                        // dispatch to the CDATA telnet scripts (see onudelete/onureboot/onureset).
+                                        $onuAction = '<div class="row flex">'
+                                            . '<form onsubmit="confirmSubmit(event, \'Delete This ONU!\')" action="/olt/delete/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">'
+                                            . '<input type="hidden" name="_method" value="DELETE">'
+                                            . '<input type="hidden" name="_token" value="' . csrf_token() . '">'
+                                            . '<button type="submit" class="btn btn-danger btn-sm m-1" title="Delete"><i class="fas fa-trash-alt"></i></button>'
+                                            . '</form>'
+                                            . '<form onsubmit="confirmSubmit(event, \'Reboot This ONU!\')" action="/olt/reboot/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">'
+                                            . '<input type="hidden" name="_token" value="' . csrf_token() . '">'
+                                            . '<button type="submit" class="btn btn-warning btn-sm m-1" title="Reboot"><i class="fas fa-sync-alt"></i></button>'
+                                            . '</form>'
+                                            . '<form onsubmit="confirmSubmit(event, \'Factory Reset This ONU!\')" action="/olt/reset/' . $olt->id . '/' . $oltPonIndex . '/' . $onuId . '" method="POST">'
+                                            . '<input type="hidden" name="_token" value="' . csrf_token() . '">'
+                                            . '<button type="submit" class="btn btn-info btn-sm m-1" title="Factory Reset"><i class="fas fa-redo-alt"></i></button>'
+                                            . '</form>'
+                                            . '</div>';
+
+                                        $data[] = [
+                                            'onuId' => $onuId,
+                                            'name' => e($row['name'] ?? ''),
+                                            'status' => $onu_ststus,
+                                            'distance' => $row['distance_m'] !== null ? $row['distance_m'] . 'm' : 'N/A',
+                                            'onuModel' => !empty($row['model']) ? e($row['model']) : 'N/A',
+                                            'onuSn' => $customerLink,
+                                            'onuLastOffline' => e($onuLastOffline),
+                                            'onuLastOnline' => e($onuLastOnline),
+                                            'onuUptime' => e($onuUptime),
+                                            'onuDelete' => $onuAction,
+                                        ];
+                                    }
+                                    $snmp->close();
+
+                                    return DataTables::of($data)
+                                        ->addIndexColumn()
+                                        ->rawColumns(['DT_RowIndex', 'onuId', 'onuSn', 'onuModel', 'name', 'status', 'distance', 'onuLastOffline', 'onuLastOnline', 'onuUptime', 'onuDelete'])
+                                        ->make(true);
+                                }
 
                                 // For C600/C620/C650 the PON index is "frame/slot/port" which contains slashes
                                 // and breaks Laravel route segments. We convert it to underscores for URL building
@@ -4910,8 +5814,70 @@ public function coba($host, $community)
         $oltType = strtolower($olt->type ?? '');
         $oltName = strtolower($olt->name ?? '');
         $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
+        $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+        $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
         $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                 str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
+
+        if ($isCDATA || $isVSOL) {
+            // CDATA & VSOL: id_onu format is "PON:ONU_ID" (e.g., "1:5"). Reuse the same
+            // collector already verified for the ONU list / dashboards instead of
+            // re-deriving raw SNMP walks a fourth time.
+            $customers = \App\Customer::where('id_olt', $olt->id)->get();
+            $rows = $isVSOL
+                ? $this->collectVsolOnuMetrics($snmp, $customers, $frameSlotPort, $ontId)
+                : $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt);
+            $row = null;
+            foreach ($rows as $r) {
+                if ((string) ($r['pon'] ?? '') === (string) $frameSlotPort && (string) ($r['onu_id'] ?? '') === (string) $ontId) {
+                    $row = $r;
+                    break;
+                }
+            }
+
+            if (!$row) {
+                echo '<a class="badge-warning btn btn-sm ml-2 mr-2 text-white">Not Found</a>';
+                return;
+            }
+
+            $modalId = $frameSlotPort . '-' . $ontId;
+            $isOnline = in_array($row['status'], ['online', 'working'], true);
+
+            $modalBody = '<p>Onu Name : ' . e($row['name'] ?? '') . '</p>'
+                . '<p>Onu Model : ' . (!empty($row['model']) ? e($row['model']) : 'N/A') . '</p>'
+                . '<p>Onu Sn : ' . e($row['sn'] ?? '') . '</p>'
+                . '<p>Onu Rx Power : ' . ($row['rx_dbm'] !== null ? e($row['rx_dbm']) . ' dBm' : '-') . '</p>'
+                . '<p>Onu Tx Power : ' . ($row['tx_dbm'] !== null ? e($row['tx_dbm']) . ' dBm' : '-') . '</p>'
+                . '<p>Onu Cable Length : ' . ($row['distance_m'] !== null ? e($row['distance_m']) . ' m' : 'N/A') . '</p>'
+                . '<p>Onu Last Offline : ' . (!empty($row['last_offline_at']) ? e($row['last_offline_at']) : (!empty($row['last_offline_reason']) ? '(' . e($row['last_offline_reason']) . ')' : '-')) . '</p>'
+                . '<p>Onu Last Online : ' . (!empty($row['last_online_at']) ? e($row['last_online_at']) : '-') . '</p>';
+
+            if ($isOnline && $row['rx_dbm'] !== null && $row['tx_dbm'] !== null) {
+                $displayStatus = 'Rx: ' . e($row['rx_dbm']) . ' | Tx: ' . e($row['tx_dbm']);
+                echo '<button id="powerButton" class="btn bg-success btn-sm pb-1" data-toggle="modal" data-target="#powerModal' . $modalId . '">' . $displayStatus . '</button>';
+            } elseif ($isOnline) {
+                echo '<button id="powerButton" class="btn bg-success btn-sm pb-1" data-toggle="modal" data-target="#powerModal' . $modalId . '">ONLINE</button>';
+            } else {
+                $label = !empty($row['last_offline_reason']) ? $row['last_offline_reason'] : 'offline';
+                echo '<a class="badge-danger badge btn-sm p-2 ml-2 mr-2 text-white" data-toggle="modal" data-target="#powerModal' . $modalId . '" style="cursor:pointer;">' . e($label) . '</a>';
+            }
+
+            echo '<div class="modal fade" id="powerModal' . $modalId . '">
+                <div class="modal-dialog">
+                <div class="modal-content">
+                <div class="modal-header">
+                <h5 class="modal-title"><strong>Status ONU ' . e($olt->name) . ' ' . e($frameSlotPort) . ':' . e($ontId) . '</strong></h5>
+                </div>
+                <div class="modal-body">' . $modalBody . '</div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+                </div>
+                </div>
+                </div>';
+
+            return;
+        }
 
         if ($isHSGQ) {
             // HSGQ: id_onu format is "PON:ONU_ID" (e.g., "2:1")

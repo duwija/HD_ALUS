@@ -901,21 +901,25 @@
         $portId = null;
         $value = null;
         $isHsgqOlt = false;
+        $isCdataOlt = false;
+        $isVsolOlt = false;
         $isC600Olt = false;
 
         if (isset($customer->id_onu) && strpos($customer->id_onu, ':') !== false) {
           list($key, $value) = explode(":", $customer->id_onu, 2);
-          
+
           // Check if OLT is HSGQ
           $oltData = \App\Olt::find($customer->id_olt);
           if ($oltData) {
             $oltVendorCheck = strtolower(($oltData->vendor ?? '') . ' ' . ($oltData->type ?? '') . ' ' . ($oltData->name ?? ''));
             $isHsgqOlt = str_contains($oltVendorCheck, 'hsgq');
+            $isCdataOlt = str_contains($oltVendorCheck, 'cdata') || str_contains($oltVendorCheck, 'fdd');
+            $isVsolOlt = str_contains($oltVendorCheck, 'vsol');
             $isC600Olt = str_contains($oltVendorCheck, 'c600') || str_contains($oltVendorCheck, 'c620') || str_contains($oltVendorCheck, 'c650');
           }
-          
-          if ($isHsgqOlt) {
-            // HSGQ: pass PON number directly as portId
+
+          if ($isHsgqOlt || $isCdataOlt || $isVsolOlt) {
+            // HSGQ, CDATA & VSOL: id_onu is "PON:ONU" — pass PON number directly as portId
             $portId = $key;
           } elseif ($isC600Olt) {
             // C600: keep frame/slot/port and encode slash for route safety
@@ -944,12 +948,12 @@
 
 
 <div class="modal fade" id="modal_onu_detail" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="exampleModalLabel">ONU Detail - {{ $customer->id_onu }}</h5>
       </div>
-      <div class="modal-body modal-dialog-scrollable" id="modal-body-content">
+      <div class="modal-body" id="modal-body-content">
         <div id="onu_detail" name="onu_detail">
           <div class="fa-3x">
             <i class="fas fa-cog fa-spin"></i>

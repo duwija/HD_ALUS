@@ -3077,14 +3077,18 @@ public function show($code)
     ->orWhereNotNull('parent')
     ->get();
 
+  $createdBy = optional($jurnals->first())->created_by;
+  $createdByName = $createdBy ? optional(\App\User::find($createdBy))->name : null;
+
   return view('jurnal.show', [
-   'note'        => optional($jurnals->first())->note,
-   'memo'        => optional($jurnals->first())->memo,
-   'code'        => $code,
-   'jurnals'     => $jurnals,
-   'totalDebet'  => $totalDebet,
-   'totalKredit' => $totalKredit,
-   'akunList'    => $akunList,
+   'note'          => optional($jurnals->first())->note,
+   'memo'          => optional($jurnals->first())->memo,
+   'code'          => $code,
+   'jurnals'       => $jurnals,
+   'totalDebet'    => $totalDebet,
+   'totalKredit'   => $totalKredit,
+   'akunList'      => $akunList,
+   'createdByName' => $createdByName,
  ]);
 }
 

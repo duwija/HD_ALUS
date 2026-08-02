@@ -743,6 +743,8 @@
       if (!olt) return 'zte';
       var v = ((olt.vendor || '') + ' ' + (olt.type || '') + ' ' + (olt.name || '')).toLowerCase();
       if (v.indexOf('hsgq') !== -1) return 'hsgq';
+      if (v.indexOf('cdata') !== -1 || v.indexOf('fdd') !== -1) return 'cdata';
+      if (v.indexOf('vsol') !== -1) return 'vsol';
       return 'zte';
     }
 
@@ -754,6 +756,12 @@
       if (type === 'hsgq') {
         input.attr('placeholder', 'PON:ONU contoh 2:1');
         hint.text('Format HSGQ: PON:ONU (contoh: 2:1)');
+      } else if (type === 'cdata') {
+        input.attr('placeholder', 'PON:ONU contoh 1:5');
+        hint.text('Format CDATA: PON:ONU (contoh: 1:5)');
+      } else if (type === 'vsol') {
+        input.attr('placeholder', 'PON:ONU contoh 1:5');
+        hint.text('Format VSOL: PON:ONU (contoh: 1:5)');
       } else {
         input.attr('placeholder', 'x/x/x:xx contoh 0/2/1:3');
         hint.text('Format ZTE: frame/slot/port:onu (contoh: 0/2/1:3)');
@@ -764,8 +772,8 @@
     function formatOnuId(value, type) {
       // Remove semua karakter selain angka, titik dua, dan slash
       var clean = value.replace(/[^0-9:\/]/g, '');
-      if (type === 'hsgq') {
-        // HSGQ: hanya angka dan satu titik dua -> x:x
+      if (type === 'hsgq' || type === 'cdata' || type === 'vsol') {
+        // HSGQ & CDATA: hanya angka dan satu titik dua -> x:x
         clean = clean.replace(/\//g, ''); // hapus slash
         var parts = clean.split(':');
         if (parts.length > 2) {
@@ -821,6 +829,14 @@
         // Format: PON:ONU (misal 2:1)
         valid = /^\d{1,2}:\d{1,3}$/.test(value);
         msg = 'Format HSGQ harus PON:ONU (contoh: 2:1, 8:12)';
+      } else if (type === 'cdata') {
+        // Format: PON:ONU (misal 1:5) — sama seperti HSGQ, PON 1-8/1-16 tergantung model
+        valid = /^\d{1,2}:\d{1,3}$/.test(value);
+        msg = 'Format CDATA harus PON:ONU (contoh: 1:5, 8:12)';
+      } else if (type === 'vsol') {
+        // Format: PON:ONU (misal 1:5) — VSOL-G004 punya 4 PON port, ONU ID 1-127
+        valid = /^\d{1,2}:\d{1,3}$/.test(value);
+        msg = 'Format VSOL harus PON:ONU (contoh: 1:5, 4:17)';
       } else {
         // Format: x/x/x:xx (misal 0/2/1:3)
         valid = /^\d{1,2}\/\d{1,2}\/\d{1,2}:\d{1,3}$/.test(value);
