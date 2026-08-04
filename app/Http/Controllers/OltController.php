@@ -163,6 +163,7 @@ class OltController extends Controller
                 'huawei' => 'badge-danger',
                 'fiberhome' => 'badge-primary',
                 'vsol' => 'badge-secondary',
+                'hioso' => 'badge-light',
                 'other' => 'badge-dark',
             ];
             $badge = $vendorBadges[$olt->vendor ?? 'other'] ?? 'badge-secondary';
@@ -465,17 +466,20 @@ class OltController extends Controller
             $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
             $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
             $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+            $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
             $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                             str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
 
-            if ($isVSOL) {
-                // VSOL only exposes a plain online/offline flag (see config/vsol_oid.php) —
-                // no los/powerdown/dyinggasp/etc buckets like ZTE/CDATA. $includeOptical is
-                // false here: this overview card only needs counts + offline SN list, not
-                // RX/TX, and skipping it keeps a full-device scan well under this tenant's
-                // nginx proxy_read_timeout (see collectVsolOnuMetrics()'s doc comment).
+            if ($isVSOL || $isHIOSO) {
+                // VSOL/HIOSO only expose a plain online/offline flag (see config/vsol_oid.php,
+                // config/hioso_oid.php) — no los/powerdown/dyinggasp/etc buckets like ZTE/CDATA.
+                // $includeOptical is false here: this overview card only needs counts + offline
+                // SN list, not RX/TX, and skipping it keeps a full-device scan well under this
+                // tenant's nginx proxy_read_timeout (see collectVsolOnuMetrics()'s doc comment).
                 $customers = \App\Customer::where('id_olt', $olt->id)->get();
-                $rows = $this->collectVsolOnuMetrics($snmp, $customers, null, null, false);
+                $rows = $isHIOSO
+                    ? $this->collectHiosoOnuMetrics($snmp, $customers, null, null, false)
+                    : $this->collectVsolOnuMetrics($snmp, $customers, null, null, false);
 
                 $onuCount = count($rows);
                 foreach ($rows as $row) {
@@ -1267,6 +1271,7 @@ public function onudelete($oltId, $oltPonIndex, $onuId)
     $oltName = strtolower((string) ($olt->name ?? ''));
     $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
     $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+    $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
     $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                     str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
 
@@ -1275,6 +1280,45 @@ public function onudelete($oltId, $oltPonIndex, $onuId)
         // delete/reboot/factory-reset on this OEM stack yet, so we deliberately don't
         // guess at commands against production hardware.
         return redirect('/olt/' . $oltId)->with('warning', 'Delete ONU VSOL belum didukung — perlu contoh command CLI Telnet OLT ini.');
+    }
+
+    if ($isHIOSO) {
+        // HIOSO: Telnet CLI method, "delete onu <onu>" — same login/enable/config/
+        // interface sequence as reboot (see pyhton/reboot_hioso_ont.py, confirmed
+        // live 2026-08-03), only the final command differs. IMPORTANT: like factory
+        // reset, this has NOT been run against a real device — applied by analogy
+        // per explicit instruction, not verified. See pyhton/delete_hioso_ont.py's
+        // module doc for the caveat and its (different) confirmation heuristic.
+        try {
+            $processDelete = new Process(["python3", env("PHYTON_DIR") . "delete_hioso_ont.py",
+                $ip, $login, $password, (string) ($port ?? 23), (string) $timeout,
+                (string) $oltPonIndex, (string) $onuId, (string) ($olt->community_ro ?? 'public')]);
+            $processDelete->setTimeout(60);
+            $processDelete->run();
+
+            \Log::info('[DELETE][HIOSO] Python script finished', [
+                'exitCode' => $processDelete->getExitCode(),
+                'output' => $processDelete->getOutput(),
+                'errorOutput' => $processDelete->getErrorOutput(),
+            ]);
+
+            if (!$processDelete->isSuccessful()) {
+                throw new ProcessFailedException($processDelete);
+            }
+
+            $message = trim($processDelete->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect('/olt/' . $oltId)->with('warning', 'Delete command sent: ' . $lastLine);
+            }
+            return redirect('/olt/' . $oltId)->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Delete error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Delete error: ' . $e->getMessage());
+        }
     }
 
     if ($isCDATA) {
@@ -1373,6 +1417,7 @@ public function onureboot($oltId, $oltPonIndex, $onuId)
     $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
     $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
     $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+    $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
     $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                     str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
 
@@ -1381,6 +1426,50 @@ public function onureboot($oltId, $oltPonIndex, $onuId)
         // delete/reboot/factory-reset on this OEM stack yet, so we deliberately don't
         // guess at commands against production hardware.
         return redirect('/olt/' . $oltId)->with('warning', 'Reboot ONU VSOL belum didukung — perlu contoh command CLI Telnet OLT ini.');
+    }
+
+    if ($isHIOSO) {
+        // HIOSO: Telnet CLI method, sequence confirmed live 2026-08-03 against a real
+        // unit (see pyhton/reboot_hioso_ont.py's module doc for the exact transcript).
+        // oltPonIndex is a plain PON number, same as CDATA below — HIOSO's board is
+        // always 1 (baked into the script's "interface epon 1/<pon>" command), matching
+        // the board=1 assumption already used for its SNMP index (config/hioso_oid.php).
+        try {
+            $ip = $olt->ip;
+            $login = $olt->user;
+            $password = $olt->password;
+            $port = (string) ($olt->port ?? 23);
+            $timeout = '10';
+
+            $processReboot = new Process(["python3", env("PHYTON_DIR") . "reboot_hioso_ont.py",
+                $ip, $login, $password, $port, $timeout,
+                (string) $oltPonIndex, (string) $onuId, (string) ($olt->community_ro ?? 'public')]);
+            $processReboot->setTimeout(60);
+            $processReboot->run();
+
+            \Log::info('[REBOOT][HIOSO] Python script finished', [
+                'exitCode' => $processReboot->getExitCode(),
+                'output' => $processReboot->getOutput(),
+                'errorOutput' => $processReboot->getErrorOutput(),
+            ]);
+
+            if (!$processReboot->isSuccessful()) {
+                throw new ProcessFailedException($processReboot);
+            }
+
+            $message = trim($processReboot->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect()->back()->with('warning', 'Reboot command sent: ' . $lastLine);
+            }
+            return redirect()->back()->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect()->back()->with('error', 'Reboot error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Reboot error: ' . $e->getMessage());
+        }
     }
 
     if ($isCDATA) {
@@ -1621,9 +1710,10 @@ public function onu_detail(Request $request)
     $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
     $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
     $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+    $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
 
-    if ($isVSOL) {
-        // VSOL: SNMP-only detail (no confirmed CLI method yet) — reuse the ONU list collector.
+    if ($isVSOL || $isHIOSO) {
+        // VSOL/HIOSO: SNMP-only detail (no confirmed CLI method yet) — reuse the ONU list collector.
         try {
             $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
 
@@ -1632,7 +1722,9 @@ public function onu_detail(Request $request)
             $onuIdNum = (string) (int) $onuIdNum;
 
             $customers = \App\Customer::where('id_olt', $olt->id)->get();
-            $rows = $this->collectVsolOnuMetrics($snmp, $customers, $ponNum, $onuIdNum);
+            $rows = $isHIOSO
+                ? $this->collectHiosoOnuMetrics($snmp, $customers, $ponNum, $onuIdNum)
+                : $this->collectVsolOnuMetrics($snmp, $customers, $ponNum, $onuIdNum);
             $row = null;
             foreach ($rows as $r) {
                 if ((string) ($r['pon'] ?? '') === $ponNum && (string) ($r['onu_id'] ?? '') === $onuIdNum) {
@@ -1653,7 +1745,7 @@ public function onu_detail(Request $request)
 
             $html = '<table class="table table-sm table-bordered mb-0" style="table-layout:fixed;">';
             $html .= '<colgroup><col style="width:42%"><col style="width:58%"></colgroup>';
-            $html .= '<tr><th colspan="2" class="bg-primary text-white">ONU Information - VSOL GPON</th></tr>';
+            $html .= '<tr><th colspan="2" class="bg-primary text-white">ONU Information - ' . ($isHIOSO ? 'HIOSO EPON' : 'VSOL GPON') . '</th></tr>';
             $html .= '<tr><td><strong>ONU ID</strong></td><td>PON' . e($ponNum) . '/' . e($onuIdNum) . '</td></tr>';
             $html .= '<tr><td><strong>Status</strong></td><td>' . $ifStatus . '</td></tr>';
             $html .= '<tr><td><strong>Vendor</strong></td><td>' . e($row['vendor'] ?: '-') . '</td></tr>';
@@ -1662,6 +1754,9 @@ public function onu_detail(Request $request)
             $html .= '<tr><th colspan="2" class="bg-info text-white">Optical Information</th></tr>';
             $html .= '<tr><td><strong>ONU RX Power</strong></td><td>' . ($row['rx_dbm'] !== null ? e($row['rx_dbm']) . ' dBm' : '-') . '</td></tr>';
             $html .= '<tr><td><strong>ONU TX Power</strong></td><td>' . ($row['tx_dbm'] !== null ? e($row['tx_dbm']) . ' dBm' : '-') . '</td></tr>';
+            if ($isHIOSO) {
+                $html .= '<tr><td><strong>Distance</strong></td><td>' . ($row['distance_m'] !== null ? e($row['distance_m']) . ' m' : '-') . '</td></tr>';
+            }
             $html .= '<tr><th colspan="2" class="bg-secondary text-white">Registration</th></tr>';
             $html .= '<tr><td><strong>Firmware Version</strong></td><td>' . e($row['firmware_version'] ?: '-') . '</td></tr>';
             $html .= '</table>';
@@ -1669,7 +1764,7 @@ public function onu_detail(Request $request)
             echo $html;
             return;
         } catch (\Exception $e) {
-            echo '<div class="alert alert-danger">Error fetching VSOL ONU detail: ' . e($e->getMessage()) . '</div>';
+            echo '<div class="alert alert-danger">Error fetching ' . ($isHIOSO ? 'HIOSO' : 'VSOL') . ' ONU detail: ' . e($e->getMessage()) . '</div>';
             return;
         }
     }
@@ -1890,12 +1985,58 @@ public function onureset($oltId, $oltPonIndex, $onuId)
     $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
     $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
     $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+    $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
 
     if ($isVSOL) {
         // VSOL: read-only SNMP support only so far — no confirmed Telnet CLI syntax for
         // delete/reboot/factory-reset on this OEM stack yet, so we deliberately don't
         // guess at commands against production hardware.
         return redirect('/olt/' . $oltId)->with('warning', 'Factory reset ONU VSOL belum didukung — perlu contoh command CLI Telnet OLT ini.');
+    }
+
+    if ($isHIOSO) {
+        // HIOSO: Telnet CLI method, "onu <onu> factory" — same login/enable/config/
+        // interface sequence as reboot (see pyhton/reboot_hioso_ont.py, confirmed
+        // live 2026-08-03), only the final command differs. IMPORTANT: unlike
+        // reboot, this command has NOT been run against a real device — applied by
+        // analogy per explicit instruction, not verified. See
+        // pyhton/reset_hioso_ont.py's module doc for the caveat.
+        try {
+            $ip = $olt->ip;
+            $login = $olt->user;
+            $password = $olt->password;
+            $port = $olt->port ?? 23;
+            $timeout = 10;
+
+            $processReset = new Process(["python3", env("PHYTON_DIR") . "reset_hioso_ont.py",
+                $ip, $login, $password, $port, $timeout,
+                (string) $oltPonIndex, (string) $onuId, (string) ($olt->community_ro ?? 'public')]);
+            $processReset->setTimeout(45);
+            $processReset->run();
+
+            \Log::info('[RESET][HIOSO] Python script finished', [
+                'exitCode' => $processReset->getExitCode(),
+                'output' => $processReset->getOutput(),
+                'errorOutput' => $processReset->getErrorOutput(),
+            ]);
+
+            if (!$processReset->isSuccessful()) {
+                throw new ProcessFailedException($processReset);
+            }
+
+            $message = trim($processReset->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect('/olt/' . $oltId)->with('warning', 'Factory reset command sent: ' . $lastLine);
+            }
+            return redirect('/olt/' . $oltId)->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Reset error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Reset error: ' . $e->getMessage());
+        }
     }
 
     if ($isCDATA) {
@@ -2173,17 +2314,20 @@ public function getOltPon($id)
         $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
         $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
         $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+        $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
         $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                         str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
 
-        if ($isCDATA || $isVSOL) {
-            // CDATA (EPON or GPON, auto-dispatched inside collectCdataOnuMetrics) and
-            // VSOL both use the PON number itself as a usable suffix — no frame/slot
+        if ($isCDATA || $isVSOL || $isHIOSO) {
+            // CDATA (EPON or GPON, auto-dispatched inside collectCdataOnuMetrics), VSOL,
+            // and HIOSO all use the PON number itself as a usable suffix — no frame/slot
             // encoding needed.
-            $rows = $isVSOL
+            $rows = $isHIOSO
                 // Only the PON list is needed here — skip optical AND the identity walks.
-                ? $this->collectVsolOnuMetrics($snmp, collect(), null, null, false, true)
-                : $this->collectCdataOnuMetrics($snmp, $zteoid, [], collect(), $olt);
+                ? $this->collectHiosoOnuMetrics($snmp, collect(), null, null, false, true)
+                : ($isVSOL
+                    ? $this->collectVsolOnuMetrics($snmp, collect(), null, null, false, true)
+                    : $this->collectCdataOnuMetrics($snmp, $zteoid, [], collect(), $olt));
             $seenPon = [];
             $data = [];
             foreach ($rows as $row) {
@@ -2376,17 +2520,18 @@ public function getOltPon($id)
 
             $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
             $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
+            $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
             $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650')
                          || str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
-            $isC300Series = !$isC600Series && !$isHSGQ && !$isCDATA
+            $isC300Series = !$isC600Series && !$isHSGQ && !$isCDATA && !$isHIOSO
                          && (str_contains($oltType, 'c300') || str_contains($oltType, 'c320')
                           || str_contains($oltName, 'c300') || str_contains($oltName, 'c320')
                           || $oltVendor === 'zte');
 
-            if (!$isC600Series && !$isC300Series && !$isHSGQ && !$isCDATA) {
+            if (!$isC600Series && !$isC300Series && !$isHSGQ && !$isCDATA && !$isHIOSO) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Search by Name/SN saat ini didukung untuk ZTE C300/C320/C600/C620/C650, HSGQ, dan CDATA.',
+                    'message' => 'Search by Name/SN saat ini didukung untuk ZTE C300/C320/C600/C620/C650, HSGQ, CDATA, dan HIOSO.',
                     'data'    => [],
                     'total'   => 0,
                 ], 200);
@@ -2398,6 +2543,47 @@ public function getOltPon($id)
             $snmp = new \SNMP(\SNMP::VERSION_2c, $host, $olt->community_ro);
             // NOTE: do NOT use SNMP_VALUE_PLAIN — we need Hex-STRING format for SN decoding.
             $snmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+
+            if ($isHIOSO) {
+                $customers = \App\Customer::where('id_olt', $olt->id)->get();
+                // No PON filter (search spans the whole device); skip optical GETs since
+                // the search table doesn't render RX/TX and HIOSO's GET-per-key optical
+                // fetch would multiply SNMP round-trips across every ONU on every PON
+                // (see collectHiosoOnuMetrics()'s doc comment).
+                $rows = $this->collectHiosoOnuMetrics($snmp, $customers, null, null, false);
+
+                $qLower = mb_strtolower($q);
+                $qUpperHex = strtoupper(preg_replace('/[^a-fA-F0-9]/', '', $q));
+
+                $rows = array_values(array_filter($rows, function ($row) use ($qLower, $qUpperHex) {
+                    $hay = mb_strtolower(implode(' ', [
+                        (string) ($row['name'] ?? ''),
+                        (string) ($row['sn'] ?? ''),
+                        (string) ($row['pon'] ?? ''),
+                        (string) ($row['onu_id'] ?? ''),
+                        (string) ($row['status'] ?? ''),
+                    ]));
+
+                    $matched = (mb_strpos($hay, $qLower) !== false);
+                    if (!$matched && $qUpperHex !== '' && strlen($qUpperHex) >= 4) {
+                        $matched = (strpos(strtoupper((string) ($row['sn'] ?? '')), $qUpperHex) !== false);
+                    }
+                    return $matched;
+                }));
+
+                if (count($rows) > 200) {
+                    $rows = array_slice($rows, 0, 200);
+                }
+
+                $snmp->close();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => count($rows) . ' ONU ditemukan.',
+                    'data'    => $rows,
+                    'total'   => count($rows),
+                ]);
+            }
 
             if ($isHSGQ) {
                 $customers = \App\Customer::where('id_olt', $olt->id)->get();
@@ -3269,6 +3455,169 @@ public function getOltPon($id)
     }
 
     /**
+     * HIOSO EPON ONU collector — see config/hioso_oid.php for the OID map (enterprise
+     * 25355, branch .3.2.6, HA7304V/C/VX family). Index is a 3-level "{board}.{pon}.{onu}"
+     * table (board assumed constant at 1, per the source doc), unlike VSOL's plain
+     * 2-level "{port}.{onu}" — so this reindexes on a 3-part tail and drops the board
+     * segment. RX/TX/distance are fetched per-key via individual GETs (same pattern as
+     * collectVsolOnuMetrics(), whose doc comment explains why: table walks over the
+     * optical branch are unreliable/slow on this class of OEM SNMP agent, and there is
+     * no evidence either way for HIOSO — GET-per-key is the safe default). RX/TX values
+     * are already final dBm float strings on this profile (not scaled integers like the
+     * source doc's BDCOM/GPON profiles, which this file doesn't implement).
+     */
+    private function collectHiosoOnuMetrics($snmp, $customers, $ponFilter = null, $onuFilter = null, bool $includeOptical = true, bool $identityOnly = false): array
+    {
+        $cfg = config('hioso_oid') ?: [];
+        $statusOid = $cfg['oidOnuStatus'] ?? null;
+        $snOid = $cfg['oidOnuSn'] ?? null;
+        $nameOid = $cfg['oidOnuName'] ?? null;
+        $modelOid = $cfg['oidOnuModel'] ?? null;
+        $vendorOid = $cfg['oidOnuVendor'] ?? null;
+        $versionOid = $cfg['oidOnuVersion'] ?? null;
+        $rxOid = $cfg['oidOnuRxPower'] ?? null;
+        $txOid = $cfg['oidOnuTxPowerOnu'] ?? null;
+        $distOid = $cfg['oidOnuDistance'] ?? null;
+
+        if (empty($statusOid) || empty($snOid)) {
+            return [];
+        }
+
+        // Board segment is assumed constant at 1 (see config/hioso_oid.php doc header).
+        $board = '1';
+
+        $ponFilter = $ponFilter !== null ? (string) $ponFilter : null;
+        $onuFilter = $onuFilter !== null ? (string) $onuFilter : null;
+
+        if ($ponFilter !== null && $onuFilter !== null) {
+            // Single known ONU: skip walk() entirely, just GET the fields directly.
+            $key = $ponFilter . '.' . $onuFilter;
+            $suffix = $board . '.' . $key;
+            $statusRaw = $this->safeSnmpGet($snmp, $statusOid . '.' . $suffix);
+            if ($statusRaw === null) {
+                return [];
+            }
+            $statusByKey = [$key => $statusRaw];
+            $snByKey = [$key => $this->safeSnmpGet($snmp, $snOid . '.' . $suffix)];
+            $nameByKey = [$key => $nameOid ? $this->safeSnmpGet($snmp, $nameOid . '.' . $suffix) : null];
+            $modelByKey = [$key => $modelOid ? $this->safeSnmpGet($snmp, $modelOid . '.' . $suffix) : null];
+            $vendorByKey = [$key => $vendorOid ? $this->safeSnmpGet($snmp, $vendorOid . '.' . $suffix) : null];
+            $versionByKey = [$key => $versionOid ? $this->safeSnmpGet($snmp, $versionOid . '.' . $suffix) : null];
+        } else {
+            // Subtree-scope the walk to just this port when given (board.pon prefix).
+            $portSuffix = $ponFilter !== null ? '.' . $board . '.' . $ponFilter : '';
+
+            $statusWalk = @$snmp->walk($statusOid . $portSuffix) ?: [];
+            if (empty($statusWalk)) {
+                return [];
+            }
+            $statusByKey = $this->reindexSnmpWalkByTail($statusWalk, 3);
+            // Drop the board segment ("1.<pon>.<onu>" -> "<pon>.<onu>") for the row key.
+            $statusByKey = collect($statusByKey)->mapWithKeys(function ($value, $tail) {
+                $parts = explode('.', $tail);
+                return [implode('.', array_slice($parts, 1)) => $value];
+            })->all();
+
+            if ($identityOnly) {
+                $snByKey = $nameByKey = $modelByKey = $vendorByKey = $versionByKey = [];
+            } else {
+                $reindex3 = function ($walk) {
+                    $byTail = $this->reindexSnmpWalkByTail($walk, 3);
+                    return collect($byTail)->mapWithKeys(function ($value, $tail) {
+                        $parts = explode('.', $tail);
+                        return [implode('.', array_slice($parts, 1)) => $value];
+                    })->all();
+                };
+                $snByKey = $reindex3(@$snmp->walk($snOid . $portSuffix) ?: []);
+                $nameByKey = $nameOid ? $reindex3(@$snmp->walk($nameOid . $portSuffix) ?: []) : [];
+                $modelByKey = $modelOid ? $reindex3(@$snmp->walk($modelOid . $portSuffix) ?: []) : [];
+                $vendorByKey = $vendorOid ? $reindex3(@$snmp->walk($vendorOid . $portSuffix) ?: []) : [];
+                $versionByKey = $versionOid ? $reindex3(@$snmp->walk($versionOid . $portSuffix) ?: []) : [];
+            }
+        }
+
+        $rxByKey = [];
+        $txByKey = [];
+        $distByKey = [];
+        if ($includeOptical) {
+            foreach (array_keys($statusByKey) as $key) {
+                $suffix = $board . '.' . $key;
+                if ($rxOid) {
+                    $rxRaw = $this->safeSnmpGet($snmp, $rxOid . '.' . $suffix);
+                    if ($rxRaw !== null && preg_match('/-?\d+(\.\d+)?/', (string) $rxRaw, $m)) {
+                        $rxByKey[$key] = (float) $m[0];
+                    }
+                }
+                if ($txOid) {
+                    $txRaw = $this->safeSnmpGet($snmp, $txOid . '.' . $suffix);
+                    if ($txRaw !== null && preg_match('/-?\d+(\.\d+)?/', (string) $txRaw, $m)) {
+                        $txByKey[$key] = (float) $m[0];
+                    }
+                }
+                if ($distOid) {
+                    $distRaw = $this->safeSnmpGet($snmp, $distOid . '.' . $suffix);
+                    if ($distRaw !== null && preg_match('/-?\d+/', (string) $distRaw, $m)) {
+                        $distByKey[$key] = (int) $m[0];
+                    }
+                }
+            }
+        }
+
+        $rows = [];
+
+        foreach ($statusByKey as $key => $statusRaw) {
+            $parts = explode('.', $key);
+            if (count($parts) < 2) {
+                continue;
+            }
+            [$portId, $onuId] = $parts;
+
+            $isOnline = (bool) preg_match('/\b1\b/', (string) $statusRaw);
+
+            $snRaw = $snByKey[$key] ?? null;
+            $snVal = $snRaw !== null ? trim($this->normalizeOnuSerial((string) $snRaw), " \t\"'") : '';
+
+            // Admin-set label; device returns the literal "NA" when never configured —
+            // treat that the same as empty (see config/hioso_oid.php doc header).
+            $nameRaw = $nameByKey[$key] ?? null;
+            $nameVal = $nameRaw !== null ? trim($this->stripSnmpPrefix((string) $nameRaw), " \t\"'") : '';
+            if (strcasecmp($nameVal, 'NA') === 0) {
+                $nameVal = '';
+            }
+
+            $modelRaw = $modelByKey[$key] ?? null;
+            $modelVal = $modelRaw !== null ? trim($this->stripSnmpPrefix((string) $modelRaw), " \t\"'") : '';
+
+            $vendorRaw = $vendorByKey[$key] ?? null;
+            $vendorVal = $vendorRaw !== null ? trim($this->stripSnmpPrefix((string) $vendorRaw), " \t\"'") : '';
+
+            $versionRaw = $versionByKey[$key] ?? null;
+            $versionVal = $versionRaw !== null ? trim($this->stripSnmpPrefix((string) $versionRaw), " \t\"'") : '';
+
+            $rows[] = [
+                'pon' => (string) $portId,
+                'onu_id' => (string) $onuId,
+                'sn' => $snVal,
+                'name' => $nameVal !== '' ? $nameVal : ($snVal !== '' ? $snVal : ('ONU-' . $portId . '-' . $onuId)),
+                'model' => $modelVal,
+                'vendor' => $vendorVal,
+                'firmware_version' => $versionVal,
+                'status' => $isOnline ? 'online' : 'offline',
+                'last_offline_reason' => null,
+                'last_online_at' => null,
+                'last_offline_at' => null,
+                'rx_dbm' => $rxByKey[$key] ?? null,
+                'tx_dbm' => $txByKey[$key] ?? null,
+                'distance_m' => $distByKey[$key] ?? null,
+                'customer' => $customers ? optional($customers->firstWhere('id_onu', $portId . ':' . $onuId))->name ?? '' : '',
+                'customer_id' => $customers ? optional($customers->firstWhere('id_onu', $portId . ':' . $onuId))->id : null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * CDATA GPON ONU collector for CDATA's officially registered enterprise 34592
      * (CDATA-GPON-MIB, per the public LibreNMS reference). Index format is a plain
      * 4-level tuple {gponOltDeviceId}.{gponOltCardId}.{gponOltPortId}.{gponOnuId} — no
@@ -4131,19 +4480,23 @@ public function getOltPon($id)
                                 $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
                                 $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
                                 $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+                                $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
                                 $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                                                 str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
 
-                                if ($isCDATA || $isVSOL) {
+                                if ($isCDATA || $isVSOL || $isHIOSO) {
                                     $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
                                     $rows = [];
 
                                     try {
-                                        $rows = $isVSOL
+                                        $rows = $isHIOSO
                                             // Scope the (slow) optical fetch to just this PON's ONUs — see
-                                            // collectVsolOnuMetrics()'s doc comment for why that matters here.
-                                            ? $this->collectVsolOnuMetrics($snmp, $customers, $oltPonIndex)
-                                            : $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt);
+                                            // collectVsolOnuMetrics()'s / collectHiosoOnuMetrics()'s doc comments
+                                            // for why that matters here.
+                                            ? $this->collectHiosoOnuMetrics($snmp, $customers, $oltPonIndex)
+                                            : ($isVSOL
+                                                ? $this->collectVsolOnuMetrics($snmp, $customers, $oltPonIndex)
+                                                : $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt));
                                     } catch (\Throwable $e) {
                                         $rows = [];
                                     }
@@ -5816,17 +6169,20 @@ public function coba($host, $community)
         $isHSGQ = str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq');
         $isCDATA = str_contains($oltVendor, 'cdata') || str_contains($oltType, 'cdata') || str_contains($oltName, 'cdata') || str_contains($oltType, 'fdd');
         $isVSOL = str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol');
+        $isHIOSO = str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso');
         $isC600Series = str_contains($oltType, 'c600') || str_contains($oltType, 'c620') || str_contains($oltType, 'c650') ||
                 str_contains($oltName, 'c600') || str_contains($oltName, 'c620') || str_contains($oltName, 'c650');
 
-        if ($isCDATA || $isVSOL) {
-            // CDATA & VSOL: id_onu format is "PON:ONU_ID" (e.g., "1:5"). Reuse the same
-            // collector already verified for the ONU list / dashboards instead of
+        if ($isCDATA || $isVSOL || $isHIOSO) {
+            // CDATA, VSOL & HIOSO: id_onu format is "PON:ONU_ID" (e.g., "1:5"). Reuse the
+            // same collector already verified for the ONU list / dashboards instead of
             // re-deriving raw SNMP walks a fourth time.
             $customers = \App\Customer::where('id_olt', $olt->id)->get();
-            $rows = $isVSOL
-                ? $this->collectVsolOnuMetrics($snmp, $customers, $frameSlotPort, $ontId)
-                : $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt);
+            $rows = $isHIOSO
+                ? $this->collectHiosoOnuMetrics($snmp, $customers, $frameSlotPort, $ontId)
+                : ($isVSOL
+                    ? $this->collectVsolOnuMetrics($snmp, $customers, $frameSlotPort, $ontId)
+                    : $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt));
             $row = null;
             foreach ($rows as $r) {
                 if ((string) ($r['pon'] ?? '') === (string) $frameSlotPort && (string) ($r['onu_id'] ?? '') === (string) $ontId) {

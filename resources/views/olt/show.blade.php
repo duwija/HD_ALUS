@@ -39,6 +39,7 @@
                     'huawei' => 'badge-danger',
                     'fiberhome' => 'badge-primary',
                     'vsol' => 'badge-secondary',
+                    'hioso' => 'badge-light',
                     'other' => 'badge-dark',
                   ];
                   $badge = $vendorBadges[$olt->vendor ?? 'other'] ?? 'badge-secondary';

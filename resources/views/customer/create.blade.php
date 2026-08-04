@@ -11,8 +11,8 @@
         @csrf
         <div class="card-body row">
           <div class="form-group col-md-4">
-            <label for="nama">Customer Name</label>
-            <input type="text" class="form-control @error('name') is-invalid @enderror " name="name" id="name"  placeholder="Customer Name" value="{{ request('name') ?? old('name') }}">
+            <label for="nama">Customer Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control @error('name') is-invalid @enderror " name="name" id="name"  placeholder="Customer Name" value="{{ request('name') ?? old('name') }}" required>
             @error('name')
             <div class="error invalid-feedback">{{ $message }}</div>
             @enderror
@@ -35,7 +35,7 @@
 
 
           <div class="form-group col-md-2">
-            <label for="customer_id"> Customer Id (CID) </label>
+            <label for="customer_id"> Customer Id (CID) <span class="text-danger">*</span></label>
             @php
             
             $rescode         = config("app.rescode");
@@ -51,7 +51,7 @@
             @endphp
             <div class="input-group mb-3">
 
-              <input type="text"  class="form-control @error('customer_id') is-invalid @enderror" name="customer_id"  id="customer_id" placeholder="Customer ID" value="{{ $cidDefault }}">
+              <input type="text"  class="form-control @error('customer_id') is-invalid @enderror" name="customer_id"  id="customer_id" placeholder="Customer ID" value="{{ $cidDefault }}" required>
               @error('customer_id')
               <div class="error invalid-feedback">{{ $message }}</div>
               @enderror
@@ -80,9 +80,9 @@
         </div>
         
         <div class="form-group col-md-4">
-          <label for="contact_name">Contact Name</label>
+          <label for="contact_name">Contact Name <span class="text-danger">*</span></label>
           <div class="input-group">
-            <input type="text" class="form-control @error('contact_name') is-invalid @enderror" name="contact_name" id="contact_name" placeholder="Contact Name" value="{{old('contact_name')}}">
+            <input type="text" class="form-control @error('contact_name') is-invalid @enderror" name="contact_name" id="contact_name" placeholder="Contact Name" value="{{old('contact_name')}}" required>
             <div class="input-group-append">
              <button type="button" class="btn btn-primary" onclick="copy_name()" title="Copy from Customer Name"><i class="fa fa-clone"></i></button>
            </div>
@@ -101,13 +101,14 @@
       </div>
       
       <div class="form-group col-md-2">
-        <label for="phone">Phone No</label>
+        <label for="phone">Phone No <span class="text-danger">*</span></label>
         <input type="text" class="form-control @error('phone') is-invalid @enderror" name="phone" id="phone"
           placeholder="Contoh: 08123456789"
           value="{{old('phone')}}"
           oninput="this.value=this.value.replace(/[^0-9]/g,'')"
           pattern="[0-9]{6,15}"
-          title="Nomor telepon: angka saja, tanpa tanda + atau spasi">
+          title="Nomor telepon: angka saja, tanpa tanda + atau spasi"
+          required>
         @error('phone')
         <div class="error invalid-feedback">{{ $message }}</div>
         @enderror

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat /etc/nginx/conf.d/cnetgoup.alus.co.id.conf)",
+      "Read(//etc/nginx/conf.d/**)"
+    ]
+  }
+}

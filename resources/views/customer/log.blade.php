@@ -18,6 +18,7 @@
         <h2>Customer Changed Logs</h2>
         <a href="{{ url('customer/'.$id) }}" class="btn btn-primary mb-3">Kembali</a>
 
+        <div class="table-responsive">
         <table class="table table-bordered">
             <thead>
                 <tr>
@@ -32,7 +33,7 @@
                 @forelse ($logEntries as $log)
                 <tr>
                     <td>{{ $loop->iteration }}</td>
-                    <td>{{ $log->date }}</td>
+                    <td class="text-nowrap">{{ $log->date }}</td>
                     <td>{{ $log->updated_by }}</td>
                     <td>
                         @php
@@ -46,15 +47,15 @@
                         @endphp
                         <span class="badge {{ $topicInfo['class'] }}">{{ $topicInfo['label'] }}</span>
                     </td>
-                    <td>
-                        <ul>
+                    <td style="min-width:260px;">
+                        <ul class="pl-3 mb-0">
                             @php
                             $changes = json_decode($log->updates, true);
                             @endphp
                             @forelse ($changes ?? [] as $key => $change)
-                            <li><strong>{{ ucfirst($key) }}</strong>: 
+                            <li style="word-break:break-word;"><strong>{{ ucfirst($key) }}</strong>:
                                 @if(is_array($change))
-                                <span class="text-danger">{{ $change['old'] ?? 'N/A' }}</span> → 
+                                <span class="text-danger">{{ $change['old'] ?? 'N/A' }}</span> →
                                 <span class="text-success">{{ $change['new'] ?? 'N/A' }}</span>
                                 @else
                                 {{ $change }}
@@ -68,11 +69,12 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="4" class="text-center">log not found.</td>
+                    <td colspan="5" class="text-center">log not found.</td>
                 </tr>
                 @endforelse
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 </section>

@@ -29,6 +29,7 @@
               <option value="huawei">Huawei</option>
               <option value="fiberhome">Fiberhome</option>
               <option value="vsol">VSOL</option>
+              <option value="hioso">HIOSO</option>
               <option value="other">Other</option>
             </select>
             @error('vendor')

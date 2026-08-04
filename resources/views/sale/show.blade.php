@@ -41,54 +41,38 @@
     <!-- Statistics Cards -->
     <div class="row mb-4">
       <div class="col-lg-3 col-md-6">
-        <div class="card bg-info">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h6 class="text-white mb-0">Total Customers</h6>
-                <h3 class="text-white font-weight-bold mb-0">{{ $totalCustomers }}</h3>
-              </div>
-              <i class="fas fa-users fa-3x text-white opacity-50"></i>
-            </div>
+        <div class="info-box">
+          <span class="info-box-icon bg-info elevation-1"><i class="fas fa-users"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Total Customers</span>
+            <span class="info-box-number">{{ $totalCustomers }}</span>
           </div>
         </div>
       </div>
       <div class="col-lg-3 col-md-6">
-        <div class="card bg-success">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h6 class="text-white mb-0">Active</h6>
-                <h3 class="text-white font-weight-bold mb-0">{{ $activeCustomers }}</h3>
-              </div>
-              <i class="fas fa-check-circle fa-3x text-white opacity-50"></i>
-            </div>
+        <div class="info-box">
+          <span class="info-box-icon bg-success elevation-1"><i class="fas fa-check-circle"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Active</span>
+            <span class="info-box-number">{{ $activeCustomers }}</span>
           </div>
         </div>
       </div>
       <div class="col-lg-3 col-md-6">
-        <div class="card bg-danger">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h6 class="text-white mb-0">Blocked</h6>
-                <h3 class="text-white font-weight-bold mb-0">{{ $blockCustomers }}</h3>
-              </div>
-              <i class="fas fa-ban fa-3x text-white opacity-50"></i>
-            </div>
+        <div class="info-box">
+          <span class="info-box-icon bg-danger elevation-1"><i class="fas fa-ban"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Blocked</span>
+            <span class="info-box-number">{{ $blockCustomers }}</span>
           </div>
         </div>
       </div>
       <div class="col-lg-3 col-md-6">
-        <div class="card bg-warning">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h6 class="text-white mb-0">Inactive</h6>
-                <h3 class="text-white font-weight-bold mb-0">{{ $inactiveCustomers }}</h3>
-              </div>
-              <i class="fas fa-pause-circle fa-3x text-white opacity-50"></i>
-            </div>
+        <div class="info-box">
+          <span class="info-box-icon bg-warning elevation-1"><i class="fas fa-pause-circle"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Inactive</span>
+            <span class="info-box-number">{{ $inactiveCustomers }}</span>
           </div>
         </div>
       </div>
@@ -98,8 +82,8 @@
     <div class="row mb-4">
       <div class="col-lg-5">
         <div class="card">
-          <div class="card-header bg-primary">
-            <h5 class="card-title text-white mb-0">Customer Distribution by Status</h5>
+          <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-chart-pie text-primary mr-1"></i> Customer Distribution by Status</h5>
           </div>
           <div class="card-body">
             <canvas id="statusChart" style="height: 300px;"></canvas>
@@ -108,8 +92,8 @@
       </div>
       <div class="col-lg-7">
         <div class="card">
-          <div class="card-header bg-success">
-            <h5 class="card-title text-white mb-0">Monthly Customer Growth ({{ \Carbon\Carbon::parse($dateFrom)->format('d M Y') }} - {{ \Carbon\Carbon::parse($dateTo)->format('d M Y') }})</h5>
+          <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-chart-line text-success mr-1"></i> Monthly Customer Growth ({{ \Carbon\Carbon::parse($dateFrom)->format('d M Y') }} - {{ \Carbon\Carbon::parse($dateTo)->format('d M Y') }})</h5>
           </div>
           <div class="card-body">
             <canvas id="growthChart" style="height: 300px;"></canvas>
@@ -122,8 +106,8 @@
     <div class="row mb-4">
       <div class="col-lg-8">
         <div class="card">
-          <div class="card-header bg-warning">
-            <h5 class="card-title text-white mb-0">Monthly Revenue ({{ \Carbon\Carbon::parse($dateFrom)->format('d M Y') }} - {{ \Carbon\Carbon::parse($dateTo)->format('d M Y') }})</h5>
+          <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-money-bill-wave text-warning mr-1"></i> Monthly Revenue ({{ \Carbon\Carbon::parse($dateFrom)->format('d M Y') }} - {{ \Carbon\Carbon::parse($dateTo)->format('d M Y') }})</h5>
           </div>
           <div class="card-body">
             <canvas id="revenueChart" style="height: 300px;"></canvas>
@@ -132,8 +116,8 @@
       </div>
       <div class="col-lg-4">
         <div class="card">
-          <div class="card-header bg-info">
-            <h5 class="card-title text-white mb-0">Revenue by Plan</h5>
+          <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-chart-pie text-info mr-1"></i> Revenue by Plan</h5>
           </div>
           <div class="card-body">
             <canvas id="planRevenueChart" style="height: 300px;"></canvas>

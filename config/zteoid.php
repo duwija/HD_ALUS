@@ -59,6 +59,12 @@ if (!function_exists('get_olt_oid_config')) {
             \Log::warning("VSOL OLT detected but config/vsol_oid.php not found");
         }
 
+        // HIOSO Detection (HA7304V/C/VX family — see config/hioso_oid.php)
+        if (str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso')) {
+            if (config('hioso_oid')) return config('hioso_oid');
+            \Log::warning("HIOSO OLT detected but config/hioso_oid.php not found");
+        }
+
         // HSGQ Detection (EPON vs GPON)
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {
             // HSGQ-G02ID family (uses .3320 branch)
@@ -216,6 +222,10 @@ if (!function_exists('get_olt_vendor')) {
 
         if (str_contains($oltVendor, 'vsol') || str_contains($oltType, 'vsol') || str_contains($oltName, 'vsol')) {
             return 'VSOL GPON';
+        }
+
+        if (str_contains($oltVendor, 'hioso') || str_contains($oltType, 'hioso') || str_contains($oltName, 'hioso')) {
+            return 'HIOSO EPON';
         }
 
         if (str_contains($oltVendor, 'hsgq') || str_contains($oltType, 'hsgq') || str_contains($oltName, 'hsgq')) {

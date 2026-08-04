@@ -42,6 +42,7 @@
                 <option value="huawei" {{ ($olt->vendor ?? '') == 'huawei' ? 'selected' : '' }}>Huawei</option>
                 <option value="fiberhome" {{ ($olt->vendor ?? '') == 'fiberhome' ? 'selected' : '' }}>Fiberhome</option>
                 <option value="vsol" {{ ($olt->vendor ?? '') == 'vsol' ? 'selected' : '' }}>VSOL</option>
+                <option value="hioso" {{ ($olt->vendor ?? '') == 'hioso' ? 'selected' : '' }}>HIOSO</option>
                 <option value="other" {{ ($olt->vendor ?? '') == 'other' ? 'selected' : '' }}>Other</option>
               </select>
               @error('vendor')

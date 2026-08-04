@@ -423,7 +423,7 @@ $('#getOnu').click(function() {
 
   // ──────────────────────────────────────────────
   // Search ONU by Name/SN across all PONs of this OLT
-  // (Backend: POST /olt/onu-search, supports ZTE + HSGQ)
+  // (Backend: POST /olt/onu-search, supports ZTE, HSGQ, CDATA, HIOSO)
   // ──────────────────────────────────────────────
   function escapeHtml(str) {
     return String(str ?? '')

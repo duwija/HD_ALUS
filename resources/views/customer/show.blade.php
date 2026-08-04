@@ -536,10 +536,10 @@
         </form>
       @else
         <button type="button" class="btn btn-sm" style="background:rgba(23,162,184,.12);color:#17a2b8;border:1px solid rgba(23,162,184,.3);border-radius:6px;" data-toggle="modal" data-target="#modal-update-lead">
-          <i class="fas fa-edit"></i> Update Progress
+          <i class="fas fa-edit"></i> Update
         </button>
         <button type="button" class="btn btn-sm" style="background:rgba(220,53,69,.1);color:#dc3545;border:1px solid rgba(220,53,69,.3);border-radius:6px;" data-toggle="modal" data-target="#modal-mark-lost">
-          <i class="fas fa-times-circle"></i> Tandai Gagal
+          <i class="fas fa-times-circle"></i> Cancel
         </button>
         <button type="button" class="btn btn-sm" style="background:rgba(40,167,69,.1);color:#28a745;border:1px solid rgba(40,167,69,.3);border-radius:6px;" data-toggle="modal" data-target="#modal-convert">
           <i class="fas fa-check-circle"></i> Convert to Active

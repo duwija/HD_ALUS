@@ -459,6 +459,24 @@
     }
 
     /* ============================================================
+       INFO BOXES (theme-aware stat cards — only the icon badge
+       carries the contextual color, box/text stay theme-neutral so
+       they're never a colored .card with white-on-white text)
+       ============================================================ */
+    .info-box {
+      background: var(--bg-surface) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 10px !important;
+      box-shadow: var(--shadow-sm) !important;
+      color: var(--text-primary) !important;
+      transition: box-shadow 0.2s ease;
+    }
+    .info-box:hover { box-shadow: var(--shadow-md) !important; }
+    .info-box-content { color: var(--text-primary) !important; }
+    .info-box-text    { color: var(--text-secondary) !important; }
+    .info-box-number  { color: var(--text-primary) !important; font-weight: 700; }
+
+    /* ============================================================
        TABLES
        ============================================================ */
     .table {

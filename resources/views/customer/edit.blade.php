@@ -62,8 +62,8 @@
         @csrf
         <div class="card-body row">
           <div class="form-group col-md-4">
-            <label for="nama">Customer Name</label>
-            <input type="text" class="form-control @error('name') is-invalid @enderror " name="name" id="name"  placeholder="Customer Name" value="{{$customer->name}}">
+            <label for="nama">Customer Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control @error('name') is-invalid @enderror " name="name" id="name"  placeholder="Customer Name" value="{{$customer->name}}" required>
             @error('name')
             <div class="error invalid-feedback">{{ $message }}</div>
             @enderror
@@ -144,9 +144,9 @@
 
 
       <div class="form-group col-md-4">
-        <label for="nama">Contact Name</label>
+        <label for="nama">Contact Name <span class="text-danger">*</span></label>
         <div class="input-group mb-3">
-          <input type="text" class="form-control @error('contact_name') is-invalid @enderror " name="contact_name" id="contact_name"  placeholder="Customer contact_name" value="{{$customer->contact_name}}">
+          <input type="text" class="form-control @error('contact_name') is-invalid @enderror " name="contact_name" id="contact_name"  placeholder="Customer contact_name" value="{{$customer->contact_name}}" required>
           @error('contact_name')
           <div class="error invalid-feedback">{{ $message }}</div>
           @enderror
@@ -163,13 +163,14 @@
       @enderror
     </div>
     <div class="form-group col-md-2">
-      <label for="nama">Phone No</label>
+      <label for="nama">Phone No <span class="text-danger">*</span></label>
       <input type="text" class="form-control @error('phone') is-invalid @enderror" name="phone" id="phone"
         placeholder="Contoh: 08123456789"
         value="{{$customer->phone}}"
         oninput="this.value=this.value.replace(/[^0-9]/g,'')"
         pattern="[0-9]{6,15}"
-        title="Nomor telepon: angka saja, tanpa tanda + atau spasi">
+        title="Nomor telepon: angka saja, tanpa tanda + atau spasi"
+        required>
       @error('phone')
       <div class="error invalid-feedback">{{ $message }}</div>
       @enderror
@@ -218,8 +219,8 @@
 </div>
 
 <div class="form-group col-md-6">
-  <label for="ip"> Customer Address</label>
-  <input type="text" class="form-control" name="address" id="address"  placeholder="Enter Address" value="{{$customer->address}}">
+  <label for="ip"> Customer Address <span class="text-danger">*</span></label>
+  <input type="text" class="form-control" name="address" id="address"  placeholder="Enter Address" value="{{$customer->address}}" required>
 
 </div>
 
@@ -389,9 +390,9 @@
 
 </div>
 <div class="form-group col-md-1">
-  <label for="site location">  Isolir Date </label>
+  <label for="site location">  Isolir Date <span class="text-danger">*</span></label>
   <div class="input-group mb-3">
-    <select name="isolir_date" id="isolir_date" class="form-control select2">
+    <select name="isolir_date" id="isolir_date" class="form-control select2" required>
       <?php
       $numbers = [];
       for ($i = 0; $i < 30; $i++) {
@@ -488,12 +489,61 @@
     <div class="error invalid-feedback">{{ $message }}</div>
     @enderror 
     <div class="input-group-append">
+      <button type="button" class="btn btn-info" data-toggle="modal" data-target="#modal-search-onu" title="Search ONU by Name/SN">
+        <i class="fas fa-search"></i>
+      </button>
       <a href="/olt/addonu/{{$customer->id}}/{{$customer->id_olt}}" class="btn btn-primary">Onu </a>
     </div>
   </div>
   <small class="text-muted" id="onu_format_hint">Format: x/x/x:xx</small>
   <div class="invalid-feedback" id="onu_format_error" style="display:none;"></div>
 
+</div>
+
+<!-- Modal: Search ONU by Name/SN -->
+<div class="modal fade" id="modal-search-onu" tabindex="-1" role="dialog" aria-labelledby="modal-search-onuLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-search-onuLabel">Search ONU by Name / SN</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-wrap align-items-center mb-3">
+          <input type="text" id="onuSearchModalInput" class="form-control mr-2 mb-1"
+            placeholder="Search by Name / SN (min 2 char)…" style="max-width:360px;">
+          <button id="btnSearchOnuModal" class="btn btn-info mr-2 mb-1" type="button">
+            <i class="fas fa-search"></i> Search
+          </button>
+        </div>
+        <div id="onuSearchModalMeta" class="small text-muted mb-2"></div>
+        <div class="table-responsive">
+          <table id="onu-search-modal-table" class="table table-bordered table-striped table-sm mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>PON</th>
+                <th>ONU ID</th>
+                <th>SN</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Customer</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="8" class="text-center text-muted">Ketik nama customer atau Serial Number ONU lalu klik Search.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 
@@ -745,6 +795,7 @@
       if (v.indexOf('hsgq') !== -1) return 'hsgq';
       if (v.indexOf('cdata') !== -1 || v.indexOf('fdd') !== -1) return 'cdata';
       if (v.indexOf('vsol') !== -1) return 'vsol';
+      if (v.indexOf('hioso') !== -1) return 'hioso';
       return 'zte';
     }
 
@@ -762,6 +813,9 @@
       } else if (type === 'vsol') {
         input.attr('placeholder', 'PON:ONU contoh 1:5');
         hint.text('Format VSOL: PON:ONU (contoh: 1:5)');
+      } else if (type === 'hioso') {
+        input.attr('placeholder', 'PON:ONU contoh 1:5');
+        hint.text('Format HIOSO: PON:ONU (contoh: 1:5)');
       } else {
         input.attr('placeholder', 'x/x/x:xx contoh 0/2/1:3');
         hint.text('Format ZTE: frame/slot/port:onu (contoh: 0/2/1:3)');
@@ -772,7 +826,7 @@
     function formatOnuId(value, type) {
       // Remove semua karakter selain angka, titik dua, dan slash
       var clean = value.replace(/[^0-9:\/]/g, '');
-      if (type === 'hsgq' || type === 'cdata' || type === 'vsol') {
+      if (type === 'hsgq' || type === 'cdata' || type === 'vsol' || type === 'hioso') {
         // HSGQ & CDATA: hanya angka dan satu titik dua -> x:x
         clean = clean.replace(/\//g, ''); // hapus slash
         var parts = clean.split(':');
@@ -837,6 +891,10 @@
         // Format: PON:ONU (misal 1:5) — VSOL-G004 punya 4 PON port, ONU ID 1-127
         valid = /^\d{1,2}:\d{1,3}$/.test(value);
         msg = 'Format VSOL harus PON:ONU (contoh: 1:5, 4:17)';
+      } else if (type === 'hioso') {
+        // Format: PON:ONU (misal 1:5)
+        valid = /^\d{1,2}:\d{1,3}$/.test(value);
+        msg = 'Format HIOSO harus PON:ONU (contoh: 1:5, 4:12)';
       } else {
         // Format: x/x/x:xx (misal 0/2/1:3)
         valid = /^\d{1,2}\/\d{1,2}\/\d{1,2}:\d{1,3}$/.test(value);
@@ -881,6 +939,114 @@
 
     // Init on page load
     updateOnuPlaceholder();
+
+    // === Search ONU by Name/SN (same backend as OLT show page's Search ONU tab) ===
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function runOnuSearchModal() {
+      var q = ($('#onuSearchModalInput').val() || '').trim();
+      var oltId = $('#id_olt').val();
+      var $btn  = $('#btnSearchOnuModal');
+      var $meta = $('#onuSearchModalMeta');
+      var $body = $('#onu-search-modal-table tbody');
+
+      if (!oltId) {
+        Swal.fire({ icon: 'warning', title: 'Pilih OLT terlebih dahulu', timer: 1800, showConfirmButton: false });
+        return;
+      }
+      if (q.length < 2) {
+        Swal.fire({ icon: 'warning', title: 'Keyword minimal 2 karakter', timer: 1800, showConfirmButton: false });
+        return;
+      }
+
+      $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Searching…');
+      $meta.text('Walking SNMP…');
+      $body.html('<tr><td colspan="8" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>');
+
+      $.ajax({
+        url: '/olt/onu-search',
+        type: 'POST',
+        headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+        data: { olt_id: oltId, q: q },
+        dataType: 'json'
+      })
+      .done(function(res) {
+        if (!res.success) {
+          $meta.text('');
+          $body.html('<tr><td colspan="8" class="text-center text-danger">' + escapeHtml(res.message || 'Search gagal') + '</td></tr>');
+          return;
+        }
+        var rows = res.data || [];
+        $meta.text(res.message || (rows.length + ' result'));
+        if (rows.length === 0) {
+          $body.html('<tr><td colspan="8" class="text-center text-muted">Tidak ada ONU yang cocok.</td></tr>');
+          return;
+        }
+        var html = '';
+        rows.forEach(function(r, i) {
+          var custCell = r.customer ? escapeHtml(r.customer) : '<span class="text-muted">—</span>';
+          var statusLower = (r.status || '').toLowerCase();
+          var isWorking = statusLower.indexOf('working') !== -1 || statusLower.indexOf('online') !== -1;
+          var statusBadge = isWorking
+            ? '<span class="badge badge-success">' + escapeHtml(r.status) + '</span>'
+            : '<span class="badge badge-secondary">' + escapeHtml(r.status) + '</span>';
+
+          html += '<tr>'
+                +   '<td>' + (i + 1) + '</td>'
+                +   '<td><code>' + escapeHtml(r.pon) + '</code></td>'
+                +   '<td>' + escapeHtml(r.onu_id) + '</td>'
+                +   '<td><code>' + escapeHtml(r.sn) + '</code></td>'
+                +   '<td>' + escapeHtml(r.name) + '</td>'
+                +   '<td>' + statusBadge + '</td>'
+                +   '<td>' + custCell + '</td>'
+                +   '<td>'
+                +     '<button type="button" class="btn btn-xs btn-success onu-add-id" '
+                +       'data-pon="' + escapeHtml(r.pon) + '" data-onuid="' + escapeHtml(r.onu_id) + '" title="Gunakan ONU ID ini">'
+                +       '<i class="fas fa-plus"></i> Add ID'
+                +     '</button>'
+                +   '</td>'
+                + '</tr>';
+        });
+        $body.html(html);
+      })
+      .fail(function(xhr) {
+        var msg = 'HTTP ' + xhr.status;
+        try { msg = (JSON.parse(xhr.responseText).message) || msg; } catch (e) {}
+        $meta.text('');
+        $body.html('<tr><td colspan="8" class="text-center text-danger">' + escapeHtml(msg) + '</td></tr>');
+      })
+      .always(function() {
+        $btn.prop('disabled', false).html('<i class="fas fa-search"></i> Search');
+      });
+    }
+
+    $(document).on('click', '#btnSearchOnuModal', runOnuSearchModal);
+    $(document).on('keypress', '#onuSearchModalInput', function(e) {
+      if (e.which === 13) { e.preventDefault(); runOnuSearchModal(); }
+    });
+
+    // Klik "Add ID" pada hasil pencarian -> paste "pon:onu_id" ke field ONU ID
+    $(document).on('click', '.onu-add-id', function() {
+      var pon = $(this).data('pon');
+      var onuId = $(this).data('onuid');
+      $('#id_onu').val(pon + ':' + onuId).trigger('input');
+      validateOnuId();
+      $('#modal-search-onu').modal('hide');
+    });
+
+    // Reset modal state saat dibuka
+    $('#modal-search-onu').on('shown.bs.modal', function () {
+      $('#onuSearchModalInput').val('').trigger('focus');
+      $('#onuSearchModalMeta').text('');
+      $('#onu-search-modal-table tbody').html('<tr><td colspan="8" class="text-center text-muted">Ketik nama customer atau Serial Number ONU lalu klik Search.</td></tr>');
+    });
   });
 </script>
 
