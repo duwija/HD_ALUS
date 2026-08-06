@@ -548,7 +548,7 @@ class OltController extends Controller
                         'onuName' => (string) ($row['name'] ?? ''),
                         'Id'      => ((string) ($row['pon'] ?? '')) . ':' . ((string) ($row['onu_id'] ?? '')),
                         'sn'      => (string) ($row['sn'] ?? ''),
-                        'model'   => '',
+                        'model'   => (string) ($row['model'] ?? ''),
                     ];
 
                     switch ((string) ($row['status'] ?? 'Unknown')) {
@@ -1321,6 +1321,47 @@ public function onudelete($oltId, $oltPonIndex, $onuId)
         }
     }
 
+    if ($isCDATA && is_cdata_epon($oltType, $oltName)) {
+        // CDATA EPON: Telnet CLI method, confirmed live by the user against a real
+        // FD1304E unit (see pyhton/reboot_cdata_epon_ont.py's module doc for the
+        // full transcript). oltPonIndex is "<card>-<port>" (hyphen — see the
+        // 'pon' label comment in collectCdataEpon17409OnuMetrics()); card selects
+        // the "interface epon 0/<card>" context, port is the first arg to
+        // "ont delete <port> <onu>".
+        try {
+            [$card, $ponWithinCard] = array_pad(explode('-', (string) $oltPonIndex, 2), 2, '1');
+
+            $processDelete = new Process(["python3", env("PHYTON_DIR") . "delete_cdata_epon_ont.py",
+                $ip, $login, $password, (string) ($port ?? 23), (string) $timeout,
+                (string) $card, (string) $ponWithinCard, (string) $onuId]);
+            $processDelete->setTimeout(60);
+            $processDelete->run();
+
+            \Log::info('[DELETE][CDATA-EPON] Python script finished', [
+                'exitCode' => $processDelete->getExitCode(),
+                'output' => $processDelete->getOutput(),
+                'errorOutput' => $processDelete->getErrorOutput(),
+            ]);
+
+            if (!$processDelete->isSuccessful()) {
+                throw new ProcessFailedException($processDelete);
+            }
+
+            $message = trim($processDelete->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect('/olt/' . $oltId)->with('warning', 'Delete command sent: ' . $lastLine);
+            }
+            return redirect('/olt/' . $oltId)->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Delete error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Delete error: ' . $e->getMessage());
+        }
+    }
+
     if ($isCDATA) {
         // CDATA GPON: Telnet CLI method (SNMP has no write/action support for this OEM stack).
         // oltPonIndex is a plain PON number (1-8) for CDATA — no slash/underscore encoding needed.
@@ -1448,6 +1489,51 @@ public function onureboot($oltId, $oltPonIndex, $onuId)
             $processReboot->run();
 
             \Log::info('[REBOOT][HIOSO] Python script finished', [
+                'exitCode' => $processReboot->getExitCode(),
+                'output' => $processReboot->getOutput(),
+                'errorOutput' => $processReboot->getErrorOutput(),
+            ]);
+
+            if (!$processReboot->isSuccessful()) {
+                throw new ProcessFailedException($processReboot);
+            }
+
+            $message = trim($processReboot->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect()->back()->with('warning', 'Reboot command sent: ' . $lastLine);
+            }
+            return redirect()->back()->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect()->back()->with('error', 'Reboot error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Reboot error: ' . $e->getMessage());
+        }
+    }
+
+    if ($isCDATA && is_cdata_epon($oltType, $oltName)) {
+        // CDATA EPON: Telnet CLI method, confirmed live by the user against a real
+        // FD1304E unit (see pyhton/reboot_cdata_epon_ont.py's module doc for the
+        // full transcript). oltPonIndex is "<card>-<port>" (hyphen — see the
+        // 'pon' label comment in collectCdataEpon17409OnuMetrics()).
+        try {
+            $ip = $olt->ip;
+            $login = $olt->user;
+            $password = $olt->password;
+            $port = (string) ($olt->port ?? 23);
+            $timeout = '10';
+
+            [$card, $ponWithinCard] = array_pad(explode('-', (string) $oltPonIndex, 2), 2, '1');
+
+            $processReboot = new Process(["python3", env("PHYTON_DIR") . "reboot_cdata_epon_ont.py",
+                $ip, $login, $password, $port, $timeout,
+                (string) $card, (string) $ponWithinCard, (string) $onuId]);
+            $processReboot->setTimeout(60);
+            $processReboot->run();
+
+            \Log::info('[REBOOT][CDATA-EPON] Python script finished', [
                 'exitCode' => $processReboot->getExitCode(),
                 'output' => $processReboot->getOutput(),
                 'errorOutput' => $processReboot->getErrorOutput(),
@@ -2015,6 +2101,51 @@ public function onureset($oltId, $oltPonIndex, $onuId)
             $processReset->run();
 
             \Log::info('[RESET][HIOSO] Python script finished', [
+                'exitCode' => $processReset->getExitCode(),
+                'output' => $processReset->getOutput(),
+                'errorOutput' => $processReset->getErrorOutput(),
+            ]);
+
+            if (!$processReset->isSuccessful()) {
+                throw new ProcessFailedException($processReset);
+            }
+
+            $message = trim($processReset->getOutput());
+            $lines = array_filter(array_map('trim', explode("\n", $message)));
+            $lastLine = end($lines);
+            $parts = explode(":", $lastLine, 2);
+            if (count($parts) < 2) {
+                return redirect('/olt/' . $oltId)->with('warning', 'Factory reset command sent: ' . $lastLine);
+            }
+            return redirect('/olt/' . $oltId)->with(trim($parts[0]), trim($parts[1]));
+        } catch (ProcessFailedException $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Reset error: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return redirect('/olt/' . $oltId)->with('error', 'Reset error: ' . $e->getMessage());
+        }
+    }
+
+    if ($isCDATA && is_cdata_epon($oltType, $oltName)) {
+        // CDATA EPON: Telnet CLI method, confirmed live by the user against a real
+        // FD1304E unit (see pyhton/reboot_cdata_epon_ont.py's module doc for the
+        // full transcript). oltPonIndex is "<card>-<port>" (hyphen — see the
+        // 'pon' label comment in collectCdataEpon17409OnuMetrics()).
+        try {
+            $ip = $olt->ip;
+            $login = $olt->user;
+            $password = $olt->password;
+            $port = $olt->port ?? 23;
+            $timeout = 10;
+
+            [$card, $ponWithinCard] = array_pad(explode('-', (string) $oltPonIndex, 2), 2, '1');
+
+            $processReset = new Process(["python3", env("PHYTON_DIR") . "reset_cdata_epon_ont.py",
+                $ip, $login, $password, $port, $timeout,
+                (string) $card, (string) $ponWithinCard, (string) $onuId]);
+            $processReset->setTimeout(45);
+            $processReset->run();
+
+            \Log::info('[RESET][CDATA-EPON] Python script finished', [
                 'exitCode' => $processReset->getExitCode(),
                 'output' => $processReset->getOutput(),
                 'errorOutput' => $processReset->getErrorOutput(),
@@ -3004,6 +3135,13 @@ public function getOltPon($id)
             return $this->collectCdataGponOnuMetrics($snmp, $oidConfig, $ontStatuses, $customers);
         }
 
+        $epon17409Rows = $this->collectCdataEpon17409OnuMetrics($snmp, $customers);
+        if (!empty($epon17409Rows)) {
+            return $epon17409Rows;
+        }
+
+        // Fall back to the legacy enterprise-34592 FD-OLT-MIB llid table below (older
+        // or different EPON firmware that doesn't implement the 17409 OEM tree).
         $nameOid = $oidConfig['oidOnuName'] ?? null;
         $statusOid = $oidConfig['oidOnuStatus'] ?? null;
         $snOid = $oidConfig['oidOnuSn'] ?? null;
@@ -3085,6 +3223,165 @@ public function getOltPon($id)
                 'status' => (string) $statusText,
                 'rx_dbm' => null,
                 'tx_dbm' => null,
+                'distance_m' => null,
+                'customer' => $customer ? ($customer->name ?? '') : '',
+                'customer_id' => $customer ? ($customer->id ?? null) : null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * CDATA EPON ONU collector for the enterprise-17409 OEM tree (reverse-engineered
+     * live — see config/cdata_epon_17409_oid.php for the full writeup). Distinct from
+     * CDATA GPON's 17409 tree (collectCdataGpon17409OnuMetrics() below): different
+     * branch (.2.3.4 vs .2.8.4), different index formula (adds a per-PON-card term
+     * via decode_cdata_epon17409_index()), and no confirmed history/lastChange/
+     * downCause columns on this tree. Status (column 8, 1=online/2=offline) is NOT
+     * CLI-cross-checked, unlike the GPON tree's column 101 — see the config file
+     * header for why it's still the best available signal. Caller falls back to the
+     * legacy enterprise-34592 FD-OLT-MIB llid table if this returns empty (older or
+     * different EPON firmware that doesn't implement this OEM tree).
+     */
+    private function collectCdataEpon17409OnuMetrics($snmp, $customers): array
+    {
+        $cfg = config('cdata_epon_17409_oid') ?: [];
+        $nameOid = $cfg['oidOnuName'] ?? null;
+        $macOid = $cfg['oidOnuMac'] ?? null;
+        $runStateOid = $cfg['oidOnuRunState'] ?? null;
+        $versionOid = $cfg['oidOnuVersion'] ?? null;
+        $uptimeSecOid = $cfg['oidOnuUptimeSeconds'] ?? null;
+        $vendorOid = $cfg['oidOnuVendor'] ?? null;
+        $rxOid = $cfg['oidOnuRxPower'] ?? null;
+        $txOid = $cfg['oidOnuTxPowerOnu'] ?? null;
+        $rxDivisor = $cfg['rx_power_divisor'] ?? 100;
+        $opticalSuffix = $cfg['optical_index_suffix'] ?? '.1.1';
+        $opticalSuffixParts = count(array_filter(explode('.', $opticalSuffix), fn($p) => $p !== ''));
+
+        if (empty($nameOid)) {
+            return [];
+        }
+
+        $nameWalk = @$snmp->walk($nameOid) ?: [];
+        if (empty($nameWalk)) {
+            return [];
+        }
+
+        $macByIndex = $macOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($macOid) ?: [], 1) : [];
+        $runStateByIndex = $runStateOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($runStateOid) ?: [], 1) : [];
+        $versionByIndex = $versionOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($versionOid) ?: [], 1) : [];
+        $uptimeSecByIndex = $uptimeSecOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($uptimeSecOid) ?: [], 1) : [];
+        $vendorByIndex = $vendorOid ? $this->reindexSnmpWalkByTail(@$snmp->walk($vendorOid) ?: [], 1) : [];
+
+        // RX/TX are indexed as "<onuIndex>.1.<portInCard>" — the trailing component is
+        // NOT a fixed ".1.1" (it varies per ONU's own port, confirmed live), so re-key
+        // by the last (opticalSuffixParts + 1) components and take only the first
+        // (the ONU index) via strtok() — never assume/reconstruct the trailing part
+        // (same defensive technique as collectCdataGpon17409OnuMetrics()'s ".0.0"
+        // optical suffix, which happens to be constant on that tree, unlike this one).
+        $rxByIndex = [];
+        if ($rxOid) {
+            foreach ($this->reindexSnmpWalkByTail(@$snmp->walk($rxOid) ?: [], $opticalSuffixParts + 1) as $tailKey => $val) {
+                $rxByIndex[(string) strtok($tailKey, '.')] = $val;
+            }
+        }
+        $txByIndex = [];
+        if ($txOid) {
+            foreach ($this->reindexSnmpWalkByTail(@$snmp->walk($txOid) ?: [], $opticalSuffixParts + 1) as $tailKey => $val) {
+                $txByIndex[(string) strtok($tailKey, '.')] = $val;
+            }
+        }
+
+        $rows = [];
+
+        foreach ($nameWalk as $oidKey => $rawName) {
+            $parts = explode('.', (string) $oidKey);
+            $index = (int) end($parts);
+            if ($index <= 0) {
+                continue;
+            }
+
+            $decoded = decode_cdata_epon17409_index($index);
+            if ($decoded['card'] <= 0 || $decoded['port'] <= 0) {
+                continue;
+            }
+            // Hyphen, NOT slash: this label gets embedded raw into
+            // /olt/delete|reboot|reset/{oltId}/{oltPonIndex}/{onuId} route segments
+            // elsewhere (see onudelete/onureboot/onureset) — a literal "/" would
+            // split into an extra path segment and misalign {onuId}.
+            $ponLabel = $decoded['card'] . '-' . $decoded['port'];
+            $onuId = (string) $decoded['onu'];
+
+            $nameVal = trim($this->stripSnmpPrefix((string) $rawName), " \t\"'");
+
+            $macRaw = $macByIndex[(string) $index] ?? null;
+            $macVal = '';
+            if ($macRaw !== null) {
+                $macHex = trim($this->stripSnmpPrefix((string) $macRaw));
+                if ($macHex !== '') {
+                    $macVal = strtoupper(trim(preg_replace('/\s+/', ':', $macHex), ':'));
+                }
+            }
+
+            if ($nameVal === '') {
+                $nameVal = $macVal !== '' ? $macVal : ('ONU-' . $ponLabel . '-' . $onuId);
+            }
+
+            $runStateRaw = $runStateByIndex[(string) $index] ?? null;
+            $statusText = 'online';
+            if ($runStateRaw !== null && preg_match('/(\d+)/', (string) $runStateRaw, $m) && (int) $m[1] === 2) {
+                $statusText = 'offline';
+            }
+
+            $rxRaw = $rxByIndex[(string) $index] ?? null;
+            $rxDbm = null;
+            if ($rxRaw !== null && preg_match('/-?\d+/', (string) $rxRaw, $m)) {
+                $rxDbm = ((int) $m[0]) / $rxDivisor;
+            }
+
+            $txRaw = $txByIndex[(string) $index] ?? null;
+            $txDbm = null;
+            if ($txRaw !== null && preg_match('/-?\d+/', (string) $txRaw, $m)) {
+                $txDbm = ((int) $m[0]) / $rxDivisor;
+            }
+
+            $versionRaw = $versionByIndex[(string) $index] ?? null;
+            $versionVal = $versionRaw !== null ? trim($this->stripSnmpPrefix((string) $versionRaw), " \t\"'") : '';
+
+            // Column 25 (vendor short-code, e.g. "CDTC"/"HWTC") doubles as the 'model'
+            // shown in the UI's Model column — no true model-number string exists on
+            // this tree (see config/cdata_epon_17409_oid.php header).
+            $vendorRaw = $vendorByIndex[(string) $index] ?? null;
+            $vendorVal = $vendorRaw !== null ? trim($this->stripSnmpPrefix((string) $vendorRaw), " \t\"'") : '';
+
+            // Column 15 is "seconds since last MPCP re-registration", not a
+            // timestamp — synthesize last_online_at from it (only meaningful while
+            // currently online) so OltController::getOltOnu()'s existing
+            // Carbon::diffForHumans() uptime display works unmodified.
+            $lastOnlineAt = null;
+            if ($statusText === 'online') {
+                $uptimeSecRaw = $uptimeSecByIndex[(string) $index] ?? null;
+                if ($uptimeSecRaw !== null && preg_match('/\d+/', (string) $uptimeSecRaw, $m) && (int) $m[0] > 0) {
+                    $lastOnlineAt = \Carbon\Carbon::now()->subSeconds((int) $m[0])->toDateTimeString();
+                }
+            }
+
+            $customer = $customers ? $customers->firstWhere('id_onu', $ponLabel . ':' . $onuId) : null;
+
+            $rows[] = [
+                'pon' => $ponLabel,
+                'onu_id' => $onuId,
+                'sn' => $macVal,
+                'name' => $nameVal,
+                'model' => $vendorVal,
+                'vendor' => $vendorVal,
+                'firmware_version' => $versionVal,
+                'status' => $statusText,
+                'last_online_at' => $lastOnlineAt,
+                'last_offline_at' => null, // no down-timestamp field on this tree, see config file header
+                'rx_dbm' => $rxDbm,
+                'tx_dbm' => $txDbm,
                 'distance_m' => null,
                 'customer' => $customer ? ($customer->name ?? '') : '',
                 'customer_id' => $customer ? ($customer->id ?? null) : null,
@@ -3203,7 +3500,8 @@ public function getOltPon($id)
 
             $runStateRaw = $runStateByIndex[(string) $index] ?? null;
             $statusText = 'online';
-            if ($runStateRaw !== null && preg_match('/(\d+)/', (string) $runStateRaw, $m) && (int) $m[1] === 0) {
+            $isCurrentlyOffline = ($runStateRaw !== null && preg_match('/(\d+)/', (string) $runStateRaw, $m) && (int) $m[1] === 0);
+            if ($isCurrentlyOffline) {
                 $statusText = 'offline';
             }
 
@@ -3221,6 +3519,15 @@ public function getOltPon($id)
                 ? trim($this->stripSnmpPrefix((string) $lastDownCauseRaw), " \t\"'")
                 : null;
 
+            // Column 103 is stale history for ONUs that have since reconnected (see the
+            // header warning in config/cdata_gpon_17409_oid.php), but for an ONU that's
+            // CURRENTLY offline per column 101 it's exactly the live down-reason — refine
+            // the generic 'offline' bucket into 'los'/'dyinggasp' so the OLT overview cards
+            // (and their SN lists) match what "show ont info all" reports.
+            if ($isCurrentlyOffline) {
+                $statusText = $this->normalizeCdata17409DownCause($lastOfflineReason);
+            }
+
             // Column 102 is a single "last run-state transition" timestamp — it means
             // "became online at" while the ONU is online, or "went offline at" while it's
             // offline. It gets overwritten on every transition, so it can't tell us the
@@ -3230,8 +3537,8 @@ public function getOltPon($id)
             $lastChangeVal = $lastChangeRaw !== null
                 ? trim($this->stripSnmpPrefix((string) $lastChangeRaw), " \t\"'")
                 : null;
-            $lastOnlineAt = ($statusText === 'online') ? $lastChangeVal : null;
-            $lastOfflineAt = ($statusText === 'offline') ? $lastChangeVal : null;
+            $lastOnlineAt = $isCurrentlyOffline ? null : $lastChangeVal;
+            $lastOfflineAt = $isCurrentlyOffline ? $lastChangeVal : null;
 
             $distanceRaw = $distanceByIndex[(string) $index] ?? null;
             $distanceM = null;
@@ -3277,12 +3584,24 @@ public function getOltPon($id)
     }
 
     /**
-     * Normalize the literal status string returned by the CDATA enterprise-17409 GPON
-     * ONU table onto this app's existing status vocabulary (see the switch-case in
-     * getOltInfo()). Observed real values: "--" (no active alarm), "dying-gasp",
-     * "LOS". Anything else is passed through lowercased/de-hyphenated so it still
-     * displays as readable text even if not one of the counted buckets.
+     * Normalize the literal "last down-cause" string (column 103) returned by the CDATA
+     * enterprise-17409 GPON ONU table onto this app's existing status vocabulary (see the
+     * switch-case in getOltInfo()). Only call this once column 101 has already confirmed
+     * the ONU is currently offline — see the caller in collectCdataGpon17409OnuMetrics().
+     * Observed real values: "--" (no cause recorded yet), "dying-gasp", "LOS". Anything
+     * else falls back to the generic 'offline' bucket rather than being invented.
      */
+    private function normalizeCdata17409DownCause(?string $lastOfflineReason): string
+    {
+        $normalized = strtolower(str_replace(['-', ' ', '_'], '', (string) $lastOfflineReason));
+
+        return match ($normalized) {
+            'dyinggasp' => 'dyinggasp',
+            'los' => 'los',
+            default => 'offline',
+        };
+    }
+
     /**
      * PHP's SNMP class returns walk() keys in symbolic form (e.g.
      * "SNMPv2-SMI::enterprises.17409.2.8.4.1.1.103.4718593"), NOT the numeric OID string
@@ -4512,9 +4831,14 @@ public function getOltPon($id)
                                         $statusRaw = (string) ($row['status'] ?? 'Unknown');
                                         $isOnline = in_array($statusRaw, ['online', 'working'], true);
 
-                                        if ($isOnline && $row['rx_dbm'] !== null && $row['tx_dbm'] !== null) {
+                                        if ($isOnline && ($row['rx_dbm'] !== null || $row['tx_dbm'] !== null)) {
                                             // Match the ZTE ONU list style: green pill showing live Rx/Tx.
-                                            $onu_ststus = '<span class="badge badge-success">Rx: ' . e($row['rx_dbm']) . ' | Tx: ' . e($row['tx_dbm']) . '</span>';
+                                            // Some CDATA trees only expose one of the two (the legacy
+                                            // enterprise-34592 FD-OLT-MIB EPON fallback path has neither) —
+                                            // show 'N/A' for the missing side rather than fabricate a reading.
+                                            $rxLabel = $row['rx_dbm'] !== null ? e($row['rx_dbm']) : 'N/A';
+                                            $txLabel = $row['tx_dbm'] !== null ? e($row['tx_dbm']) : 'N/A';
+                                            $onu_ststus = '<span class="badge badge-success">Rx: ' . $rxLabel . ' | Tx: ' . $txLabel . '</span>';
                                         } elseif ($isOnline) {
                                             $onu_ststus = '<span class="badge badge-success">ONLINE</span>';
                                         } else {

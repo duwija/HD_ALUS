@@ -848,6 +848,16 @@ a button {
                                 {{ number_format($tax, 0, ',', '.') }}
 
                             </strong> </td> --}}</tr>
+                            @if ($suminvoice_number->payment_status == 1 && $suminvoice_number->merchant_fee > 0)
+                            <tr>
+                                <td colspan="4" style="border: 1px solid #333">Biaya Admin </td>
+                                <td style="border: 1px solid #333" align="right"><strong id="total">Rp. {{ number_format($suminvoice_number->merchant_fee, 0, ',', '.') }} </strong></td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" style="border: 1px solid #333">Total Dibayar</td>
+                                <td style="border: 1px solid #333" align="right"><strong id="total">Rp. {{ number_format($subtotal + $suminvoice_number->merchant_fee, 0, ',', '.') }} </strong></td>
+                            </tr>
+                            @endif
                             <tr>
                                 <td>
                                 </td>

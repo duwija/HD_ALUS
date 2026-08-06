@@ -221,10 +221,21 @@
       @endif
     </tbody>
     <tfoot>
+      @if ($isPaid && $suminvoice_number->merchant_fee > 0)
+      <tr>
+        <td class="desc" colspan="2">Biaya Admin</td>
+        <td class="amt">{{ number_format($suminvoice_number->merchant_fee, 0, ',', '.') }}</td>
+      </tr>
+      <tr class="total-row">
+        <td colspan="2" class="right bold">TOTAL DIBAYAR</td>
+        <td class="amt bold">Rp {{ number_format($subtotal + $suminvoice_number->merchant_fee, 0, ',', '.') }}</td>
+      </tr>
+      @else
       <tr class="total-row">
         <td colspan="2" class="right bold">TOTAL</td>
         <td class="amt bold">Rp {{ number_format($subtotal, 0, ',', '.') }}</td>
       </tr>
+      @endif
     </tfoot>
   </table>
 

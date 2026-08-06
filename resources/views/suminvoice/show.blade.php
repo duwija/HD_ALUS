@@ -304,7 +304,8 @@
 
                $tax = round($subtotal * ($taxfee / 100), 0);
                $pph = round($subtotal * ($pphfee / 100), 0);
-               $total = (float)$subtotal + (float)$tax - (float)$pph + (float)$admin_fee;
+               $merchant_fee = ($status == 1) ? (float)($suminvoice_number->merchant_fee ?? 0) : 0;
+               $total = (float)$subtotal + (float)$tax - (float)$pph + (float)$admin_fee + $merchant_fee;
                @endphp
 
                <tr> <td colspan="7"> <strong> Tax Ppn ({{$taxfee}}%)</strong>
@@ -324,6 +325,16 @@
                 <td colspan="7"><strong>Biaya Admin</strong></td>
                 <td>
                   <strong>{{ number_format(Auth::user()->admin_fee, 0, ',', '.') }}</strong>
+                </td>
+              </tr>
+              @endif
+
+              {{-- Hanya tampil jika PAID dan ada merchant fee --}}
+              @if ($merchant_fee > 0)
+              <tr>
+                <td colspan="7"><strong>Biaya Admin (Merchant Fee)</strong></td>
+                <td>
+                  <strong>{{ number_format($merchant_fee, 0, ',', '.') }}</strong>
                 </td>
               </tr>
               @endif

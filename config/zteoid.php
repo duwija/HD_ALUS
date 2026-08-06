@@ -407,6 +407,47 @@ if (!function_exists('decode_cdata17409_index')) {
     }
 }
 
+/**
+ * Encode card/port/ONU to the CDATA-EPON "enterprise 17409" OEM index format.
+ * Verified live against a real EPON unit (103.156.75.196:1612) — 181 real ONUs
+ * across 4 active EPON ports decoded with zero mismatches against the human-
+ * readable port/onu numbers embedded in the device's own ONU name strings. See
+ * config/cdata_epon_17409_oid.php for the full writeup.
+ *
+ * Formula: (card * 0x1000000) + 0x480000 + ((portInCard - 1) << 12) + onu
+ * Same base/step as CDATA-GPON's enterprise-17409 tree (encode_cdata17409_index()
+ * above), plus a per-card term for EPON's multi-PON-card layout.
+ *
+ * @param int $card PON card number (1-based, e.g. the "1" in "epon 0/1/1")
+ * @param int $portInCard EPON port number within the card (1-based)
+ * @param int $onu ONU id (1-based)
+ * @return int Encoded index
+ */
+if (!function_exists('encode_cdata_epon17409_index')) {
+    function encode_cdata_epon17409_index($card, $portInCard, $onu) {
+        return ($card * 0x1000000) + 0x480000 + (($portInCard - 1) << 12) + $onu;
+    }
+}
+
+/**
+ * Decode a CDATA-EPON "enterprise 17409" index back to card/port/onu.
+ *
+ * @param int $index Encoded index (e.g., 21495809 -> card 1, port 1, onu 1)
+ * @return array ['card' => 1, 'port' => 1, 'onu' => 1]
+ */
+if (!function_exists('decode_cdata_epon17409_index')) {
+    function decode_cdata_epon17409_index($index) {
+        $card = intdiv($index, 0x1000000);
+        $offset = ($index % 0x1000000) - 0x480000;
+        if ($card < 1 || $offset < 1) {
+            return ['card' => 0, 'port' => 0, 'onu' => 0];
+        }
+        $portInCard = intdiv($offset - 1, 4096) + 1;
+        $onu = (($offset - 1) % 4096) + 1;
+        return ['card' => $card, 'port' => $portInCard, 'onu' => $onu];
+    }
+}
+
 // Default ZTE C300/C320 OID Configuration
 return [
     'oidOltName' => '.1.3.6.1.2.1.1.5.0',
