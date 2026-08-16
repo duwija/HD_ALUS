@@ -23,6 +23,7 @@
      'pageLength','copy', 'excel', 'pdf', 'csv', 'print'
      ],
     "lengthMenu": [[50 ,100, 200, 500, 1000], [50 ,100, 200, 500, 1000]],
+    "order": [[16, "desc"]], // payment_date, terbaru dulu
     processing: true,
     serverSide: true,
     ajax: {

@@ -2483,6 +2483,8 @@ public function table_transaction_list(Request $request)
 
     ->addColumn('payment_date', fn($s)=> $s->payment_date)
 
+    ->orderColumn('payment_date', 'suminvoices.payment_date $1')
+
     ->rawColumns(['number','cid','period','status'])
 
     ->with('total', $total)
