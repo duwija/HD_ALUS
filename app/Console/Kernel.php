@@ -28,6 +28,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('isolir:auto')->dailyAt('01:00');
         $schedule->command('pppoe:collect-stats-all')->everyThreeMinutes();
         $schedule->command('pppoe:sync-sessions-all')->everyFiveMinutes();
+        $schedule->command('pings:prune-all')->dailyAt('02:00');
+        $schedule->command('alerts:prune-all')->dailyAt('02:10');
     }
 
     /**
