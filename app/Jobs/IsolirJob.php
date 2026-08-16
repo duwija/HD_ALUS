@@ -158,27 +158,18 @@ class IsolirJob implements ShouldQueue
         if (empty($this->tenantDomain)) return;
 
         try {
-            $tenantModel = \App\Tenant::on('isp_master')->where('domain', $this->tenantDomain)->first();
-            if (!$tenantModel) return;
+            $tenant = \App\Services\TenantDatabaseSwitcher::fetchTenantArray($this->tenantDomain);
+            if (!$tenant) return;
 
-            $tenant = $tenantModel->toTenantArray();
             app()->instance('tenant', $tenant);
 
             // Re-arahkan log channel ke folder tenant yang benar
             $this->switchTenantLogChannels($tenant['db_database'] ?? env('DB_DATABASE', 'default'));
 
-            $dbConfig = [
-                'host'     => $tenant['db_host']     ?? env('DB_HOST'),
-                'port'     => $tenant['db_port']     ?? env('DB_PORT'),
-                'database' => $tenant['db_database'] ?? env('DB_DATABASE'),
-                'username' => $tenant['db_username'] ?? env('DB_USERNAME'),
-                'password' => $tenant['db_password'] ?? env('DB_PASSWORD'),
-            ];
-            foreach ($dbConfig as $key => $value) {
-                Config::set('database.connections.mysql.' . $key, $value);
+            if (!\App\Services\TenantDatabaseSwitcher::switchTo($tenant)) {
+                Log::channel('isolir')->error("[TENANT] Gagal restore context untuk {$this->tenantDomain} (switch DB gagal setelah retry).");
+                return;
             }
-            \DB::purge('mysql');
-            \DB::reconnect('mysql');
 
             Log::channel('isolir')->info("[TENANT] Context restored: domain={$this->tenantDomain} db={$tenant['db_database']}");
         } catch (\Exception $e) {

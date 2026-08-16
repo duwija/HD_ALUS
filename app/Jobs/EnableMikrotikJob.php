@@ -69,7 +69,13 @@ class EnableMikrotikJob implements ShouldQueue
             $customer->id_status = 2;
             $customer->save();
 
-            
+            // Reboot ONT/ONU pelanggan jika terdaftar — fire-and-forget, tidak
+            // divalidasi berhasil atau tidak, tidak boleh menggagalkan job ini.
+            if (!empty($customer->id_onu)) {
+                \App\Jobs\RebootOnuJob::dispatch($customer->id)
+                    ->onQueue(app('tenant')['domain'] ?? 'default');
+            }
+
         } else {
             \Log::error("Enable Mikrotik failed permanently for Customer ID {$customer->id}");
 
@@ -96,24 +102,15 @@ class EnableMikrotikJob implements ShouldQueue
         if (empty($this->tenantDomain)) return;
 
         try {
-            $tenantModel = \App\Tenant::on('isp_master')->where('domain', $this->tenantDomain)->first();
-            if (!$tenantModel) return;
+            $tenant = \App\Services\TenantDatabaseSwitcher::fetchTenantArray($this->tenantDomain);
+            if (!$tenant) return;
 
-            $tenant = $tenantModel->toTenantArray();
-            app()->instance('tenant', $tenant);
-
-            $dbConfig = [
-                'host'     => $tenant['db_host']     ?? env('DB_HOST'),
-                'port'     => $tenant['db_port']     ?? env('DB_PORT'),
-                'database' => $tenant['db_database'] ?? env('DB_DATABASE'),
-                'username' => $tenant['db_username'] ?? env('DB_USERNAME'),
-                'password' => $tenant['db_password'] ?? env('DB_PASSWORD'),
-            ];
-            foreach ($dbConfig as $key => $value) {
-                Config::set('database.connections.mysql.' . $key, $value);
+            if (!\App\Services\TenantDatabaseSwitcher::switchTo($tenant)) {
+                \Log::error("[TENANT] EnableMikrotikJob gagal restore context untuk {$this->tenantDomain} (switch DB gagal setelah retry).");
+                return;
             }
-            \DB::purge('mysql');
-            \DB::reconnect('mysql');
+
+            app()->instance('tenant', $tenant);
 
             \Log::info("[TENANT] EnableMikrotikJob context restored: domain={$this->tenantDomain} db={$tenant['db_database']}");
         } catch (\Exception $e) {

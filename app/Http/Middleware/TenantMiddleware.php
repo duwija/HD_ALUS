@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\DB;
 
 class TenantMiddleware
 {
@@ -135,33 +134,17 @@ class TenantMiddleware
      */
     protected function setDatabaseConnection($tenant)
     {
-        // Cek user/password di table tenants pada database isp_master
-        $tenantDb = null;
-        try {
-            $tenantDb = \DB::connection('isp_master')->table('tenants')
-                ->where('domain', $tenant['domain'])
-                ->first();
-        } catch (\Exception $e) {
-            // Jika gagal query, biarkan tenantDb null (fallback ke default)
-           
+        // $tenant sudah berasal dari \App\Tenant::toTenantArray() (lihat
+        // getTenantByDomainMasterOnly di atas) — db_password di sana sudah benar
+        // ter-decrypt lewat accessor Eloquent, jadi tidak perlu query ulang ke
+        // isp_master di sini. TenantDatabaseSwitcher juga memverifikasi koneksi
+        // beneran nyambung (dengan retry) sebelum request lanjut — dulu titik ini
+        // pernah gagal "Access denied" sesaat pada race switch tenant tanpa verifikasi.
+        $ok = \App\Services\TenantDatabaseSwitcher::switchTo($tenant);
+
+        if (!$ok) {
+            throw new \RuntimeException('Gagal konek ke database tenant: ' . ($tenant['domain'] ?? '(unknown)'));
         }
-
-        $dbUser = $tenant['db_username'] ?? env('DB_USERNAME');
-        $dbPass = $tenant['db_password'] ?? env('DB_PASSWORD');
-        if ($tenantDb && !empty($tenantDb->db_username) && !empty($tenantDb->db_password)) {
-            $dbUser = $tenantDb->db_username;
-            $dbPass = $tenantDb->db_password;
-        }
-
-        Config::set('database.connections.mysql.host', $tenant['db_host'] ?? env('DB_HOST'));
-        Config::set('database.connections.mysql.port', $tenant['db_port'] ?? env('DB_PORT'));
-        Config::set('database.connections.mysql.database', $tenant['db_database']);
-        Config::set('database.connections.mysql.username', $dbUser);
-        Config::set('database.connections.mysql.password', $dbPass);
-
-        // Reconnect database
-        DB::purge('mysql');
-        DB::reconnect('mysql');
     }
     
     /**

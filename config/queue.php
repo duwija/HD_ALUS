@@ -83,7 +83,13 @@ return [
 
     'failed' => [
         'driver' => env('QUEUE_FAILED_DRIVER', 'database'),
-        'database' => env('DB_CONNECTION', 'mysql'),
+        // PENTING: 'mysql_queue', BUKAN 'mysql' — tabel failed_jobs cuma ada di
+        // database pusat (lubaxx), sedangkan koneksi 'mysql' di-switch per-tenant
+        // saat job jalan (lihat TenantDatabaseSwitcher). Kalau pakai 'mysql', job
+        // yang gagal di tengah context tenant tertentu akan GAGAL LAGI saat coba
+        // dicatat ke failed_jobs (connection tsb lagi nunjuk ke DB tenant, bukan
+        // lubaxx) — kegagalan asli jadi tidak pernah tercatat.
+        'database' => 'mysql_queue',
         'table' => 'failed_jobs',
     ],
 
