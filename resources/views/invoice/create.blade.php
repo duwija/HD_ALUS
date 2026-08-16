@@ -178,8 +178,8 @@
               $month_num = $strmonth[1];
 
 
-              // $month_name = date("F", mktime(0, 0, 0, $month_num, 10)); 
-              $month_name = $monthArray0 [$strmonth];
+              // $month_name = date("F", mktime(0, 0, 0, $month_num, 10));
+              $month_name = $monthArray0[$strmonth] ?? $invoice->periode;
               if ( $invoice->monthly_fee == 1 )
               {
                 $description = $invoice->description.' - '.$month_name.' '.$stryear;
