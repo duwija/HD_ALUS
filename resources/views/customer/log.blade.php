@@ -42,6 +42,7 @@
                             'convert_to_active'=> ['label' => 'Convert to Active','class' => 'badge-success'],
                             'mark_as_lost'     => ['label' => 'Mark as Lost',     'class' => 'badge-danger'],
                             'reopen_lead'      => ['label' => 'Reopen Lead',      'class' => 'badge-warning'],
+                            'pppoe_status'     => ['label' => 'PPPoE Status',     'class' => 'badge-info'],
                         ];
                         $topicInfo = $topicMap[$log->topic] ?? ['label' => ucfirst(str_replace('_',' ',$log->topic)), 'class' => 'badge-secondary'];
                         @endphp

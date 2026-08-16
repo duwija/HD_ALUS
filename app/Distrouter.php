@@ -299,7 +299,10 @@ class Distrouter extends Model
 
 			$secrets = $client->query($query)->read();
 
+			$wasDisabled = null;
 			foreach ($secrets as $secret) {
+
+				$wasDisabled = $secret['disabled'] ?? 'false';
 
 				// enable
 				$query = (new Query('/ppp/secret/set'))
@@ -308,6 +311,8 @@ class Distrouter extends Model
 
 				$client->query($query)->read();
 			}
+
+			static::logPppoeStatusChange($cid, $wasDisabled, 'false');
 
 		} catch (Exception $ex) {
 			throw new \RuntimeException('MikroTik enable failed for ' . $cid . ': ' . $ex->getMessage(), 0, $ex);
@@ -342,7 +347,10 @@ class Distrouter extends Model
 
 			$secrets = $client->query($query)->read();
 
+			$wasDisabled = null;
 			foreach ($secrets as $secret) {
+
+				$wasDisabled = $secret['disabled'] ?? 'false';
 
 				// disable
 				$query = (new Query('/ppp/secret/set'))
@@ -364,10 +372,45 @@ class Distrouter extends Model
 				}
 			}
 
+			static::logPppoeStatusChange($cid, $wasDisabled, 'true');
+
 		} catch (Exception $ex) {
 			throw new \RuntimeException('MikroTik disable failed for ' . $cid . ': ' . $ex->getMessage(), 0, $ex);
 		}
 
+	}
+
+	/**
+	 * Catat perubahan status PPPoE (enable/disable) ke Customerlog, dipanggil dari
+	 * mikrotik_enable()/mikrotik_disable() supaya semua caller otomatis tercatat
+	 * tanpa perlu ubah tiap titik panggil. $cid = nama PPP secret (= customers.pppoe).
+	 * $fromDisabledRaw/$toDisabledRaw = nilai property 'disabled' RouterOS ('true'/'false').
+	 */
+	private static function logPppoeStatusChange($cid, $fromDisabledRaw, $toDisabledRaw)
+	{
+		if ($fromDisabledRaw === null) return; // tidak ada secret yang diubah
+
+		$from = ($fromDisabledRaw === 'true') ? 'Disabled' : 'Enabled';
+		$to   = ($toDisabledRaw === 'true') ? 'Disabled' : 'Enabled';
+
+		if ($from === $to) return; // tidak ada perubahan status nyata
+
+		try {
+			$customer = \App\Customer::where('pppoe', $cid)->first();
+			if (!$customer) return;
+
+			\App\Customerlog::create([
+				'id_customer' => $customer->id,
+				'date'        => now(),
+				'updated_by'  => 'System (MikroTik)',
+				'topic'       => 'pppoe_status',
+				'updates'     => json_encode([
+					'PPPoE Status' => ['old' => $from, 'new' => $to],
+				]),
+			]);
+		} catch (\Exception $e) {
+			\Log::warning("Gagal mencatat Customerlog pppoe_status untuk {$cid}: " . $e->getMessage());
+		}
 	}
 
 
