@@ -119,11 +119,7 @@
                                     <select name="updatedBy" id="updatedBy" class="form-control form-control-sm select2">
                                         <option value="">ALL</option>
                                         @foreach($user as $transaction)
-                                            @if(is_numeric($transaction->updated_by))
-                                                <option value="{{$transaction->updated_by}}">{{ $transaction->updated_by }}</option>
-                                            @else
-                                                <option value="{{$transaction->updated_by}}">{{ $transaction->updated_by }}</option>
-                                            @endif
+                                            <option value="{{$transaction->updated_by}}">{{ $users[$transaction->updated_by] ?? $transaction->updated_by }}</option>
                                         @endforeach
                                     </select>
                                 </div>
@@ -535,6 +531,8 @@ $(document).ready(function() {
     
     console.log('Initializing DataTable...');
 
+    var tenantUsersList = [];
+
     // Initialize DataTable
     var table = $('#table-transaction-list').DataTable({
         "responsive": false,
@@ -579,6 +577,9 @@ $(document).ready(function() {
                     return [];
                 }
                 
+                // Cache users list for column rendering
+                tenantUsersList = json.users || [];
+
                 // Update grouped tables
                 updateGroupedTransactionsUser(json);
                 updateGroupedTransactionsMerchant(json);
@@ -614,7 +615,13 @@ $(document).ready(function() {
                 return data == 1 ? '<span class="badge badge-success">Paid</span>' : '<span class="badge badge-warning">Unpaid</span>';
             }},
             { data: 'kasbank_name', defaultContent: '-' },
-            { data: 'updated_by', defaultContent: '-' },
+            { data: 'updated_by', defaultContent: '-', render: function(data) {
+                if (tenantUsersList && tenantUsersList.length) {
+                    var user = tenantUsersList.find(u => u.id == data);
+                    if (user) return user.name;
+                }
+                return data || '-';
+            }},
             { data: 'payment_date', defaultContent: '-' }
         ]
     });

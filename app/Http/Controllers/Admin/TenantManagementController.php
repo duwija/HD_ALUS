@@ -1656,6 +1656,11 @@ class TenantManagementController extends Controller
             ->whereBetween('payment_date', [$startOfMonth, $today->copy()->addDay()])
             ->groupBy('updated_by')
             ->get();
+
+        // Get users for name lookup
+        $users = \DB::connection('tenant_temp')
+            ->table('users')
+            ->pluck('name', 'id');
         
         // Daily transactions report (only paid)
         $dailyTransactions = \DB::connection('tenant_temp')
@@ -1738,10 +1743,11 @@ class TenantManagementController extends Controller
             'totalReceivable' => $totalReceivable,
             'groupedTransactions' => $groupedTransactions,
             'merchant' => $merchant,
-            'kasbank' => $kasbank
+            'kasbank' => $kasbank,
+            'users' => $users
         ]);
     }
-    
+
     /**
      * Get transaction data for DataTables (AJAX)
      */
