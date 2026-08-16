@@ -3,6 +3,7 @@
 namespace App\Logging;
 
 use Monolog\Logger;
+use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Handler\StreamHandler;
 
 class TenantLogger
@@ -15,50 +16,86 @@ class TenantLogger
      */
     public function __invoke(array $config)
     {
-        $tenantId = $this->getTenantId();
-        
-        // Create tenant-specific log path
-        $logPath = storage_path("logs/tenant_{$tenantId}/laravel.log");
-        
-        // Ensure directory exists
-        $logDir = dirname($logPath);
-        if (!file_exists($logDir)) {
-            mkdir($logDir, 0755, true);
-        }
-        
         $logger = new Logger('tenant');
-        $logger->pushHandler(new StreamHandler($logPath, Logger::DEBUG));
-        
+        $logger->pushHandler(new TenantAwareStreamHandler());
+
         return $logger;
     }
-    
+}
+
+/**
+ * Resolves the tenant (and therefore the log file) on every write instead of
+ * once when the channel is constructed.
+ *
+ * Laravel's LogManager caches the resolved channel for the lifetime of the
+ * application container. In HTTP requests that's fine (fresh container per
+ * request), but the queue worker here runs `queue:work --max-jobs=500` across
+ * several tenants' queues in one long-lived process, reusing the same
+ * container across jobs. A handler built once at construction time would keep
+ * writing every subsequent job's logs (any tenant) to whichever tenant
+ * resolved first, since restoring tenant context mid-worker doesn't rebuild
+ * the channel.
+ */
+class TenantAwareStreamHandler extends AbstractProcessingHandler
+{
+    /** @var StreamHandler[] */
+    protected $handlers = [];
+
+    protected function write(array $record): void
+    {
+        $tenantId = $this->resolveTenantId();
+
+        if (!isset($this->handlers[$tenantId])) {
+            $logPath = storage_path("logs/tenant_{$tenantId}/laravel.log");
+            $logDir = dirname($logPath);
+            if (!file_exists($logDir)) {
+                mkdir($logDir, 0755, true);
+            }
+            $this->handlers[$tenantId] = new StreamHandler($logPath, Logger::DEBUG);
+        }
+
+        $this->handlers[$tenantId]->handle($record);
+    }
+
     /**
-     * Get current tenant ID from session or config
+     * Get current tenant ID from the bound tenant instance, session, or config
      *
      * @return string
      */
-    protected function getTenantId()
+    protected function resolveTenantId()
     {
+        // Prefer the 'tenant' app instance. It's set both by TenantMiddleware
+        // (HTTP requests) and by queue jobs that restore tenant context
+        // (e.g. EnableMikrotikJob, IsolirJob) via app()->instance('tenant', ...),
+        // so it's the only signal that's reliable from inside a queue worker.
+        if (app()->bound('tenant')) {
+            $tenant = app('tenant');
+            $domain = is_array($tenant) ? ($tenant['domain'] ?? null) : null;
+            if ($domain) {
+                return explode('.', $domain)[0];
+            }
+        }
+
         // Try to get tenant from session
         if (session()->has('tenant_id')) {
             return session('tenant_id');
         }
-        
+
         // Try to get from config (set by middleware)
         if (config('app.current_tenant_id')) {
             return config('app.current_tenant_id');
         }
-        
+
         // Try to get from environment variable
         if (env('TENANT_ID')) {
             return env('TENANT_ID');
         }
-        
+
         // Try to get from auth user
         if (auth()->check() && auth()->user()->tenant_id) {
             return auth()->user()->tenant_id;
         }
-        
+
         // Default tenant
         return 'default';
     }

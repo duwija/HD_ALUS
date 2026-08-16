@@ -60,18 +60,23 @@ public function searchforjurnal(Request $request) {
             return redirect()->back()->with('error', 'Sorry, You Are Not Allowed to Access Destination page !!');
         }
 
-        // Gunakan tenant aktif dari session multi-tenant, fallback ke DB_DATABASE
-        $tenantKey = app()->bound('tenant') ? (app('tenant')['db_database'] ?? env('DB_DATABASE', 'default')) : env('DB_DATABASE', 'default');
-        $tenantDir = storage_path("logs/tenant_{$tenantKey}");
+        // Dua skema penamaan folder log berbeda dipakai di codebase ini:
+        // - channel 'tenant' (laravel.log, via App\Logging\TenantLogger) -> berbasis domain
+        // - channel harian lain (invoice/isolir/notif/payment/dst, via config/logging.php
+        //   yang pakai env('DB_DATABASE')) -> berbasis db_database
+        [$logKey, $channelKey] = $this->resolveTenantLogKeys();
+        $tenantKey = $logKey;
+        $channelDir = storage_path("logs/tenant_{$channelKey}");
+        $logDir     = storage_path("logs/tenant_{$logKey}");
 
         // Tenant-specific channel logs
         $tenantFiles = [];
-        if (is_dir($tenantDir)) {
-            foreach (glob($tenantDir . '/*.log') as $path) {
+        if (is_dir($channelDir)) {
+            foreach (glob($channelDir . '/*.log') as $path) {
                 $name = basename($path);
                 if ($name === 'laravel.log') continue;
                 $tenantFiles[] = [
-                    'name'     => "tenant_{$tenantKey}/{$name}",
+                    'name'     => "tenant_{$channelKey}/{$name}",
                     'label'    => $name,
                     'size'     => filesize($path),
                     'modified' => filemtime($path),
@@ -81,10 +86,10 @@ public function searchforjurnal(Request $request) {
         usort($tenantFiles, fn($a, $b) => $b['modified'] - $a['modified']);
 
         // Tenant laravel.log
-        $tenantLogPath   = $tenantDir . '/laravel.log';
+        $tenantLogPath   = $logDir . '/laravel.log';
         $tenantLogExists = file_exists($tenantLogPath);
         $tenantLogInfo   = $tenantLogExists ? [
-            'name'     => "tenant_{$tenantKey}/laravel.log",
+            'name'     => "tenant_{$logKey}/laravel.log",
             'size'     => filesize($tenantLogPath),
             'modified' => filemtime($tenantLogPath),
         ] : null;
@@ -100,20 +105,62 @@ public function searchforjurnal(Request $request) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
-        $file      = $request->get('file', '');
-        $lines     = (int) $request->get('lines', 300);
-        $tenantKey = app()->bound('tenant') ? (app('tenant')['db_database'] ?? env('DB_DATABASE', 'default')) : env('DB_DATABASE', 'default');
-        $tenantDir = storage_path("logs/tenant_{$tenantKey}");
+        $file  = $request->get('file', '');
+        $lines = (int) $request->get('lines', 300);
 
-        // Hanya izinkan baca file yang berada di folder tenant aktif.
+        // $file datang sebagai "tenant_xxx/nama.log", persis nilai 'name' yang kita
+        // bentuk sendiri di log(). Batasi hanya ke 2 folder tenant aktif yang valid
+        // (log channel & channel harian lain) supaya tidak bisa baca folder tenant lain.
+        [$logKey, $channelKey] = $this->resolveTenantLogKeys();
+        $allowedDirs = [
+            "tenant_{$logKey}"     => storage_path("logs/tenant_{$logKey}"),
+            "tenant_{$channelKey}" => storage_path("logs/tenant_{$channelKey}"),
+        ];
+
+        $folder = dirname(str_replace('\\', '/', $file));
+        $name   = basename($file);
+
+        if (!isset($allowedDirs[$folder])) {
+            return response()->json(['error' => 'File tidak ditemukan'], 404);
+        }
+
+        $tenantDir = $allowedDirs[$folder];
         $basePath = realpath($tenantDir);
-        $path = realpath($tenantDir . '/' . basename($file));
+        $path = realpath($tenantDir . '/' . $name);
         if (!$basePath || !$path || !str_starts_with($path, $basePath)) {
             return response()->json(['error' => 'File tidak ditemukan'], 404);
         }
 
         $content = $this->tailLogFile($path, $lines);
         return response()->json(['content' => $content, 'size' => filesize($path), 'modified' => date('d M Y H:i', filemtime($path))]);
+    }
+
+    /**
+     * Codebase ini pakai 2 skema folder log tenant yang berbeda:
+     *  - [0] logKey: dipakai App\Logging\TenantLogger untuk laravel.log, berbasis domain
+     *    (mis. 'perumnet.alus.co.id' -> 'perumnet').
+     *  - [1] channelKey: dipakai channel 'daily' lain (invoice/isolir/notif/payment/dst di
+     *    config/logging.php) yang path-nya literally env('DB_DATABASE'), mis. 'db_perumnet'.
+     * Keduanya harus dihitung terpisah, tidak bisa disamakan.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function resolveTenantLogKeys(): array
+    {
+        $dbFallback = env('DB_DATABASE', 'default');
+        $logKey     = $dbFallback;
+        $channelKey = $dbFallback;
+
+        if (app()->bound('tenant')) {
+            $tenant = app('tenant');
+            $domain = $tenant['domain'] ?? null;
+            if ($domain) {
+                $logKey = explode('.', $domain)[0];
+            }
+            $channelKey = $tenant['db_database'] ?? $channelKey;
+        }
+
+        return [$logKey, $channelKey];
     }
 
     private function tailLogFile(string $path, int $lineCount = 300): string
