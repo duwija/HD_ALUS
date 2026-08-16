@@ -13,6 +13,13 @@ class Distrouter extends Model
 	use SoftDeletes;
     //
 	protected $fillable =['name','ip', 'port', 'web','user','password','created_at','updated_at','note','deleted_at'];
+
+	// Password MikroTik dienkripsi at-rest (APP_KEY). Transparan untuk semua $distrouter->password
+	// yang sudah ada di codebase — otomatis encrypt saat save, decrypt saat dibaca.
+	// Data lama sudah dimigrasi lewat: php artisan distrouter:encrypt-passwords
+	protected $casts = [
+		'password' => 'encrypted',
+	];
 	public function customer()
 	{
 		return $this->hasmany('\App\Customer', 'id_distrouter');

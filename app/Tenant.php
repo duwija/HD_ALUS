@@ -95,20 +95,27 @@ class Tenant extends Model
     }
 
     /**
-     * Password mutator - store as plain text
-     * Tidak di-encrypt karena column VARCHAR(191) terlalu pendek untuk encrypted string
+     * Encrypt db_password (kolom sudah diperbesar ke VARCHAR(255) via
+     * php artisan tenant:encrypt-db-passwords — cukup untuk Crypt::encryptString()).
+     * Pola sama persis dengan whatsapp_token/xendit_key di bawah.
      */
     public function setDbPasswordAttribute($value)
     {
-        $this->attributes['db_password'] = $value;
+        $this->attributes['db_password'] = $value ? Crypt::encryptString($value) : $value;
     }
 
     /**
-     * Password accessor - return as plain text
+     * Decrypt db_password. Fallback ke raw value kalau decrypt gagal (mis. data
+     * lama yang belum sempat termigrasi) — sama seperti whatsapp_token/xendit_key.
      */
     public function getDbPasswordAttribute($value)
     {
-        return $value;
+        if (!$value) return $value;
+        try {
+            return Crypt::decryptString($value);
+        } catch (\Exception $e) {
+            return $value;
+        }
     }
 
     /**
