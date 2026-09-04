@@ -4,7 +4,7 @@ namespace App\Logging;
 
 use Monolog\Logger;
 use Monolog\Handler\AbstractProcessingHandler;
-use Monolog\Handler\StreamHandler;
+use Monolog\Handler\RotatingFileHandler;
 
 class TenantLogger
 {
@@ -38,7 +38,7 @@ class TenantLogger
  */
 class TenantAwareStreamHandler extends AbstractProcessingHandler
 {
-    /** @var StreamHandler[] */
+    /** @var RotatingFileHandler[] */
     protected $handlers = [];
 
     protected function write(array $record): void
@@ -51,7 +51,11 @@ class TenantAwareStreamHandler extends AbstractProcessingHandler
             if (!file_exists($logDir)) {
                 mkdir($logDir, 0755, true);
             }
-            $this->handlers[$tenantId] = new StreamHandler($logPath, Logger::DEBUG);
+            // RotatingFileHandler writes to a dated file (laravel-YYYY-MM-DD.log) and
+            // prunes files beyond maxFiles on rotation, same as config/logging.php's
+            // 'daily' driver channels — plain StreamHandler never rotated or pruned,
+            // so this file grew unbounded (tens of MB per tenant) forever.
+            $this->handlers[$tenantId] = new RotatingFileHandler($logPath, 7, Logger::DEBUG);
         }
 
         $this->handlers[$tenantId]->handle($record);

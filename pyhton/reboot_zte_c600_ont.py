@@ -1,5 +1,3 @@
-import datetime
-import os
 import sys
 import telnetlib
 
@@ -10,15 +8,6 @@ def usage_and_exit() -> None:
         "<ip> <user> <password> <port> <timeout> <shelf> <slot> <pon_port> <onu_id>"
     )
     sys.exit(1)
-
-
-def build_log_file_path() -> str:
-    log_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "storage", "logs")
-    )
-    os.makedirs(log_path, exist_ok=True)
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    return os.path.join(log_path, f"olt_log_{today}.log")
 
 
 def read_prompt(tn: telnetlib.Telnet, timeout: int = 15) -> str:
@@ -71,64 +60,51 @@ def do_reboot(
     pon_port: str,
     onu_id: str,
 ) -> tuple[bool, str]:
-    log_file = build_log_file_path()
+    tn = telnetlib.Telnet(ip, port, timeout=10)
+    try:
+        tn.read_until(b"Username:", timeout=15)
+        tn.write(username.encode("ascii") + b"\n")
+        tn.read_until(b"Password:", timeout=15)
+        tn.write(password.encode("ascii") + b"\n")
 
-    with open(log_file, "a", encoding="utf-8") as log:
-        def log_line(title: str, text: str) -> None:
-            now = datetime.datetime.now().isoformat(sep=" ", timespec="seconds")
-            log.write(f"{now} {title}\n{text}\n")
+        output = read_prompt(tn, timeout=20)
 
-        tn = telnetlib.Telnet(ip, port, timeout=10)
-        try:
-            tn.read_until(b"Username:", timeout=15)
-            tn.write(username.encode("ascii") + b"\n")
-            tn.read_until(b"Password:", timeout=15)
-            tn.write(password.encode("ascii") + b"\n")
+        output = write_and_read_prompt(tn, "configure terminal", timeout=20)
 
-            output = read_prompt(tn, timeout=20)
-            log_line("LOGIN", output)
+        entered, iface, output = try_enter_onu_mng_mode(
+            tn, shelf, slot, pon_port, onu_id
+        )
 
-            output = write_and_read_prompt(tn, "configure terminal", timeout=20)
-            log_line("CMD configure terminal", output)
+        if not entered:
+            return False, "failed to enter pon-onu-mng mode"
 
-            entered, iface, output = try_enter_onu_mng_mode(
-                tn, shelf, slot, pon_port, onu_id
-            )
-            log_line("CMD pon-onu-mng", output)
+        tn.write(b"reboot\n")
+        idx, _, reboot_output = tn.expect(
+            [b"\\[yes/no\\]:", b"#", b"%Error", b"Invalid"],
+            timeout=timeout,
+        )
+        decoded_reboot = reboot_output.decode("ascii", errors="ignore")
 
-            if not entered:
-                return False, "failed to enter pon-onu-mng mode"
+        if idx in (2, 3):
+            return False, "reboot command rejected by OLT"
 
-            tn.write(b"reboot\n")
-            idx, _, reboot_output = tn.expect(
-                [b"\\[yes/no\\]:", b"#", b"%Error", b"Invalid"],
-                timeout=timeout,
-            )
-            decoded_reboot = reboot_output.decode("ascii", errors="ignore")
-            log_line(f"CMD reboot ({iface})", decoded_reboot)
+        if idx == 0:
+            tn.write(b"yes\n")
+            confirm_output = read_prompt(tn, timeout=timeout)
 
-            if idx in (2, 3):
-                return False, "reboot command rejected by OLT"
+            lowered_confirm = confirm_output.lower()
+            if "%error" in lowered_confirm or "invalid" in lowered_confirm:
+                return False, "confirmation failed on OLT"
 
-            if idx == 0:
-                tn.write(b"yes\n")
-                confirm_output = read_prompt(tn, timeout=timeout)
-                log_line("CMD yes", confirm_output)
+        elif idx == -1:
+            return False, "no response after reboot command"
 
-                lowered_confirm = confirm_output.lower()
-                if "%error" in lowered_confirm or "invalid" in lowered_confirm:
-                    return False, "confirmation failed on OLT"
+        # Exit config mode cleanly
+        output = write_and_read_prompt(tn, "end", timeout=15)
 
-            elif idx == -1:
-                return False, "no response after reboot command"
-
-            # Exit config mode cleanly
-            output = write_and_read_prompt(tn, "end", timeout=15)
-            log_line("CMD end", output)
-
-            return True, f"ONU {shelf}/{slot}/{pon_port}:{onu_id} reboot sent"
-        finally:
-            tn.close()
+        return True, f"ONU {shelf}/{slot}/{pon_port}:{onu_id} reboot sent"
+    finally:
+        tn.close()
 
 
 if __name__ == "__main__":

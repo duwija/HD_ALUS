@@ -1,8 +1,6 @@
 import sys
 import socket
 import time
-import datetime
-import os
 import subprocess
 import re
 
@@ -21,15 +19,7 @@ timeout  = int(sys.argv[5])
 pon_int  = sys.argv[6]
 onu_num  = sys.argv[7]
 
-log_path = os.path.dirname(os.path.abspath(__file__)) + "/logs"
-os.makedirs(log_path, exist_ok=True)
-
 # ---------- Helpers ----------
-
-def log(msg, logfile):
-    line = f"{datetime.datetime.now()} {msg}"
-    logfile.write(line + "\n")
-    logfile.flush()
 
 def recv_until(s, expect, wait=12):
     """Read from socket until expected bytes found or timeout."""
@@ -74,125 +64,100 @@ def get_onu_uptime_ticks(host, community, pon, onu):
 
 # ---------- Main ----------
 
-def telnet_hsgq(host, port, username, pwd, pon, onu, log_path):
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    log_file_path = f"{log_path}/hsgq_olt_log_{today}.log"
+def telnet_hsgq(host, port, username, pwd, pon, onu):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((host, port))
 
-    with open(log_file_path, 'a') as log_file:
+        # Wait for username prompt (OLT sends IAC negotiation + banner first)
+        banner = recv_until(s, 'username:', wait=15)
+        if b'username:' not in banner.lower():
+            print("error:No username prompt from OLT")
+            return
+
+        # Send login
+        s.sendall((username + '\r\n').encode())
+        out = recv_until(s, 'password:', wait=12)
+        if b'password:' not in out.lower():
+            print("error:No password prompt from OLT")
+            return
+
+        s.sendall((pwd + '\r\n').encode())
+        out = recv_until(s, '>', wait=12)
+        if b'>' not in out:
+            print("error:Login failed - no prompt")
+            return
+
+        # Enable mode
+        s.sendall(b'enable\r\n')
+        out = recv_until(s, '#', wait=10)
+        if b'#' not in out:
+            print("error:Cannot enter enable mode")
+            return
+
+        # Config mode
+        s.sendall(b'config\r\n')
+        out = recv_until(s, '#', wait=10)
+
+        # Capture uptime before command for reboot verification fallback.
+        before_ticks = get_onu_uptime_ticks(host, "public_ro", pon, onu)
+
+        # HSGQ firmware on this OLT accepts ONT reset command in config mode.
+        # Use TAB between tokens so CLI parses token boundaries reliably.
+        reset_cmd = f'ont\treset\t{pon}\t{onu}\r\n'.encode()
+        s.sendall(reset_cmd)
+
+        # Wait and capture all OLT response
+        time.sleep(10)
+        s.settimeout(2)
+        full_output = b''
         try:
-            log("CONNECTING TO OLT ...", log_file)
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((host, port))
-
-            # Wait for username prompt (OLT sends IAC negotiation + banner first)
-            banner = recv_until(s, 'username:', wait=15)
-            if b'username:' not in banner.lower():
-                log(f"ERROR: No username prompt. Got: {repr(banner[-50:])}", log_file)
-                print("error:No username prompt from OLT")
-                return
-            log("GOT USERNAME PROMPT", log_file)
-
-            # Send login
-            s.sendall((username + '\r\n').encode())
-            out = recv_until(s, 'password:', wait=12)
-            if b'password:' not in out.lower():
-                log(f"ERROR: No password prompt. Got: {repr(out[-50:])}", log_file)
-                print("error:No password prompt from OLT")
-                return
-            log("GOT PASSWORD PROMPT", log_file)
-
-            s.sendall((pwd + '\r\n').encode())
-            out = recv_until(s, '>', wait=12)
-            if b'>' not in out:
-                log(f"ERROR: No > prompt after login. Got: {repr(out[-80:])}", log_file)
-                print("error:Login failed - no prompt")
-                return
-            log("LOGIN SUCCESS", log_file)
-
-            # Enable mode
-            s.sendall(b'enable\r\n')
-            out = recv_until(s, '#', wait=10)
-            if b'#' not in out:
-                log(f"ERROR: No # prompt after enable. Got: {repr(out[-80:])}", log_file)
-                print("error:Cannot enter enable mode")
-                return
-            log("ENTER ENABLE MODE", log_file)
-
-            # Config mode
-            s.sendall(b'config\r\n')
-            out = recv_until(s, '#', wait=10)
-            log("ENTER CONFIG MODE", log_file)
-
-            # Capture uptime before command for reboot verification fallback.
-            before_ticks = get_onu_uptime_ticks(host, "public_ro", pon, onu)
-            log(f"SNMP UPTIME BEFORE: {before_ticks}", log_file)
-
-            # HSGQ firmware on this OLT accepts ONT reset command in config mode.
-            # Use TAB between tokens so CLI parses token boundaries reliably.
-            reset_cmd = f'ont\treset\t{pon}\t{onu}\r\n'.encode()
-            log(f"SEND REBOOT COMMAND: ont reset {pon} {onu}", log_file)
-            s.sendall(reset_cmd)
-
-            # Wait and capture all OLT response
-            log("WAITING FOR RESPONSE (10s)...", log_file)
-            time.sleep(10)
-            s.settimeout(2)
-            full_output = b''
-            try:
-                while True:
-                    chunk = s.recv(1024)
-                    if not chunk:
-                        break
-                    full_output += chunk
-            except socket.timeout:
-                pass
-
-            decoded = full_output.decode('ascii', errors='ignore')
-            log(f"FULL OUTPUT: {repr(decoded)}", log_file)
-
-            # Fallback verification: if no explicit CLI confirmation, check SNMP uptime reset.
-            after_ticks = get_onu_uptime_ticks(host, "public_ro", pon, onu)
-            log(f"SNMP UPTIME AFTER: {after_ticks}", log_file)
-
-            # Remove echo of our command from output
-            cleaned = decoded.replace(f'ont reset {pon} {onu}', '').replace(f'ont reset {pon}{onu}', '').strip()
-
-            lowered = decoded.lower()
-            if (
-                "error" in lowered
-                or "invalid" in lowered
-                or "fail" in lowered
-                or "not exist" in lowered
-                or "unknown command" in lowered
-            ):
-                log("REBOOT COMMAND FAILED", log_file)
-                print(f"error:Failed to reboot ONU PON{pon}/{onu} - {cleaned[:100]}")
-            elif "reset ont fail" in lowered:
-                log("REBOOT COMMAND REJECTED", log_file)
-                print(f"error:Reboot rejected by OLT for ONU PON{pon}/{onu} - {cleaned[:100]}")
-            elif "link down" in lowered or "offline" in lowered:
-                log("REBOOT CONFIRMED - ONU LINK DOWN", log_file)
-                print(f"success:ONU PON{pon}/{onu} rebooted successfully!")
-            elif before_ticks is not None and after_ticks is not None and after_ticks < before_ticks:
-                log("REBOOT CONFIRMED - SNMP UPTIME RESET", log_file)
-                print(f"success:ONU PON{pon}/{onu} rebooted successfully! (uptime reset)")
-            else:
-                log("REBOOT COMMAND SENT (no explicit confirmation)", log_file)
-                print(f"warning:ONU PON{pon}/{onu} reboot command sent (not confirmed)")
-
-            s.sendall(b'exit\r\n')
-            time.sleep(0.5)
-            s.sendall(b'exit\r\n')
-            time.sleep(0.5)
-            s.close()
-            log("SESSION CLOSED", log_file)
-
-        except ConnectionRefusedError:
-            print("error:Telnet connection refused")
+            while True:
+                chunk = s.recv(1024)
+                if not chunk:
+                    break
+                full_output += chunk
         except socket.timeout:
-            print("error:Connection timeout")
-        except Exception as e:
-            print(f"error:Unexpected - {e}")
+            pass
+
+        decoded = full_output.decode('ascii', errors='ignore')
+
+        # Fallback verification: if no explicit CLI confirmation, check SNMP uptime reset.
+        after_ticks = get_onu_uptime_ticks(host, "public_ro", pon, onu)
+
+        # Remove echo of our command from output
+        cleaned = decoded.replace(f'ont reset {pon} {onu}', '').replace(f'ont reset {pon}{onu}', '').strip()
+
+        lowered = decoded.lower()
+        if (
+            "error" in lowered
+            or "invalid" in lowered
+            or "fail" in lowered
+            or "not exist" in lowered
+            or "unknown command" in lowered
+        ):
+            print(f"error:Failed to reboot ONU PON{pon}/{onu} - {cleaned[:100]}")
+        elif "reset ont fail" in lowered:
+            print(f"error:Reboot rejected by OLT for ONU PON{pon}/{onu} - {cleaned[:100]}")
+        elif "link down" in lowered or "offline" in lowered:
+            print(f"success:ONU PON{pon}/{onu} rebooted successfully!")
+        elif before_ticks is not None and after_ticks is not None and after_ticks < before_ticks:
+            print(f"success:ONU PON{pon}/{onu} rebooted successfully! (uptime reset)")
+        else:
+            print(f"warning:ONU PON{pon}/{onu} reboot command sent (not confirmed)")
+
+        s.sendall(b'exit\r\n')
+        time.sleep(0.5)
+        s.sendall(b'exit\r\n')
+        time.sleep(0.5)
+        s.close()
+
+    except ConnectionRefusedError:
+        print("error:Telnet connection refused")
+    except socket.timeout:
+        print("error:Connection timeout")
+    except Exception as e:
+        print(f"error:Unexpected - {e}")
 
 # ---------- RUN ----------
-telnet_hsgq(ip, port, login, password, pon_int, onu_num, log_path)
+telnet_hsgq(ip, port, login, password, pon_int, onu_num)

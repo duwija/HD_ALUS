@@ -1,8 +1,6 @@
 import sys
 import socket
 import time
-import datetime
-import os
 
 # ==========================================================
 # Usage:
@@ -41,15 +39,7 @@ card_int = sys.argv[6]
 pon_int  = sys.argv[7]
 onu_num  = sys.argv[8]
 
-log_path = os.path.dirname(os.path.abspath(__file__)) + "/logs"
-os.makedirs(log_path, exist_ok=True)
-
 # ---------- Helpers ----------
-
-def log(msg, logfile):
-    line = f"{datetime.datetime.now()} {msg}"
-    logfile.write(line + "\n")
-    logfile.flush()
 
 IAC, DO, WILL, WONT, DONT = 255, 253, 251, 252, 254
 
@@ -92,96 +82,74 @@ def recv_until(s, expect, wait=12):
 
 # ---------- Main ----------
 
-def telnet_cdata_epon(host, port, username, pwd, card, pon, onu, log_path):
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    log_file_path = f"{log_path}/cdata_epon_olt_log_{today}.log"
+def telnet_cdata_epon(host, port, username, pwd, card, pon, onu):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect((host, port))
 
-    with open(log_file_path, 'a') as log_file:
-        try:
-            log("CONNECTING TO OLT ...", log_file)
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(timeout)
-            s.connect((host, port))
+        # Confirmed live: this EPON unit prompts "User name:", not "login:".
+        banner = recv_until(s, 'name:', wait=15)
+        if b'login:' not in banner.lower() and b'username:' not in banner.lower() and b'user name:' not in banner.lower() and b'name:' not in banner.lower():
+            print("error:No login prompt from OLT")
+            return
 
-            # Confirmed live: this EPON unit prompts "User name:", not "login:".
-            banner = recv_until(s, 'name:', wait=15)
-            if b'login:' not in banner.lower() and b'username:' not in banner.lower() and b'user name:' not in banner.lower() and b'name:' not in banner.lower():
-                log(f"ERROR: No login prompt. Got: {repr(banner[-80:])}", log_file)
-                print("error:No login prompt from OLT")
-                return
-            log("GOT LOGIN PROMPT", log_file)
+        s.sendall((username + '\r\n').encode())
+        out = recv_until(s, 'password:', wait=12)
+        if b'password:' not in out.lower():
+            print("error:No password prompt from OLT")
+            return
 
-            s.sendall((username + '\r\n').encode())
-            out = recv_until(s, 'password:', wait=12)
-            if b'password:' not in out.lower():
-                log(f"ERROR: No password prompt. Got: {repr(out[-80:])}", log_file)
-                print("error:No password prompt from OLT")
-                return
-            log("GOT PASSWORD PROMPT", log_file)
-
-            s.sendall((pwd + '\r\n').encode())
-            out = recv_until(s, '>', wait=12)
-            if b'>' not in out:
-                lowered_out = out.lower()
-                if b'incorrect' in lowered_out or b'login failed' in lowered_out or b'denied' in lowered_out:
-                    log(f"ERROR: Login rejected. Got: {repr(out[-80:])}", log_file)
-                    print("error:Login failed - incorrect username or password")
-                else:
-                    log(f"ERROR: No > prompt after login. Got: {repr(out[-80:])}", log_file)
-                    print("error:Login failed - no prompt")
-                return
-            log("LOGIN SUCCESS", log_file)
-
-            s.sendall(b'enable\r\n')
-            out = recv_until(s, '#', wait=10)
-            if b'#' not in out:
-                log(f"ERROR: No # prompt after enable. Got: {repr(out[-80:])}", log_file)
-                print("error:Cannot enter enable mode")
-                return
-            log("ENTER ENABLE MODE", log_file)
-
-            s.sendall(b'config\r\n')
-            out = recv_until(s, '#', wait=10)
-            log("ENTER CONFIG MODE", log_file)
-
-            interface_cmd = f'interface epon 0/{card}\r\n'.encode()
-            s.sendall(interface_cmd)
-            out = recv_until(s, '#', wait=10)
-            log(f"ENTER INTERFACE EPON 0/{card}", log_file)
-
-            reboot_cmd = f'ont reboot {pon} {onu}\r\n'.encode()
-            log(f"SEND REBOOT COMMAND: ont reboot {pon} {onu}", log_file)
-            s.sendall(reboot_cmd)
-            out = recv_until(s, '#', wait=15)
-            decoded = out.decode('ascii', errors='ignore')
-            log(f"REBOOT COMMAND OUTPUT: {repr(decoded)}", log_file)
-
-            cleaned = decoded.replace(f'ont reboot {pon} {onu}', '').strip()
-            lowered = decoded.lower()
-            if any(w in lowered for w in ('error', 'invalid', 'fail', 'not exist', 'unknown command')):
-                log("REBOOT COMMAND FAILED", log_file)
-                print(f"error:Failed to reboot ONU EPON 0/{card}/{pon}/{onu} - {cleaned[:150]}")
+        s.sendall((pwd + '\r\n').encode())
+        out = recv_until(s, '>', wait=12)
+        if b'>' not in out:
+            lowered_out = out.lower()
+            if b'incorrect' in lowered_out or b'login failed' in lowered_out or b'denied' in lowered_out:
+                print("error:Login failed - incorrect username or password")
             else:
-                log("REBOOT COMMAND SENT", log_file)
-                print(f"success:ONU EPON 0/{card}/{pon}/{onu} reboot command sent!")
+                print("error:Login failed - no prompt")
+            return
 
-            s.sendall(b'exit\r\n')
-            recv_until(s, '#', wait=8)
-            s.sendall(b'save\r\n')
-            recv_until(s, '#', wait=10)
-            log("CONFIG SAVED", log_file)
+        s.sendall(b'enable\r\n')
+        out = recv_until(s, '#', wait=10)
+        if b'#' not in out:
+            print("error:Cannot enter enable mode")
+            return
 
-            s.sendall(b'exit\r\n')
-            time.sleep(0.5)
-            s.close()
-            log("SESSION CLOSED", log_file)
+        s.sendall(b'config\r\n')
+        out = recv_until(s, '#', wait=10)
 
-        except ConnectionRefusedError:
-            print("error:Telnet connection refused")
-        except socket.timeout:
-            print("error:Connection timeout")
-        except Exception as e:
-            print(f"error:Unexpected - {e}")
+        interface_cmd = f'interface epon 0/{card}\r\n'.encode()
+        s.sendall(interface_cmd)
+        out = recv_until(s, '#', wait=10)
+
+        reboot_cmd = f'ont reboot {pon} {onu}\r\n'.encode()
+        s.sendall(reboot_cmd)
+        out = recv_until(s, '#', wait=15)
+        decoded = out.decode('ascii', errors='ignore')
+
+        cleaned = decoded.replace(f'ont reboot {pon} {onu}', '').strip()
+        lowered = decoded.lower()
+        if any(w in lowered for w in ('error', 'invalid', 'fail', 'not exist', 'unknown command')):
+            print(f"error:Failed to reboot ONU EPON 0/{card}/{pon}/{onu} - {cleaned[:150]}")
+        else:
+            print(f"success:ONU EPON 0/{card}/{pon}/{onu} reboot command sent!")
+
+        s.sendall(b'exit\r\n')
+        recv_until(s, '#', wait=8)
+        s.sendall(b'save\r\n')
+        recv_until(s, '#', wait=10)
+
+        s.sendall(b'exit\r\n')
+        time.sleep(0.5)
+        s.close()
+
+    except ConnectionRefusedError:
+        print("error:Telnet connection refused")
+    except socket.timeout:
+        print("error:Connection timeout")
+    except Exception as e:
+        print(f"error:Unexpected - {e}")
 
 # ---------- RUN ----------
-telnet_cdata_epon(ip, port, login, password, card_int, pon_int, onu_num, log_path)
+telnet_cdata_epon(ip, port, login, password, card_int, pon_int, onu_num)

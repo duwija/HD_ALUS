@@ -1,8 +1,6 @@
 import sys
 import socket
 import time
-import datetime
-import os
 import subprocess
 import re
 
@@ -47,15 +45,7 @@ pon_int     = sys.argv[6]
 onu_num     = sys.argv[7]
 community_ro = sys.argv[8] if len(sys.argv) > 8 and sys.argv[8] else 'public'
 
-log_path = os.path.dirname(os.path.abspath(__file__)) + "/logs"
-os.makedirs(log_path, exist_ok=True)
-
 # ---------- Helpers ----------
-
-def log(msg, logfile):
-    line = f"{datetime.datetime.now()} {msg}"
-    logfile.write(line + "\n")
-    logfile.flush()
 
 def recv_until(s, expect, wait=12):
     """Read from socket until expected bytes found or timeout."""
@@ -96,137 +86,111 @@ def get_onu_status(host, community, pon, onu):
 
 # ---------- Main ----------
 
-def telnet_hioso(host, port, username, pwd, pon, onu, log_path):
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    log_file_path = f"{log_path}/hioso_olt_log_{today}.log"
+def telnet_hioso(host, port, username, pwd, pon, onu):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect((host, port))
 
-    with open(log_file_path, 'a') as log_file:
+        banner = recv_until(s, 'username:', wait=15)
+        if b'username:' not in banner.lower():
+            print("error:No username prompt from OLT")
+            return
+
+        s.sendall((username + '\r\n').encode())
+        out = recv_until(s, 'password:', wait=12)
+        if b'password:' not in out.lower():
+            print("error:No password prompt from OLT")
+            return
+
+        s.sendall((pwd + '\r\n').encode())
+        out = recv_until(s, '>', wait=12)
+        if b'>' not in out:
+            print("error:Login failed - no prompt")
+            return
+
+        s.sendall(b'enable\r\n')
+        out = recv_until(s, '#', wait=10)
+        if b'#' not in out:
+            print("error:Cannot enter enable mode")
+            return
+
+        s.sendall(b'configure terminal\r\n')
+        out = recv_until(s, '#', wait=10)
+        if b'#' not in out:
+            print("error:Cannot enter config mode")
+            return
+
+        iface_cmd = f'interface epon 1/{pon}\r\n'
+        s.sendall(iface_cmd.encode())
+        out = recv_until(s, '#', wait=10)
+        if b'#' not in out:
+            print(f"error:Cannot select interface epon 1/{pon}")
+            return
+
+        before_status = get_onu_status(host, community_ro, pon, onu)
+
+        reboot_cmd = f'onu {onu} reboot\r\n'
+        s.sendall(reboot_cmd.encode())
+
+        time.sleep(8)
+        s.settimeout(2)
+        full_output = b''
         try:
-            log("CONNECTING TO OLT ...", log_file)
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(timeout)
-            s.connect((host, port))
-
-            banner = recv_until(s, 'username:', wait=15)
-            if b'username:' not in banner.lower():
-                log(f"ERROR: No username prompt. Got: {repr(banner[-80:])}", log_file)
-                print("error:No username prompt from OLT")
-                return
-            log("GOT USERNAME PROMPT", log_file)
-
-            s.sendall((username + '\r\n').encode())
-            out = recv_until(s, 'password:', wait=12)
-            if b'password:' not in out.lower():
-                log(f"ERROR: No password prompt. Got: {repr(out[-80:])}", log_file)
-                print("error:No password prompt from OLT")
-                return
-            log("GOT PASSWORD PROMPT", log_file)
-
-            s.sendall((pwd + '\r\n').encode())
-            out = recv_until(s, '>', wait=12)
-            if b'>' not in out:
-                log(f"ERROR: No > prompt after login. Got: {repr(out[-80:])}", log_file)
-                print("error:Login failed - no prompt")
-                return
-            log("LOGIN SUCCESS", log_file)
-
-            s.sendall(b'enable\r\n')
-            out = recv_until(s, '#', wait=10)
-            if b'#' not in out:
-                log(f"ERROR: No # prompt after enable. Got: {repr(out[-80:])}", log_file)
-                print("error:Cannot enter enable mode")
-                return
-            log("ENTER ENABLE MODE", log_file)
-
-            s.sendall(b'configure terminal\r\n')
-            out = recv_until(s, '#', wait=10)
-            if b'#' not in out:
-                log(f"ERROR: No # prompt after configure terminal. Got: {repr(out[-80:])}", log_file)
-                print("error:Cannot enter config mode")
-                return
-            log("ENTER CONFIG MODE", log_file)
-
-            iface_cmd = f'interface epon 1/{pon}\r\n'
-            s.sendall(iface_cmd.encode())
-            out = recv_until(s, '#', wait=10)
-            if b'#' not in out:
-                log(f"ERROR: No # prompt after '{iface_cmd.strip()}'. Got: {repr(out[-80:])}", log_file)
-                print(f"error:Cannot select interface epon 1/{pon}")
-                return
-            log(f"ENTERED INTERFACE MODE: {iface_cmd.strip()}", log_file)
-
-            before_status = get_onu_status(host, community_ro, pon, onu)
-            log(f"SNMP STATUS BEFORE: {before_status}", log_file)
-
-            reboot_cmd = f'onu {onu} reboot\r\n'
-            log(f"SEND REBOOT COMMAND: onu {onu} reboot", log_file)
-            s.sendall(reboot_cmd.encode())
-
-            log("WAITING FOR RESPONSE (8s)...", log_file)
-            time.sleep(8)
-            s.settimeout(2)
-            full_output = b''
-            try:
-                while True:
-                    chunk = s.recv(1024)
-                    if not chunk:
-                        break
-                    full_output += chunk
-            except socket.timeout:
-                pass
-
-            decoded = full_output.decode('ascii', errors='ignore')
-            log(f"FULL OUTPUT: {repr(decoded)}", log_file)
-            cleaned = decoded.replace(reboot_cmd.strip(), '').strip()
-
-            lowered = decoded.lower()
-            if (
-                "error" in lowered
-                or "invalid" in lowered
-                or "fail" in lowered
-                or "not exist" in lowered
-                or "unknown command" in lowered
-                or "% " in decoded
-            ):
-                log("REBOOT COMMAND FAILED", log_file)
-                print(f"error:Failed to reboot ONU PON{pon}/{onu} - {cleaned[:100]}")
-            else:
-                # CLI prints no confirmation text (verified live) — confirm via SNMP
-                # status flip instead. Poll briefly since the link-down can lag a
-                # few seconds behind the CLI prompt returning.
-                after_status = before_status
-                for _ in range(4):
-                    time.sleep(3)
-                    after_status = get_onu_status(host, community_ro, pon, onu)
-                    if after_status == 2:
-                        break
-                log(f"SNMP STATUS AFTER: {after_status}", log_file)
-
-                if before_status == 1 and after_status == 2:
-                    log("REBOOT CONFIRMED - SNMP STATUS FLIPPED ONLINE->OFFLINE", log_file)
-                    print(f"success:ONU PON{pon}/{onu} rebooted successfully! (status confirmed via SNMP)")
-                else:
-                    # Either the ONU was already offline before the command (no
-                    # edge to observe) or the flip hasn't happened yet — don't
-                    # claim success we haven't actually verified.
-                    log("REBOOT COMMAND SENT (SNMP status did not confirm)", log_file)
-                    print(f"warning:ONU PON{pon}/{onu} reboot command sent (not confirmed) - {cleaned[:100]}")
-
-            s.sendall(b'exit\r\n')
-            time.sleep(0.3)
-            s.sendall(b'exit\r\n')
-            time.sleep(0.3)
-            s.sendall(b'exit\r\n')
-            time.sleep(0.3)
-            s.close()
-            log("SESSION CLOSED", log_file)
-
-        except ConnectionRefusedError:
-            print("error:Telnet connection refused")
+            while True:
+                chunk = s.recv(1024)
+                if not chunk:
+                    break
+                full_output += chunk
         except socket.timeout:
-            print("error:Connection timeout")
-        except Exception as e:
-            print(f"error:Unexpected - {e}")
+            pass
+
+        decoded = full_output.decode('ascii', errors='ignore')
+        cleaned = decoded.replace(reboot_cmd.strip(), '').strip()
+
+        lowered = decoded.lower()
+        if (
+            "error" in lowered
+            or "invalid" in lowered
+            or "fail" in lowered
+            or "not exist" in lowered
+            or "unknown command" in lowered
+            or "% " in decoded
+        ):
+            print(f"error:Failed to reboot ONU PON{pon}/{onu} - {cleaned[:100]}")
+        else:
+            # CLI prints no confirmation text (verified live) — confirm via SNMP
+            # status flip instead. Poll briefly since the link-down can lag a
+            # few seconds behind the CLI prompt returning.
+            after_status = before_status
+            for _ in range(4):
+                time.sleep(3)
+                after_status = get_onu_status(host, community_ro, pon, onu)
+                if after_status == 2:
+                    break
+
+            if before_status == 1 and after_status == 2:
+                print(f"success:ONU PON{pon}/{onu} rebooted successfully! (status confirmed via SNMP)")
+            else:
+                # Either the ONU was already offline before the command (no
+                # edge to observe) or the flip hasn't happened yet — don't
+                # claim success we haven't actually verified.
+                print(f"warning:ONU PON{pon}/{onu} reboot command sent (not confirmed) - {cleaned[:100]}")
+
+        s.sendall(b'exit\r\n')
+        time.sleep(0.3)
+        s.sendall(b'exit\r\n')
+        time.sleep(0.3)
+        s.sendall(b'exit\r\n')
+        time.sleep(0.3)
+        s.close()
+
+    except ConnectionRefusedError:
+        print("error:Telnet connection refused")
+    except socket.timeout:
+        print("error:Connection timeout")
+    except Exception as e:
+        print(f"error:Unexpected - {e}")
 
 # ---------- RUN ----------
-telnet_hioso(ip, port, login, password, pon_int, onu_num, log_path)
+telnet_hioso(ip, port, login, password, pon_int, onu_num)

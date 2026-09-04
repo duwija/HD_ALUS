@@ -150,7 +150,8 @@ class WaService
         $amount,
         string $openUrl,
         string $gatewayMessage,
-        string $templateKey = 'WA_TAMPLATE_ID_3'
+        string $templateKey = 'WA_TAMPLATE_ID_3',
+        array $context = []
     ): array
     {
         if (static::hasQontakConfig($templateKey)) {
@@ -184,7 +185,8 @@ class WaService
                     $cid,
                     (string) $amount,
                     $openUrl,
-                    $templateKey
+                    $templateKey,
+                    $context
                 );
 
                 $status = (is_string($result) && stripos($result, 'error') === false && $result !== '')
@@ -434,12 +436,9 @@ class WaService
             return 'titiwa: template not set';
         }
 
-        $domain = tenant_config('domain_name', env('DOMAIN_NAME', ''));
-        $fullUrl = (str_starts_with($encryptedurl, 'http://') || str_starts_with($encryptedurl, 'https://'))
-            ? $encryptedurl
-            : 'https://' . $domain . $encryptedurl;
+        $urlValue = static::titiwaButtonUrlValue($encryptedurl);
 
-        $variables = static::buildTitiwaReminderVariables($templateKey, $name, $cid, $fullUrl, $context);
+        $variables = static::buildTitiwaReminderVariables($templateKey, $name, $cid, $urlValue, $context);
 
         return static::sendViaTitiwaTemplate($phone, $template, $variables);
     }
@@ -451,7 +450,8 @@ class WaService
         string $cid,
         string $amount,
         string $openUrl,
-        string $templateKey = 'WA_TAMPLATE_ID_3'
+        string $templateKey = 'WA_TAMPLATE_ID_3',
+        array $context = []
     ): string
     {
         $template = static::getTitiwaTemplateName($templateKey);
@@ -460,18 +460,32 @@ class WaService
             return 'titiwa: template not set';
         }
 
-        $domain = tenant_config('domain_name', env('DOMAIN_NAME', ''));
-        $fullUrl = (str_starts_with($openUrl, 'http://') || str_starts_with($openUrl, 'https://'))
-            ? $openUrl
-            : 'https://' . $domain . $openUrl;
+        $urlValue = static::titiwaButtonUrlValue($openUrl);
+        $amountFormatted = number_format((float) $amount, 0, ',', '.');
 
-        $variables = [
-            $name,
-            $invoiceNo,
-            $cid,
-            'Rp ' . number_format((float) $amount, 0, ',', '.'),
-            $fullUrl,
-        ];
+        // Cabang variabel ditentukan dari NAMA template yang ter-resolve (bukan templateKey),
+        // karena tenant bisa memetakan templateKey mana pun (mis. WA_TAMPLATE_ID_2) ke template
+        // remainder_single_invoice yang sama. Template ini punya field tambahan (bulan tagihan +
+        // jatuh tempo) yang tidak dimiliki template notif_receive_payment.
+        if ($template === 'remainder_single_invoice') {
+            $variables = [
+                $name,
+                $cid,
+                $invoiceNo,
+                $amountFormatted,
+                (string) ($context['billing_month'] ?? '-'),
+                (string) ($context['due_date'] ?? '-'),
+                $urlValue,
+            ];
+        } else {
+            $variables = [
+                $name,
+                $invoiceNo,
+                $cid,
+                $amountFormatted,
+                $urlValue,
+            ];
+        }
 
         return static::sendViaTitiwaTemplate($phone, $template, $variables);
     }
@@ -550,6 +564,23 @@ class WaService
         return static::getTitiwaHost() !== ''
             && static::getTitiwaApiKey() !== ''
             && static::getTitiwaTemplateName($templateKey) !== '';
+    }
+
+    /**
+     * Nilai variabel untuk tombol URL template Titiwa/WAHub.
+     * Tombol URL template WAHub sudah menyimpan domain sebagai prefix statis
+     * (mis. https://domain/{{1}}), jadi variabel yang dikirim wajib path relatif —
+     * kalau dikirim URL absolut, hasilnya domain dobel pada link yang diterima pelanggan.
+     */
+    protected static function titiwaButtonUrlValue(string $url): string
+    {
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            $path = (string) parse_url($url, PHP_URL_PATH);
+            $query = parse_url($url, PHP_URL_QUERY);
+            return ltrim($path . ($query ? '?' . $query : ''), '/');
+        }
+
+        return ltrim($url, '/');
     }
 
     protected static function getTitiwaHost(): string

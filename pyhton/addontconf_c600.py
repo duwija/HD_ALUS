@@ -31,9 +31,7 @@ swap the script path + interface naming.
 
 import sys
 import telnetlib
-import datetime
-import logging
-import os
+import socket
 
 # --- args (identical positions to addontconf.py) ---
 ip                  = sys.argv[1]
@@ -56,8 +54,6 @@ gemportprofileup    = sys.argv[17]  # not used in C600 (kept for arg compat)
 gemportprofiledown  = sys.argv[18]  # not used in C600 (kept for arg compat)
 customer_name       = sys.argv[19]
 
-logging.basicConfig(filename='olt_log.log', level=logging.INFO)
-
 
 def _vport_from_pon(pon_int_str, onu_num_str):
     """Derive vport interface name from pon_int.
@@ -68,81 +64,66 @@ def _vport_from_pon(pon_int_str, onu_num_str):
     return f"vport-{suffix}.{onu_num_str}:1"
 
 
-def telnet_olt(host, port, username, password, commands, log_path):
+def telnet_olt(host, port, username, password, commands):
     success = False
     tn = None
     try:
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
-        log_filename = f"olt_log_{today}.log"
-        log_file_path = f"{log_path}/{log_filename}"
+        tn = telnetlib.Telnet(host, port, timeout=15)
 
-        with open(log_file_path, 'a') as log_file:
-            tn = telnetlib.Telnet(host, port, timeout=15)
+        tn.read_until(b"Username:", timeout=10)
+        tn.write(username.encode('ascii') + b"\n")
+        tn.read_until(b"Password:", timeout=10)
+        tn.write(password.encode('ascii') + b"\n")
+        tn.read_until(b"#", timeout=10)
 
-            tn.read_until(b"Username:", timeout=10)
-            tn.write(username.encode('ascii') + b"\n")
-            tn.read_until(b"Password:", timeout=10)
-            tn.write(password.encode('ascii') + b"\n")
-            tn.read_until(b"#", timeout=10)
+        success = True
+        cli_error = None
+        for command in commands:
+            tn.write(command.encode('ascii') + b"\n")
+            output = tn.read_until(b"#", timeout=15).decode('ascii', errors='ignore')
 
-            success = True
-            cli_error = None
-            for command in commands:
-                tn.write(command.encode('ascii') + b"\n")
-                output = tn.read_until(b"#", timeout=15).decode('ascii', errors='ignore')
-                log_file.write(f"{datetime.datetime.now()}: Output after sending {command}:\n{output}\n")
+            low = output.lower()
+            if "gpon onu sn already exists" in low or "already exist" in low:
+                print("Error: GPON ONU sn already exists!")
+                success = False
+                break
+            if "the entry is existed" in low:
+                print("Error: The ONU ID Already Used!")
+                success = False
+                break
+            if "%error" in low or "invalid input" in low or "bad command" in low or "ambiguous command" in low:
+                cli_error = (command, output.strip())
+                success = False
+                # don't break; let remaining cleanup commands flush
 
-                low = output.lower()
-                if "gpon onu sn already exists" in low or "already exist" in low:
-                    log_file.write(f"{datetime.datetime.now()}: Error: ONU SN already exists. cmd='{command}'\n")
-                    print("Error: GPON ONU sn already exists!")
-                    success = False
-                    break
-                if "the entry is existed" in low:
-                    log_file.write(f"{datetime.datetime.now()}: Error: entry existed. cmd='{command}'\n")
-                    print("Error: The ONU ID Already Used!")
-                    success = False
-                    break
-                if "%error" in low or "invalid input" in low or "bad command" in low or "ambiguous command" in low:
-                    cli_error = (command, output.strip())
-                    log_file.write(f"{datetime.datetime.now()}: CLI error on '{command}':\n{output}\n")
-                    success = False
-                    # don't break; let remaining cleanup commands flush
+        # final flush
+        tn.read_until(b"#", timeout=5)
 
-            # final flush
-            tn.read_until(b"#", timeout=5)
+        # Best-effort verification (non-fatal). C600 reject 'show run' shortening, so we use
+        # the full form and ignore failures — we already track CLI errors per-command above.
+        try:
+            verify_command = f"show running-config interface {onu_int}:{onu_num}"
+            tn.write(verify_command.encode('ascii') + b"\n")
+            verify_output = tn.read_until(b"#", timeout=15).decode('ascii', errors='ignore')
+        except Exception:
+            pass
 
-            # Best-effort verification (non-fatal). C600 reject 'show run' shortening, so we use
-            # the full form and ignore failures — we already track CLI errors per-command above.
-            try:
-                verify_command = f"show running-config interface {onu_int}:{onu_num}"
-                tn.write(verify_command.encode('ascii') + b"\n")
-                verify_output = tn.read_until(b"#", timeout=15).decode('ascii', errors='ignore')
-                log_file.write(f"{datetime.datetime.now()}: Verify output:\n{verify_output}\n")
-            except Exception as ve:
-                log_file.write(f"{datetime.datetime.now()}: Verify skipped: {ve}\n")
+        if success:
+            print("success:Configuration successful!")
+            tn.write(b"write\n")
+            tn.read_until(b"#", timeout=20)
+        else:
+            if cli_error is not None:
+                cmd_str, err_str = cli_error
+                # Trim error message to single line
+                msg = err_str.replace("\r", " ").replace("\n", " ").strip()
+                if len(msg) > 180:
+                    msg = msg[:180] + "..."
+                print(f"error:CLI failed on '{cmd_str}': {msg}")
 
-            if success:
-                print("success:Configuration successful!")
-                tn.write(b"write\n")
-                tn.read_until(b"#", timeout=20)
-            else:
-                if cli_error is not None:
-                    cmd_str, err_str = cli_error
-                    # Trim error message to single line
-                    msg = err_str.replace("\r", " ").replace("\n", " ").strip()
-                    if len(msg) > 180:
-                        msg = msg[:180] + "..."
-                    log_file.write(f"{datetime.datetime.now()}: Done with failure on '{cmd_str}': {msg}\n")
-                    print(f"error:CLI failed on '{cmd_str}': {msg}")
-                else:
-                    log_file.write(f"{datetime.datetime.now()}: Done with failure.\n")
-
-    except telnetlib.TelnetException as e:
-        logging.error(f"Telnet error: {e}")
+    except (EOFError, OSError, socket.error) as e:
         print(f"error:Telnet error: {e}")
     except Exception as e:
-        logging.error(f"Error: {e}")
         print(f"error:{e}")
     finally:
         try:
@@ -176,5 +157,4 @@ commands = [
     "end",
 ]
 
-log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'storage', 'logs'))
-telnet_olt(ip, port, login, password, commands, log_path)
+telnet_olt(ip, port, login, password, commands)

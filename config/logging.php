@@ -104,42 +104,42 @@ return [
             'driver' => 'daily',
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/invoice.log'),
             'level' => 'info',
-            'days' => 90,
+            'days' => 7,
         ],
 
         'notif' => [
             'driver' => 'daily',
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/notif.log'),
             'level' => 'info',
-            'days' => 90,
+            'days' => 7,
         ],
         'isolir' => [
             'driver' => 'daily',
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/isolir.log'),
             'level' => 'info',
-            'days' => 90,
+            'days' => 7,
         ],
         'payment' => [
             'driver' => 'daily',
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/payment.log'),
             'level' => 'info',
-            'days' => 90,
+            'days' => 7,
         ],
         'mikrotik' => [
             'driver' => 'daily',
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/mikrotik.log'),
             'level' => 'info',
-            'days' => 90,
+            'days' => 7,
         ],
 
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
         'auth' => [
-            'driver' => 'single',
+            'driver' => 'daily',
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/auth.log'),
             'level' => 'info',
-            'days' => 90,
+            'days' => 7,
         ],
     ],
 

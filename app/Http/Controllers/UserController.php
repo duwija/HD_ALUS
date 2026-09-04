@@ -85,11 +85,20 @@ public function searchforjurnal(Request $request) {
         }
         usort($tenantFiles, fn($a, $b) => $b['modified'] - $a['modified']);
 
-        // Tenant laravel.log
-        $tenantLogPath   = $logDir . '/laravel.log';
-        $tenantLogExists = file_exists($tenantLogPath);
+        // Tenant laravel.log — channel 'tenant' now rotates daily (laravel-YYYY-MM-DD.log,
+        // 7 hari retensi via RotatingFileHandler) instead of one never-rotated file, jadi
+        // yang dipin di sini adalah file bertanggal paling baru.
+        $tenantLogPath = null;
+        if (is_dir($logDir)) {
+            $tenantLogFiles = glob($logDir . '/laravel-*.log') ?: [];
+            if (!empty($tenantLogFiles)) {
+                usort($tenantLogFiles, fn($a, $b) => filemtime($b) - filemtime($a));
+                $tenantLogPath = $tenantLogFiles[0];
+            }
+        }
+        $tenantLogExists = $tenantLogPath !== null;
         $tenantLogInfo   = $tenantLogExists ? [
-            'name'     => "tenant_{$logKey}/laravel.log",
+            'name'     => "tenant_{$logKey}/" . basename($tenantLogPath),
             'size'     => filesize($tenantLogPath),
             'modified' => filemtime($tenantLogPath),
         ] : null;

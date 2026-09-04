@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ProbeController;
 use App\Http\Controllers\WhatsappController;
 use App\Http\Controllers\CustomerApiController;
+use App\Http\Controllers\Api\InternalResolverController;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,7 +38,8 @@ Route::post('/wa/{session}/send-media', [WhatsappController::class, 'sendMedia']
 // ========================
 Route::prefix('customer')->group(function () {
     // Public
-    Route::post('/login',  [CustomerApiController::class, 'login']);
+    Route::post('/login',    [CustomerApiController::class, 'login']);
+    Route::post('/activate', [CustomerApiController::class, 'activate']);
 
     // Protected (Bearer token)
     Route::post('/register-token',        [CustomerApiController::class, 'registerToken']);
@@ -45,6 +47,12 @@ Route::prefix('customer')->group(function () {
     Route::get ('/tickets/{customerId}',   [CustomerApiController::class, 'tickets']);
     Route::post('/logout',                [CustomerApiController::class, 'logout']);
 });
+
+// ========================
+// Internal — mobile app resolver only (lihat /var/www/mobileappresolver)
+// Diverifikasi via header X-Resolver-Secret, bukan auth customer/admin biasa.
+// ========================
+Route::post('/internal/resolve-customer', [InternalResolverController::class, 'resolveCustomer']);
 
 // ========================
 // Employee Attendance API (Mobile App Karyawan)

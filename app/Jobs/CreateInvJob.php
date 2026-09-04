@@ -20,7 +20,6 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 use App\Mail\EmailNotification;
 use Illuminate\Support\Facades\Mail;
-use App\Helpers\WaGatewayHelper;
 use Illuminate\Support\Facades\Config;
 
 class CreateInvJob implements ShouldQueue
@@ -209,7 +208,8 @@ class CreateInvJob implements ShouldQueue
                             "/invoice/cst/" . $encryptedUrl
                         );
                     } else {
-                        // Use Regular WA Gateway
+                        // Titiwa/WAHub (WA_TAMPLATE_ID_2) jika dikonfigurasi, fallback ke WA Gateway biasa
+                        // jika tidak — ditangani otomatis oleh sendPaymentConfirmationOrGateway.
                         $message = "*[Informasi Pembayaran Internet]*";
                         $message .= "\n\n";
                         $message .= "Yth. " . $customer->name . ",";
@@ -227,7 +227,21 @@ class CreateInvJob implements ShouldQueue
                         $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
                         $message .= "\n\n";
                         $message .= "".tenant_config('signature', env("SIGNATURE"))."";
-                        $msgresult = WaGatewayHelper::wa_payment($customer->phone, $message);
+
+                        $msgresult = \App\Services\WaService::sendPaymentConfirmationOrGateway(
+                            $customer->phone,
+                            $customer->name,
+                            (string) $latest_number,
+                            (string) $customer->customer_id,
+                            $total_amount,
+                            "/invoice/cst/" . $encryptedUrl,
+                            $message,
+                            'WA_TAMPLATE_ID_2',
+                            [
+                                'due_date' => $due_date,
+                                'billing_month' => Carbon::parse($this->inv_date)->translatedFormat('F Y'),
+                            ]
+                        );
                     }
 
                     $notif='Notification by WhatsApp';

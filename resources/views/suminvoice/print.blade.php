@@ -21,14 +21,23 @@
 <style>
    @media print {
     @page {
-        margin: 50;
+        size: A4;
+        margin: 12mm 15mm;
     }
-    body {
-        margin: 1;
-        padding: 1;
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
-    header, footer, .no-print {
+    header, footer, .no-print, .modal, .containers {
         display: none !important;
+    }
+    .container {
+        max-width: 100% !important;
+    }
+    #invoice-header, .row, .tbl-wrapper, .tbl tr {
+        page-break-inside: avoid;
     }
 }
 
@@ -496,7 +505,7 @@ button {
 }
 
 button:hover {
-  background-color: transparent !important;
+  background-color: transparent;
 }
 caption {
     font-size: 28px;
@@ -594,33 +603,31 @@ a button {
 <body>
 
 @if(session('error'))
-<div style="background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;padding:12px 16px;margin:8px;border-radius:6px;font-size:14px;">
+<div class="no-print" style="background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;padding:12px 16px;margin:8px;border-radius:6px;font-size:14px;">
     <strong>&#9888; Gagal:</strong> {{ session('error') }}
 </div>
 @endif
 @if(session('success'))
-<div style="background:#d4edda;color:#155724;border:1px solid #c3e6cb;padding:12px 16px;margin:8px;border-radius:6px;font-size:14px;">
+<div class="no-print" style="background:#d4edda;color:#155724;border:1px solid #c3e6cb;padding:12px 16px;margin:8px;border-radius:6px;font-size:14px;">
     <strong>&#10003;</strong> {{ session('success') }}
 </div>
 @endif
 
     <div class="container" id="invoice_pr">
-     <div  >
+     <div class="no-print">
         <button style="float:right;" class="btn no-print" onclick="window.print()">Print</button>
+        <button class="btn no-print" style="float:right; background-color:#28a745;"><a style="text-decoration:none; color:#FFF;" href="{{ url('/suminvoice/' . $suminvoice_number->tempcode . '/pdf') }}"><i class="fas fa-file-pdf"></i>&nbsp; Download PDF</a></button>
         @php
         if(!empty($suminvoice_number->file))
         {
           $url=url('upload/tax').'/'.$suminvoice_number->file;
 
-          echo' <button class="btn"><a  style="float:right; text-decoration: none; color: #FFFF" href='.$url.'> Faktur pajak </a></button>';
-          
+          echo' <button class="btn no-print"><a  style="float:right; text-decoration: none; color: #FFFF" href='.$url.'> Faktur pajak </a></button>';
+
       }
       @endphp
 
-
-      
-      
-  </div> 
+  </div>
   
   <table id="invoice-header" style="border: none">
     <tr style="border: none">
@@ -901,7 +908,7 @@ a button {
     <br>
     <p>{{ $suminvoice_number->user->name ?? $suminvoice_number->updated_by }}</p>
 
-    <div style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
+    <div class="no-print" style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
         <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
             <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
         </a>
@@ -916,7 +923,7 @@ a button {
     <p>T{{$signature}} </p>
     <p>Terima Kasih,</p>
 
-    <div style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
+    <div class="no-print" style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
         <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
             <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
         </a>
@@ -931,18 +938,17 @@ a button {
 @else
 
 @if ( $current_inv_status == 1)
-<tr>
-    <td colspan="2" align="center"></br>
-        <p><a style='font-size: 14px; color: #c40205; text-decoration: none;'>
-        Anda masih memiliki tagihan yang belum terbayar (UNPAID) pada periode sebelumnya, silahkan melakukan pelunasan pembayaran Tagihan tersebut terlebih dahulu. Untuk info lebih lanjut silahkan menghubungi team Payment kami </a>
+<div align="center">
+    <p><a style='font-size: 14px; color: #c40205; text-decoration: none;'>
+    Anda masih memiliki tagihan yang belum terbayar (UNPAID) pada periode sebelumnya, silahkan melakukan pelunasan pembayaran Tagihan tersebut terlebih dahulu. Untuk info lebih lanjut silahkan menghubungi team Payment kami </a>
     </p>
-</td>
-<a href="{{ url('/invoice/cst/' . $encryptedurl) }}"><button class="btn">Lihat Data Tagihan</button></a>
+    <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="no-print"><button class="btn">Lihat Data Tagihan</button></a>
+</div>
 
 @else
 
 @if (!empty($suminvoice_number->payment_id))
-<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:10px 0 14px;flex-wrap:wrap;">
+<div class="no-print" style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:10px 0 14px;flex-wrap:wrap;">
     @php
         $activePaymentUrl = null;
         if (strpos((string) $suminvoice_number->payment_id, '|') !== false) {
@@ -971,7 +977,7 @@ a button {
 </div>
 @endif
 
-<div style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
+<div class="no-print" style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
     <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
         <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
     </a>
@@ -999,7 +1005,7 @@ a button {
  </p>
 
 
-<div class="containers">
+<div class="containers no-print">
 
     <!-- Modal Bumdes / Payment Point -->
     <div class="modal fade" id="myModal" role="dialog">

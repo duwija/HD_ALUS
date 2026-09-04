@@ -15,6 +15,7 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         Commands\InvoiceCron::class,
         Commands\IsolirAuto::class,
+        Commands\PruneTenantLogFiles::class,
     ];
 
     /**
@@ -30,6 +31,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('pppoe:sync-sessions-all')->everyFiveMinutes();
         $schedule->command('pings:prune-all')->dailyAt('02:00');
         $schedule->command('alerts:prune-all')->dailyAt('02:10');
+        $schedule->command('logs:prune-tenants')->dailyAt('02:20');
     }
 
     /**

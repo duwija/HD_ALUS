@@ -160,6 +160,8 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
     Route::delete('/tenants/{id}/users/{userId}', [TenantManagementController::class, 'destroyTenantUser'])->name('admin.tenants.users.destroy');
     Route::post('/tenants/{id}/users/{userId}/reset-password', [TenantManagementController::class, 'resetTenantUserPassword'])->name('admin.tenants.users.reset-password');
     Route::get('/tenants/{id}/transactions', [TenantManagementController::class, 'transactions'])->name('admin.tenants.transactions');
+    Route::get('/tenants/{id}/routers', [TenantManagementController::class, 'routers'])->name('admin.tenants.routers');
+    Route::get('/tenants/{id}/routers/{routerId}/info', [TenantManagementController::class, 'routerInfo'])->name('admin.tenants.routers.info');
     Route::post('/tenants/{id}/transactions/data', [TenantManagementController::class, 'transactionsData'])->name('admin.tenants.transactions.data');
     Route::delete('/tenants/{id}', [TenantManagementController::class, 'destroy'])->name('admin.tenants.destroy');
     Route::post('/tenants/{id}/toggle', [TenantManagementController::class, 'toggleStatus'])->name('admin.tenants.toggle');
@@ -530,6 +532,7 @@ Route::get('/suminvoice/{id}','SuminvoiceController@show');
 Route::get('/testwa','SuminvoiceController@testwa');
 
 Route::get('/suminvoice/{id}/print','SuminvoiceController@print');
+Route::get('/suminvoice/{id}/pdf','SuminvoiceController@downloadPdf');
 
 
 Route::get('/suminvoice/{id}/viewinvoice','SuminvoiceController@print');

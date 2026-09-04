@@ -8,6 +8,9 @@ use App\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Crypt;
+use \RouterOS\Client;
+use \RouterOS\Query;
 
 class TenantManagementController extends Controller
 {
@@ -1746,6 +1749,147 @@ class TenantManagementController extends Controller
             'kasbank' => $kasbank,
             'users' => $users
         ]);
+    }
+
+    /**
+     * Distribution router status for a tenant (mirrors the "Distribution Routers"
+     * widget on the tenant's own admin dashboard summary).
+     */
+    public function routers($id)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        // Configure tenant database connection
+        \Config::set('database.connections.tenant_temp', [
+            'driver' => 'mysql',
+            'host' => $tenant->db_host ?? '127.0.0.1',
+            'port' => $tenant->db_port ?? '3306',
+            'database' => $tenant->db_database,
+            'username' => $tenant->db_username,
+            'password' => $tenant->db_password,
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => false,
+        ]);
+
+        try {
+            $distrouterList = \DB::connection('tenant_temp')->table('distrouters')
+                ->whereNull('deleted_at')->orderBy('name')->get();
+
+            // id_status: 2=Active/Online, 3=Inactive/Offline, 4=Block/Disable
+            $distrouterStats = \DB::connection('tenant_temp')->table('customers')
+                ->whereNull('customers.deleted_at')
+                ->whereNotNull('id_distrouter')
+                ->selectRaw('id_distrouter,
+                    SUM(CASE WHEN id_status = 2 THEN 1 ELSE 0 END) as online,
+                    SUM(CASE WHEN id_status = 3 THEN 1 ELSE 0 END) as offline,
+                    SUM(CASE WHEN id_status = 4 THEN 1 ELSE 0 END) as disabled')
+                ->groupBy('id_distrouter')
+                ->get()
+                ->keyBy('id_distrouter');
+
+            $error = null;
+        } catch (\Exception $e) {
+            $distrouterList = collect();
+            $distrouterStats = collect();
+            $error = $e->getMessage();
+        }
+
+        // Purge temporary connection
+        \DB::purge('tenant_temp');
+
+        return view('tenants.routers', compact('tenant', 'distrouterList', 'distrouterStats', 'error'));
+    }
+
+    /**
+     * Live PPPoE status for a single distribution router (AJAX), fetched directly
+     * from the MikroTik API — same source and fields as DistrouterController::getRouterInfo()
+     * on the tenant's own dashboard (/distrouter/getrouterinfo/{id}).
+     */
+    public function routerInfo($id, $routerId)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        \Config::set('database.connections.tenant_temp', [
+            'driver' => 'mysql',
+            'host' => $tenant->db_host ?? '127.0.0.1',
+            'port' => $tenant->db_port ?? '3306',
+            'database' => $tenant->db_database,
+            'username' => $tenant->db_username,
+            'password' => $tenant->db_password,
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => false,
+        ]);
+
+        $router = \DB::connection('tenant_temp')->table('distrouters')
+            ->where('id', $routerId)->whereNull('deleted_at')->first();
+
+        \DB::purge('tenant_temp');
+
+        if (!$router) {
+            return response()->json(['success' => false, 'message' => 'Router tidak ditemukan'], 404);
+        }
+
+        // Password column uses Laravel's 'encrypted' cast on the Distrouter model —
+        // decrypt with a raw-value fallback for any not-yet-migrated legacy rows.
+        $password = $router->password;
+        try {
+            $password = Crypt::decryptString($router->password);
+        } catch (\Exception $e) {
+            // keep raw value
+        }
+
+        try {
+            $client = new Client([
+                'host' => $router->ip,
+                'user' => $router->user,
+                'pass' => $password,
+                'port' => $router->port,
+                'timeout' => 5,
+            ]);
+
+            $onlineUsers = [];
+            $pppActiveCount = 0;
+            try {
+                $pppActive = $client->query(new Query('/ppp/active/print'))->read();
+                $onlineUsers = collect($pppActive)->pluck('name')->toArray();
+                $pppActiveCount = count($pppActive);
+            } catch (\Exception $e) {
+                \Log::warning("Gagal ambil ppp active (tenant {$tenant->id}, router {$router->id}): " . $e->getMessage());
+            }
+
+            $pppOfflineCount = 0;
+            $pppDisabledCount = 0;
+            try {
+                $pppUsers = $client->query(new Query('/ppp/secret/print'))->read();
+                foreach ($pppUsers as $user) {
+                    if (isset($user['disabled']) && $user['disabled'] == 'true') {
+                        $pppDisabledCount++;
+                    } elseif (!in_array($user['name'], $onlineUsers)) {
+                        $pppOfflineCount++;
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning("Gagal ambil ppp secret (tenant {$tenant->id}, router {$router->id}): " . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'pppActiveCount' => $pppActiveCount,
+                'pppOfflineCount' => $pppOfflineCount,
+                'pppDisabledCount' => $pppDisabledCount,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error("MikroTik API Error (tenant {$tenant->id}, router {$router->id}): " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Router tidak bisa diakses',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

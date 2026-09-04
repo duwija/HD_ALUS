@@ -176,8 +176,8 @@ class SuminvoiceController extends Controller
    public function __construct()
    {
         //$this->middleware('auth');
-    $this->middleware('auth', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]); 
-    $this->middleware('checkPrivilege:admin,accounting,payment,noc,marketing,merchant', ['except' => ['print', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]);
+    $this->middleware('auth', ['except' => ['print', 'downloadPdf', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]);
+    $this->middleware('checkPrivilege:admin,accounting,payment,noc,marketing,merchant', ['except' => ['print', 'downloadPdf', 'notifinvJob', 'tripay','createWinpayVA','deleteWinpayVA','findWinpayVA','createDuitkuVA','resetDuitkuVA','createBundlePayment','resetPaymentPending','cancelBundle']]);
 }
 
     /**
@@ -3240,9 +3240,80 @@ else
             ->mapWithKeys(fn($gw) => [$gw->provider . '_enabled' => (int) $gw->enabled])
             ->all();
 
-        return view ('suminvoice/print',['invoice' =>$invoice, 'suminvoice_amountdue'=>$suminvoice_amountdue, 'customer'=>$customer, 'bank'=>$bank, 'suminvoice_number' => $suminvoice_number, 'current_inv_status' => $current_inv_status, 'encryptedurl'=>$encryptedurl, 'result'=>$result,'resultwinpay'=>$resultwinpay, 'merchants'=>$merchants, 'companyAddress1'=>$companyAddress1, 'companyAddress2'=>$companyAddress2, 'companyName' => $companyName, 'signature' =>$signature, 'invNote'=>$invNote, 'paymentConfig'=>$paymentConfig, 'gateways'=>$gateways]);   
+        return view ('suminvoice/print',['invoice' =>$invoice, 'suminvoice_amountdue'=>$suminvoice_amountdue, 'customer'=>$customer, 'bank'=>$bank, 'suminvoice_number' => $suminvoice_number, 'current_inv_status' => $current_inv_status, 'encryptedurl'=>$encryptedurl, 'result'=>$result,'resultwinpay'=>$resultwinpay, 'merchants'=>$merchants, 'companyAddress1'=>$companyAddress1, 'companyAddress2'=>$companyAddress2, 'companyName' => $companyName, 'signature' =>$signature, 'invNote'=>$invNote, 'paymentConfig'=>$paymentConfig, 'gateways'=>$gateways]);
     }
 }
+
+    /**
+     * Download halaman invoice sebagai PDF bersih (server-side via DomPDF),
+     * tanpa header/footer URL bawaan browser dan tanpa tombol/panel pembayaran
+     * interaktif dari halaman print yang memang hanya relevan di layar.
+     */
+    public function downloadPdf($id)
+    {
+        $companyName = config('app.name', 'INTERNET SERVICE PROVIDER');
+        $companyAddress1 = tenant_config('company_address1', env('COMPANY_ADDRESS1'));
+        $companyAddress2 = tenant_config('company_address2', env('COMPANY_ADDRESS2'));
+        $signature = config('app.signature') ?? '';
+        $invNote = tenant_config('inv_note', env('INV_NOTE')) ?? '';
+
+        $current_inv_status = 0;
+        $invoice = \App\Invoice::where('tempcode', $id)->whereIn('payment_status', [3, 5])->get();
+        if (empty($invoice[0])) {
+            return abort(404);
+        }
+
+        $invoice_code = \App\Invoice::where('tempcode', $id)->first();
+        $suminvoice_number = \App\Suminvoice::where('tempcode', $id)->first();
+        $customer = \App\Customer::where('customers.id', $invoice_code->id_customer)
+            ->Join('statuscustomers', 'customers.id_status', '=', 'statuscustomers.id')
+            ->Join('plans', 'customers.id_plan', '=', 'plans.id')
+            ->select('customers.*', 'statuscustomers.name as status_name', 'plans.name as plan_name', 'plans.price as plan_price')
+            ->withTrashed()
+            ->first();
+        $encryptedurl = Crypt::encryptString($invoice_code->id_customer);
+
+        $active_invoice = \App\Suminvoice::where('payment_status', '=', '0')
+            ->where('id_customer', '=', $invoice_code->id_customer)
+            ->count();
+        if ($active_invoice > 1) {
+            $last_active_invoice = \App\Suminvoice::where('payment_status', '=', '0')
+                ->where('id_customer', '=', $invoice_code->id_customer)
+                ->orderBy('date', 'asc')->first();
+            $current_inv_status = ($id == $last_active_invoice->tempcode) ? 0 : 1;
+        }
+
+        // DomPDF tidak bisa fetch gambar remote (CDN/URL) secara default,
+        // jadi logo & QR code harus di-embed sebagai base64 dari file lokal.
+        $rescode = tenant_rescode();
+        $tenantInvoiceLogo = $rescode ? public_path("tenants/{$rescode}/img/logoinv.png") : null;
+        $logoPath = ($tenantInvoiceLogo && file_exists($tenantInvoiceLogo))
+            ? $tenantInvoiceLogo
+            : public_path('dashboard/dist/img/logoinv.png');
+        $logoBase64 = file_exists($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
+
+        $qrcode = base64_encode(
+            \QrCode::format('png')->size(150)->generate(url('suminvoice/' . $suminvoice_number->tempcode . '/viewinvoice'))
+        );
+
+        $pdf = \PDF::loadView('suminvoice.invoice_pdf', [
+            'invoice' => $invoice,
+            'customer' => $customer,
+            'suminvoice_number' => $suminvoice_number,
+            'current_inv_status' => $current_inv_status,
+            'encryptedurl' => $encryptedurl,
+            'companyName' => $companyName,
+            'companyAddress1' => $companyAddress1,
+            'companyAddress2' => $companyAddress2,
+            'signature' => $signature,
+            'invNote' => $invNote,
+            'qrcode' => $qrcode,
+            'logoBase64' => $logoBase64,
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download('Invoice_' . $suminvoice_number->number . '.pdf');
+    }
+
 public function dotmatrix($id)
 {
     $bank = \App\Bank::pluck('name', 'id');

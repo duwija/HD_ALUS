@@ -19,6 +19,9 @@
                         <a href="{{ route('admin.tenants.transactions', $tenant->id) }}" class="btn btn-warning btn-sm" title="Transactions">
                             <i class="fas fa-money-bill-wave"></i> <span class="d-none d-lg-inline">Transactions</span>
                         </a>
+                        <a href="{{ route('admin.tenants.routers', $tenant->id) }}" class="btn btn-outline-info btn-sm" title="Router">
+                            <i class="fas fa-project-diagram"></i> <span class="d-none d-lg-inline">Router</span>
+                        </a>
                         <a href="{{ route('admin.tenants.backups', $tenant->id) }}" class="btn btn-primary btn-sm" title="Backups">
                             <i class="fas fa-folder-open"></i> <span class="d-none d-lg-inline">Backups</span>
                         </a>

@@ -119,6 +119,49 @@ class CustomerApiController extends Controller
     }
 
     // ------------------------------------------------------------------
+    // PUBLIC: Activate (set password pertama kali via email + phone)
+    // ------------------------------------------------------------------
+
+    /**
+     * POST /api/customer/activate
+     * Body: { email, phone, password, password_confirmation }
+     * Set portal_password untuk SEMUA customer dengan email ini (akun keluarga),
+     * asalkan phone juga cocok — mirror dari CustomerAuthController::activate()
+     * (versi web), cuma responnya JSON.
+     */
+    public function activate(Request $request)
+    {
+        $request->validate([
+            'email'    => 'required|email',
+            'phone'    => 'required',
+            'password' => 'required|min:6|confirmed',
+        ]);
+
+        $phoneVariants = Customer::phoneVariants((string) $request->phone);
+        if (empty($phoneVariants)) {
+            return $this->errorResponse('Format nomor telepon tidak valid.', 422);
+        }
+
+        $customers = Customer::where('email', $request->email)
+            ->whereIn('phone', $phoneVariants)
+            ->get();
+
+        if ($customers->isEmpty()) {
+            return $this->errorResponse('Data tidak ditemukan. Periksa kembali email dan nomor telepon Anda.', 404);
+        }
+
+        foreach ($customers as $customer) {
+            $customer->update([
+                'portal_password' => Hash::make($request->password),
+            ]);
+        }
+
+        Log::channel('notif')->info('[CustomerAPI] Activate: ' . $request->email);
+
+        return $this->successResponse(['message' => 'Akun berhasil diaktifkan. Silakan login.']);
+    }
+
+    // ------------------------------------------------------------------
     // PROTECTED: Register FCM token
     // ------------------------------------------------------------------
 
