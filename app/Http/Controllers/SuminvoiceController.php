@@ -3963,7 +3963,11 @@ public function send_reminder_inv(Request $request, $id)
                 $suminvoice->total_amount,
                 $encryptedurl,
                 $message,
-                $suminvoice->payment_status == 1 ? 'WA_TAMPLATE_ID_3' : 'WA_TAMPLATE_ID_1'
+                $suminvoice->payment_status == 1 ? 'WA_TAMPLATE_ID_3' : 'WA_TAMPLATE_ID_1',
+                [
+                    'due_date' => $duedate,
+                    'billing_month' => $formattedDate,
+                ]
             );
 
             if (isset($msgresult['status']) && $msgresult['status'] === 'success') {

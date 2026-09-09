@@ -195,7 +195,7 @@ class CreateInvJob implements ShouldQueue
                     // WhatsApp Notification
                     // Prioritaskan Qontak jika ACCESS_TOKEN + WA_CHANNEL_INTEGRATION_ID + template lengkap,
                     // jika tidak fallback ke WA gateway.
-                    $waProvider = \App\Services\WaService::hasQontakConfig('WA_TAMPLATE_ID_1') ? 'qontak' : 'gateway';
+                    $waProvider = \App\Services\WaService::hasQontakConfig('WA_TAMPLATE_ID_2') ? 'qontak' : 'gateway';
 
                     if ($waProvider === 'qontak') {
                         // Use Qontak WhatsApp API
@@ -205,7 +205,9 @@ class CreateInvJob implements ShouldQueue
                             $customer->customer_id,
                             $total_amount,
                             $duedate,
-                            "/invoice/cst/" . $encryptedUrl
+                            "/invoice/cst/" . $encryptedUrl,
+                            (string) $latest_number,
+                            Carbon::parse($this->inv_date)->translatedFormat('F Y')
                         );
                     } else {
                         // Titiwa/WAHub (WA_TAMPLATE_ID_2) jika dikonfigurasi, fallback ke WA Gateway biasa

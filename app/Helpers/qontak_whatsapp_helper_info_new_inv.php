@@ -4,7 +4,7 @@ use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Log;
 
 if (!function_exists('qontak_whatsapp_helper_info_new_inv')) {
-    function qontak_whatsapp_helper_info_new_inv($phone, $name, $customer_id, $amount, $due_date, $url)
+    function qontak_whatsapp_helper_info_new_inv($phone, $name, $customer_id, $amount, $due_date, $url, $invoice_no = '-', $billing_month = '-')
     {
         if (env('WAPISENDER_STATUS') !== "disable") {
             try {
@@ -34,8 +34,10 @@ if (!function_exists('qontak_whatsapp_helper_info_new_inv')) {
                         "body" => [
                             ["key" => "1", "value" => "name", "value_text" => $name],
                             ["key" => "2", "value" => "customer_id", "value_text" => $customer_id],
-                            ["key" => "3", "value" => "amount", "value_text" => number_format($amount, 0, ',', '.')],
-                            ["key" => "4", "value" => "due_date", "value_text" => $due_date],
+                            ["key" => "3", "value" => "invoice_no", "value_text" => (string) $invoice_no],
+                            ["key" => "4", "value" => "amount", "value_text" => number_format($amount, 0, ',', '.')],
+                            ["key" => "5", "value" => "billing_month", "value_text" => (string) $billing_month],
+                            ["key" => "6", "value" => "due_date", "value_text" => $due_date],
 
                         ],
                         "buttons" => [

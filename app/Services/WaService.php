@@ -162,7 +162,9 @@ class WaService
                     $invoiceNo,
                     $cid,
                     (string) $amount,
-                    $openUrl
+                    $openUrl,
+                    $templateKey,
+                    $context
                 );
 
                 $status = (is_string($result) && stripos($result, 'error') === false && $result !== '')
@@ -370,14 +372,16 @@ class WaService
         string $invoiceNo,
         string $cid,
         string $amount,
-        string $openUrl
+        string $openUrl,
+        string $templateKey = 'WA_TAMPLATE_ID_3',
+        array $context = []
     ): string
     {
         $hp         = static::formatPhone($phone);
         $apiUrl     = static::getQontakApiUrl();
         $token      = static::getQontakToken();
         $channelId  = static::getQontakChannelId();
-        $templateId = static::getQontakTemplateId('WA_TAMPLATE_ID_3');
+        $templateId = static::getQontakTemplateId($templateKey);
 
         if (empty($token) || empty($templateId) || empty($channelId)) {
             Log::channel('notif')->warning('[WA:qontak] Konfigurasi payment confirmation tidak lengkap (token/template/channel kosong).');
@@ -386,13 +390,19 @@ class WaService
 
         $buttonPath = ltrim($openUrl, '/');
 
-        $payload = [
-            'to_number'              => $hp,
-            'to_name'                => $name,
-            'message_template_id'    => $templateId,
-            'channel_integration_id' => $channelId,
-            'language'               => ['code' => 'id'],
-            'parameters'             => [
+        // WA_TAMPLATE_ID_1 (reminder belum bayar) butuh 6 variabel body — beda struktur
+        // dari WA_TAMPLATE_ID_3 (konfirmasi lunas) yang cuma 4. Reuse builder yang sama
+        // dengan alur reminder terjadwal (buildQontakReminderParameters) agar konsisten.
+        if ($templateKey === 'WA_TAMPLATE_ID_1') {
+            $parameters = static::buildQontakReminderParameters(
+                $templateKey,
+                $name,
+                $cid,
+                $openUrl,
+                array_merge(['invoice_no' => $invoiceNo, 'amount' => $amount], $context)
+            );
+        } else {
+            $parameters = [
                 'body' => [
                     ['key' => '1', 'value' => 'name', 'value_text' => $name],
                     ['key' => '2', 'value' => 'inv_no', 'value_text' => $invoiceNo],
@@ -402,7 +412,16 @@ class WaService
                 'buttons' => [
                     ['index' => '0', 'type' => 'url', 'value' => $buttonPath],
                 ],
-            ],
+            ];
+        }
+
+        $payload = [
+            'to_number'              => $hp,
+            'to_name'                => $name,
+            'message_template_id'    => $templateId,
+            'channel_integration_id' => $channelId,
+            'language'               => ['code' => 'id'],
+            'parameters'             => $parameters,
         ];
 
         $response = Http::withHeaders([
