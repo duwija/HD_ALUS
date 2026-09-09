@@ -45,20 +45,33 @@ class TenantAwareStreamHandler extends AbstractProcessingHandler
     {
         $tenantId = $this->resolveTenantId();
 
-        if (!isset($this->handlers[$tenantId])) {
-            $logPath = storage_path("logs/tenant_{$tenantId}/laravel.log");
-            $logDir = dirname($logPath);
-            if (!file_exists($logDir)) {
-                mkdir($logDir, 0755, true);
+        // A log write must never fail the request it's logging (e.g. the tenant's
+        // log file getting left root-owned by an ad-hoc root shell command, which
+        // makes fopen() throw and previously turned every Log:: call for that
+        // tenant into an uncaught 500 for the rest of the day).
+        try {
+            if (!isset($this->handlers[$tenantId])) {
+                $logPath = storage_path("logs/tenant_{$tenantId}/laravel.log");
+                $logDir = dirname($logPath);
+                if (!file_exists($logDir)) {
+                    mkdir($logDir, 0755, true);
+                }
+                // RotatingFileHandler writes to a dated file (laravel-YYYY-MM-DD.log) and
+                // prunes files beyond maxFiles on rotation, same as config/logging.php's
+                // 'daily' driver channels — plain StreamHandler never rotated or pruned,
+                // so this file grew unbounded (tens of MB per tenant) forever.
+                $this->handlers[$tenantId] = new RotatingFileHandler($logPath, 7, Logger::DEBUG);
             }
-            // RotatingFileHandler writes to a dated file (laravel-YYYY-MM-DD.log) and
-            // prunes files beyond maxFiles on rotation, same as config/logging.php's
-            // 'daily' driver channels — plain StreamHandler never rotated or pruned,
-            // so this file grew unbounded (tens of MB per tenant) forever.
-            $this->handlers[$tenantId] = new RotatingFileHandler($logPath, 7, Logger::DEBUG);
-        }
 
-        $this->handlers[$tenantId]->handle($record);
+            $this->handlers[$tenantId]->handle($record);
+        } catch (\Throwable $e) {
+            error_log(sprintf(
+                '[tenant-log-failed] tenant=%s reason=%s original_message=%s',
+                $tenantId,
+                $e->getMessage(),
+                $record['message'] ?? ''
+            ));
+        }
     }
 
     /**
