@@ -29,6 +29,12 @@ class OltController extends Controller
 
     private $baseIndex = 268501248;
 
+    // Cache hasil walk per request untuk safeSnmpGet(): oid => nilai mentah, dan
+    // subtree yang sudah di-walk utuh (OID di bawahnya yang tidak ada di cache
+    // dianggap memang tidak ada, jadi tidak perlu GET ulang ke OLT).
+    private $snmpPrefetch = [];
+    private $snmpPrefetchPrefixes = [];
+
     // Slot gaps
     private $slotGaps = [
         1 => 0,
@@ -783,6 +789,19 @@ class OltController extends Controller
                 }
             }
 
+        // Ambil status semua ONU ZTE dalam satu walk, keyed by tail "{index}.{onuId}".
+        // GET satu per satu untuk ~900 ONU butuh 90-160 detik dan selalu melewati
+        // timeout nginx 60 detik; satu walk cukup ~10 detik. GET per ONU tetap
+        // dipakai sebagai fallback kalau walk gagal atau ONU tidak ada di hasil walk.
+            $statusByTail = [];
+            if (!$isHSGQ && !empty($onuStatus)) {
+                $statusRaw = @$snmp->walk($onuStatus) ?: [];
+                foreach ($statusRaw as $k => $v) {
+                    $p = explode('.', $k);
+                    $statusByTail[implode('.', array_slice($p, -2))] = $v;
+                }
+            }
+
         // Proses status masing-masing ONU
             foreach ($onuNameValue as $key => $onuNameEntry) {
                 $components = explode('.', $key);
@@ -879,13 +898,13 @@ class OltController extends Controller
                     
                     // Build OID for status check (branch .500 uses encoded index)
                     $oid = $onuStatus . '.' . $encodedIndex . '.' . $onuId;
-                    $statusValue = $snmp->get($oid);
+                    $statusValue = $statusByTail[$encodedIndex . '.' . $onuId] ?? $snmp->get($oid);
                 } else {
                     // C300/C320: use last 2 components
                     $lastTwo = array_slice($components, -2);
                     $result = implode('.', $lastTwo);
                     $oid = $onuStatus . '.' . $result;
-                    $statusValue = $snmp->get($oid);
+                    $statusValue = $statusByTail[$result] ?? $snmp->get($oid);
                     
                     $pon_int = array_search($lastTwo[0], $frameslotportid);
                     $pon_int = $pon_int !== false ? $pon_int : 'unknown';
@@ -4936,6 +4955,62 @@ public function getOltPon($id)
                                                 $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
                                                 $result = $snmp->walk($oidOnuName);
 
+                                                // ZTE C300/C320: ambil kolom detail ONU untuk satu PON sekaligus lewat walk.
+                                                // Sebelumnya ~11 GET per ONU; di link yang lossy tiap paket hilang memakan
+                                                // timeout 1 detik, sehingga PON 100 ONU butuh ~190 detik dan selalu 504.
+                                                // Kolom yang walk-nya gagal tetap lewat GET.
+                                                if (!$isHSGQ && !$isC600Series && $oltPonIndex !== null && $oltPonIndex !== '') {
+                                                    // Timeout 1 detik, 2 retry: sebagian firmware sama sekali tidak menjawab
+                                                    // walk di tabel optik, jadi kegagalan harus murah (~3 detik).
+                                                    $prefetchSnmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro, 1000000, 2);
+                                                    $prefetchSnmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+                                                    foreach (['oidOnuStatus', 'oidOnuDistance', 'oidOnuModel', 'oidOnuSn', 'oidOnuName',
+                                                              'oidOnuLastOffline', 'oidOnuLastOnline', 'oidOnuUptime',
+                                                              'oidOnuRxPower', 'oidOnuTxPower'] as $prefetchCol) {
+                                                        if (empty($zteoid[$prefetchCol])) {
+                                                            continue;
+                                                        }
+                                                        $prefix = $zteoid[$prefetchCol] . '.' . $oltPonIndex;
+                                                        $walked = @$prefetchSnmp->walk($prefix);
+                                                        if (is_array($walked)) {
+                                                            $this->snmpPrefetch += $walked;
+                                                            $this->snmpPrefetchPrefixes[] = $prefix;
+                                                        } elseif ($prefetchCol === 'oidOnuRxPower') {
+                                                            // Tabel TX ada di tabel optik yang sama; kalau RX tidak bisa di-walk, TX juga tidak.
+                                                            break;
+                                                        }
+                                                    }
+                                                    $prefetchSnmp->close();
+
+                                                    // Fallback optik untuk firmware yang tidak bisa di-walk: OLT membaca tiap nilai
+                                                    // secara live (~0,15-0,3 detik) dan sering menjawab >1 detik, sehingga timeout
+                                                    // default memicu kirim ulang. RX+TX dalam satu paket per ONU dengan timeout
+                                                    // 3 detik ~3x lebih cepat. Hanya ONU "working" yang dibaca, sesuai loop di bawah.
+                                                    $rxPrefix = $zteoid['oidOnuRxPower'] . '.' . $oltPonIndex;
+                                                    $statusPrefix = $zteoid['oidOnuStatus'] . '.' . $oltPonIndex;
+                                                    if (!in_array($rxPrefix, $this->snmpPrefetchPrefixes, true)
+                                                        && in_array($statusPrefix, $this->snmpPrefetchPrefixes, true)
+                                                        && !empty($zteoid['oidOnuTxPower'])) {
+                                                        $opticalSnmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro, 3000000, 1);
+                                                        $opticalSnmp->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
+                                                        foreach ($this->snmpPrefetch as $statusOid => $statusRaw) {
+                                                            if (!str_starts_with($statusOid, $statusPrefix . '.')
+                                                                || ($ontStatuses[$statusRaw] ?? null) !== 'working') {
+                                                                continue;
+                                                            }
+                                                            $onuIdForOptical = substr($statusOid, strlen($statusPrefix) + 1);
+                                                            $optical = @$opticalSnmp->get([
+                                                                $rxPrefix . '.' . $onuIdForOptical . '.1',
+                                                                $zteoid['oidOnuTxPower'] . '.' . $oltPonIndex . '.' . $onuIdForOptical . '.1',
+                                                            ]);
+                                                            if (is_array($optical)) {
+                                                                $this->snmpPrefetch += $optical;
+                                                            }
+                                                        }
+                                                        $opticalSnmp->close();
+                                                    }
+                                                }
+
                                                 $hsgqUsingLegacyOnuSource = false;
                                                 if ($isHSGQ) {
                                                     $hasParsedOnu = false;
@@ -5656,6 +5731,15 @@ public function getOltPon($id)
 
                             private function safeSnmpGet($snmp, $oid)
                             {
+                                if (array_key_exists($oid, $this->snmpPrefetch)) {
+                                    $value = $this->snmpPrefetch[$oid];
+                                    return ($value === false || str_contains((string) $value, 'No Such Instance')) ? null : $value;
+                                }
+                                foreach ($this->snmpPrefetchPrefixes as $prefix) {
+                                    if (str_starts_with((string) $oid, $prefix . '.')) {
+                                        return null;
+                                    }
+                                }
                                 try {
                                     $value = @$snmp->get($oid);
                                     if ($value === false || str_contains($value, 'No Such Instance')) {
