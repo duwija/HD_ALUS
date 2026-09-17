@@ -2710,7 +2710,11 @@ if($customers->notification == 1)
      $sumamount,
      '/invoice/cst/' . $encryptedurl,
      $message,
-     'WA_TAMPLATE_ID_1'
+     'WA_TAMPLATE_ID_1',
+     [
+         'due_date' => $request->due_date,
+         'billing_month' => Carbon::parse($request->invoice_date)->translatedFormat('F Y'),
+     ]
  );
 
 } elseif ($customers->notification == 2) {
