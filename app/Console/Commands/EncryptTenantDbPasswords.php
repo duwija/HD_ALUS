@@ -64,7 +64,22 @@ class EncryptTenantDbPasswords extends Command
             backed_up_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )");
 
-        $rows = $db->table('tenants')->select('id', 'domain', 'db_password')->get();
+        // Backup table versi awal dibuat VARCHAR(191) — terlalu pendek untuk menyimpan
+        // nilai kolom sumber yang kini VARCHAR(255), sehingga backup ikut terpotong dan
+        // rollback jadi tidak berguna. Samakan lebarnya (idempotent).
+        $backupCol = $db->selectOne("SHOW COLUMNS FROM tenants_db_password_backup WHERE Field = 'db_password'");
+        if ($backupCol && stripos($backupCol->Type, 'varchar(255)') === false) {
+            $db->statement('ALTER TABLE tenants_db_password_backup MODIFY db_password VARCHAR(255) NOT NULL');
+            $this->info('Kolom backup db_password diperbesar ke VARCHAR(255).');
+        }
+
+        // Lewati baris yang sudah soft-deleted. Query mentah ini tidak kena global scope
+        // SoftDeletes seperti Eloquent, jadi tanpa filter ini tenant mati ikut diproses —
+        // dan kalau nilainya sudah rusak, command berhenti sebelum menyentuh tenant hidup.
+        $rows = $db->table('tenants')
+            ->whereNull('deleted_at')
+            ->select('id', 'domain', 'db_password')
+            ->get();
 
         $alreadyDone = 0;
         $encrypted   = 0;
