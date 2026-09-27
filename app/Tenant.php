@@ -38,6 +38,7 @@ class Tenant extends Model
         'whatsapp_token',
         'xendit_key',
         'features',
+        'reported_merchant_ids',
         'env_variables',
         'payment_bumdes_enabled',
         'payment_winpay_enabled',
@@ -56,6 +57,7 @@ class Tenant extends Model
      */
     protected $casts = [
         'features' => 'array',
+        'reported_merchant_ids' => 'array',
         'env_variables' => 'array',
         'payment_bumdes_enabled' => 'integer',
         'payment_winpay_enabled' => 'integer',
@@ -259,6 +261,15 @@ class Tenant extends Model
         }
         $sisa = max(0, $this->licensePlan->max_customers - $activeCount);
         return number_format($sisa) . ' / ' . number_format($this->licensePlan->max_customers);
+    }
+
+    /**
+     * Whether this tenant has a merchant reporting scope configured
+     * (used to restrict supervisor accounts to specific merchants).
+     */
+    public function hasMerchantFilter(): bool
+    {
+        return !empty($this->reported_merchant_ids);
     }
 
     /**

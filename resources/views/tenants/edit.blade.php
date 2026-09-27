@@ -238,6 +238,38 @@
                         <div class="row mt-4">
                             <div class="col-md-12">
                                 <h5 class="border-bottom pb-2 mb-3">
+                                    <i class="fas fa-store"></i> Merchant untuk Supervisor
+                                    <small class="text-muted">(cakupan data yang dilihat akun supervisor)</small>
+                                </h5>
+                                <p class="text-muted small">
+                                    Pilih merchant yang datanya boleh dilihat oleh akun <strong>Supervisor</strong> yang di-assign ke tenant ini
+                                    (Customer &amp; Transaksi/Invoice akan difilter hanya untuk merchant yang dipilih).
+                                    Tidak mempengaruhi akses Super Admin. Kosongkan semua jika belum ingin membatasi (supervisor tidak akan melihat data apapun sampai ada merchant yang dipilih).
+                                </p>
+                                @php
+                                    $selectedMerchantIds = old('reported_merchant_ids', $tenant->reported_merchant_ids ?? []);
+                                @endphp
+                                <div class="border rounded p-3" style="max-height: 220px; overflow-y: auto;">
+                                    @forelse ($tenantMerchants as $m)
+                                        <div class="custom-control custom-checkbox">
+                                            <input type="checkbox"
+                                                   class="custom-control-input"
+                                                   id="reported_merchant_{{ $m->id }}"
+                                                   name="reported_merchant_ids[]"
+                                                   value="{{ $m->id }}"
+                                                   {{ in_array($m->id, $selectedMerchantIds) ? 'checked' : '' }}>
+                                            <label class="custom-control-label" for="reported_merchant_{{ $m->id }}">{{ $m->name }}</label>
+                                        </div>
+                                    @empty
+                                        <span class="text-muted">Tenant ini belum memiliki data merchant, atau koneksi ke database tenant gagal.</span>
+                                    @endforelse
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mt-4">
+                            <div class="col-md-12">
+                                <h5 class="border-bottom pb-2 mb-3">
                                     <i class="fas fa-cogs"></i> Custom Environment Variables
                                     <small class="text-muted">(Override global .env per tenant)</small>
                                 </h5>

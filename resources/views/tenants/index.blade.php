@@ -9,11 +9,13 @@
                     <h3 class="mb-0">
                         <i class="fas fa-building"></i> Tenant Management
                     </h3>
+                    @unless(auth('admin')->user()->isSupervisor())
                     <div>
                         <a href="{{ route('admin.tenants.create') }}" class="btn btn-primary">
                             <i class="fas fa-plus"></i> Tambah Tenant Baru
                         </a>
                     </div>
+                    @endunless
                 </div>
                 <div class="card-body">
                     @if(session('success'))
@@ -78,9 +80,16 @@
                                         @endif
                                     </td>
                                     <td class="text-center">
+                                        @if(auth('admin')->user()->isSupervisor())
+                                            @if($tenant->is_active)
+                                                <span class="badge badge-success"><i class="fas fa-check-circle"></i> Active</span>
+                                            @else
+                                                <span class="badge badge-secondary"><i class="fas fa-times-circle"></i> Inactive</span>
+                                            @endif
+                                        @else
                                         <form action="{{ route('admin.tenants.toggle', $tenant->id) }}" method="POST" style="display: inline;">
                                             @csrf
-                                            <button type="submit" class="btn btn-sm {{ $tenant->is_active ? 'btn-success' : 'btn-secondary' }}" 
+                                            <button type="submit" class="btn btn-sm {{ $tenant->is_active ? 'btn-success' : 'btn-secondary' }}"
                                                     onclick="return confirm('Toggle status tenant?')">
                                                 @if($tenant->is_active)
                                                     <i class="fas fa-check-circle"></i> Active
@@ -89,24 +98,37 @@
                                                 @endif
                                             </button>
                                         </form>
+                                        @endif
                                     </td>
                                     <td class="text-center">
+                                        @if(auth('admin')->user()->isSupervisor())
                                         <div class="btn-group" role="group">
-                                            <button type="button" 
-                                                    class="btn btn-sm btn-success" 
-                                                    onclick="backupDatabase({{ $tenant->id }}, '{{ $tenant->app_name }}')" 
+                                            <a href="{{ route('admin.tenants.customers', $tenant->id) }}"
+                                               class="btn btn-sm btn-info" title="Customers">
+                                                <i class="fas fa-users"></i>
+                                            </a>
+                                            <a href="{{ route('admin.tenants.transactions', $tenant->id) }}"
+                                               class="btn btn-sm btn-primary" title="Transactions">
+                                                <i class="fas fa-money-bill-wave"></i>
+                                            </a>
+                                        </div>
+                                        @else
+                                        <div class="btn-group" role="group">
+                                            <button type="button"
+                                                    class="btn btn-sm btn-success"
+                                                    onclick="backupDatabase({{ $tenant->id }}, '{{ $tenant->app_name }}')"
                                                     title="Backup Database">
                                                 <i class="fas fa-database"></i>
                                             </button>
-                                            <a href="{{ route('admin.tenants.show', $tenant->id) }}" 
+                                            <a href="{{ route('admin.tenants.show', $tenant->id) }}"
                                                class="btn btn-sm btn-info" title="View">
                                                 <i class="fas fa-eye"></i>
                                             </a>
-                                            <a href="{{ route('admin.tenants.edit', $tenant->id) }}" 
+                                            <a href="{{ route('admin.tenants.edit', $tenant->id) }}"
                                                class="btn btn-sm btn-warning" title="Edit">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <form action="{{ route('admin.tenants.destroy', $tenant->id) }}" 
+                                            <form action="{{ route('admin.tenants.destroy', $tenant->id) }}"
                                                   method="POST" style="display: inline;"
                                                   class="delete-form"
                                                   data-tenant-name="{{ $tenant->app_name }}">
@@ -117,6 +139,7 @@
                                                 </button>
                                             </form>
                                         </div>
+                                        @endif
                                     </td>
                                 </tr>
                                 @empty

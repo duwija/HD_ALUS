@@ -9,12 +9,29 @@
                     <h3 class="mb-0">
                         <i class="fas fa-money-bill-wave"></i> Transactions: {{ $tenant->app_name }}
                     </h3>
-                    <a href="{{ route('admin.tenants.show', $tenant->id) }}" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Kembali
-                    </a>
+                    <div>
+                        @if(auth('admin')->user()->isSupervisor())
+                            <a href="{{ route('admin.tenants.customers', $tenant->id) }}" class="btn btn-info">
+                                <i class="fas fa-users"></i> Customers
+                            </a>
+                            <a href="{{ route('admin.tenants.index') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Kembali
+                            </a>
+                        @else
+                            <a href="{{ route('admin.tenants.show', $tenant->id) }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Kembali
+                            </a>
+                        @endif
+                    </div>
                 </div>
 
                 <div class="card-body">
+                    @if(isset($merchantScope) && empty($merchantScope))
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Belum ada merchant yang di-set untuk dilaporkan pada tenant ini, sehingga belum ada data yang bisa ditampilkan. Hubungi Super Admin untuk mengatur cakupan merchant di halaman Edit Tenant.
+                        </div>
+                    @endif
                     <!-- Statistics Section -->
                     <div class="row mb-4">
                         <!-- Info Boxes -->
@@ -598,9 +615,21 @@ $(document).ready(function() {
                 return meta.row + meta.settings._iDisplayStart + 1;
             }},
             { data: 'invoice_date', defaultContent: '-' },
-            { data: 'invoice_no', defaultContent: '-' },
-            { data: 'customer_id', defaultContent: '-' },
-            { data: 'customer_name', defaultContent: '-' },
+            { data: 'invoice_no', defaultContent: '-', render: function(data, type, row) {
+                if (type !== 'display' || !data || !row.id_customer || !row.id) return data || '-';
+                var url = '{{ url("admin/tenants/" . $tenant->id . "/customers") }}/' + row.id_customer + '/invoices/' + row.id;
+                return '<a href="' + url + '">' + data + '</a>';
+            }},
+            { data: 'customer_id', defaultContent: '-', render: function(data, type, row) {
+                if (type !== 'display' || !data || !row.id_customer) return data || '-';
+                var url = '{{ url("admin/tenants/" . $tenant->id . "/customers") }}/' + row.id_customer;
+                return '<a href="' + url + '">' + data + '</a>';
+            }},
+            { data: 'customer_name', defaultContent: '-', render: function(data, type, row) {
+                if (type !== 'display' || !data || !row.id_customer) return data || '-';
+                var url = '{{ url("admin/tenants/" . $tenant->id . "/customers") }}/' + row.id_customer;
+                return '<a href="' + url + '">' + data + '</a>';
+            }},
             { data: 'merchant_name', defaultContent: '-' },
             { data: 'address', defaultContent: '-' },
             { data: 'note', defaultContent: '-' },

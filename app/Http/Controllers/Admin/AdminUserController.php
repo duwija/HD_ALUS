@@ -24,7 +24,8 @@ class AdminUserController extends Controller
      */
     public function create()
     {
-        return view('admin.users.create');
+        $tenants = \App\Tenant::orderBy('app_name')->get();
+        return view('admin.users.create', compact('tenants'));
     }
 
     /**
@@ -36,6 +37,9 @@ class AdminUserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:admin.admin_users,email',
             'password' => 'required|min:8|confirmed',
+            'role' => 'required|in:super_admin,supervisor',
+            'tenant_ids' => 'nullable|array',
+            'tenant_ids.*' => 'exists:isp_master.tenants,id',
         ], [
             'name.required' => 'Nama wajib diisi.',
             'name.max' => 'Nama maksimal 255 karakter.',
@@ -45,6 +49,7 @@ class AdminUserController extends Controller
             'password.required' => 'Password wajib diisi.',
             'password.min' => 'Password minimal 8 karakter.',
             'password.confirmed' => 'Konfirmasi password tidak cocok.',
+            'role.required' => 'Role wajib dipilih.',
         ]);
 
         if ($validator->fails()) {
@@ -54,12 +59,17 @@ class AdminUserController extends Controller
         }
 
         try {
-            AdminUser::create([
+            $admin = AdminUser::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
                 'is_active' => $request->has('is_active') ? 1 : 0,
+                'role' => $request->role,
             ]);
+
+            if ($request->role === AdminUser::ROLE_SUPERVISOR) {
+                $admin->syncAssignedTenants((array) $request->input('tenant_ids', []));
+            }
 
             return redirect()->route('admin.users.index')
                 ->with('success', 'Admin user berhasil dibuat!');
@@ -76,7 +86,9 @@ class AdminUserController extends Controller
     public function edit($id)
     {
         $admin = AdminUser::findOrFail($id);
-        return view('admin.users.edit', compact('admin'));
+        $tenants = \App\Tenant::orderBy('app_name')->get();
+        $assignedTenantIds = $admin->assignedTenantIds();
+        return view('admin.users.edit', compact('admin', 'tenants', 'assignedTenantIds'));
     }
 
     /**
@@ -90,6 +102,9 @@ class AdminUserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:admin.admin_users,email,' . $id,
             'password' => 'nullable|min:8|confirmed',
+            'role' => 'required|in:super_admin,supervisor',
+            'tenant_ids' => 'nullable|array',
+            'tenant_ids.*' => 'exists:isp_master.tenants,id',
         ], [
             'name.required' => 'Nama wajib diisi.',
             'name.max' => 'Nama maksimal 255 karakter.',
@@ -98,6 +113,7 @@ class AdminUserController extends Controller
             'email.unique' => 'Email sudah digunakan oleh admin lain.',
             'password.min' => 'Password minimal 8 karakter.',
             'password.confirmed' => 'Konfirmasi password tidak cocok.',
+            'role.required' => 'Role wajib dipilih.',
         ]);
 
         if ($validator->fails()) {
@@ -110,12 +126,19 @@ class AdminUserController extends Controller
             $admin->name = $request->name;
             $admin->email = $request->email;
             $admin->is_active = $request->has('is_active') ? 1 : 0;
+            $admin->role = $request->role;
 
             if ($request->filled('password')) {
                 $admin->password = Hash::make($request->password);
             }
 
             $admin->save();
+
+            if ($admin->role === AdminUser::ROLE_SUPERVISOR) {
+                $admin->syncAssignedTenants((array) $request->input('tenant_ids', []));
+            } else {
+                $admin->syncAssignedTenants([]);
+            }
 
             return redirect()->route('admin.users.index')
                 ->with('success', 'Admin user berhasil diupdate!');

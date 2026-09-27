@@ -76,7 +76,7 @@
 <body>
     <!-- Top Navbar -->
     <nav class="navbar navbar-dark fixed-top bg-dark flex-md-nowrap p-0 shadow">
-        <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="{{ route('admin.tenants.index') }}">
+        <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="{{ route('admin.dashboard') }}">
             <i class="fas fa-shield-alt"></i> Admin Panel
         </a>
         <ul class="navbar-nav px-3 ml-auto">
@@ -106,13 +106,23 @@
             <nav class="col-md-2 d-none d-md-block sidebar">
                 <div class="sidebar-sticky">
                     <ul class="nav flex-column">
+                        @unless(auth('admin')->user() && auth('admin')->user()->isSupervisor())
                         <li class="nav-item">
-                            <a class="nav-link {{ request()->routeIs('admin.tenants.*') ? 'active' : '' }}" 
+                            <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}"
+                               href="{{ route('admin.dashboard') }}">
+                                <i class="fas fa-chart-line"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        @endunless
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.tenants.*') ? 'active' : '' }}"
                                href="{{ route('admin.tenants.index') }}">
                                 <i class="fas fa-building"></i>
                                 Tenant Management
                             </a>
                         </li>
+                        @unless(auth('admin')->user() && auth('admin')->user()->isSupervisor())
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.license-plans.*') ? 'active' : '' }}"
                                href="{{ route('admin.license-plans.index') }}">
@@ -121,21 +131,21 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" 
+                            <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}"
                                href="{{ route('admin.users.index') }}">
                                 <i class="fas fa-users-cog"></i>
                                 Admin Users
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{ request()->routeIs('admin.logs.*') ? 'active' : '' }}" 
+                            <a class="nav-link {{ request()->routeIs('admin.logs.*') ? 'active' : '' }}"
                                href="{{ route('admin.logs.index') }}">
                                 <i class="fas fa-scroll"></i>
                                 Application Logs
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{ request()->routeIs('admin.github-sync*') ? 'active' : '' }}" 
+                            <a class="nav-link {{ request()->routeIs('admin.github-sync*') ? 'active' : '' }}"
                                href="{{ route('admin.github-sync') }}">
                                 <i class="fas fa-code-branch"></i>
                                 GitHub Sync
@@ -159,12 +169,13 @@
                             <hr class="bg-secondary my-3">
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{ request()->routeIs('admin.documentation') ? 'active' : '' }}" 
+                            <a class="nav-link {{ request()->routeIs('admin.documentation') ? 'active' : '' }}"
                                href="{{ route('admin.documentation') }}">
                                 <i class="fas fa-book"></i>
                                 Documentation
                             </a>
                         </li>
+                        @endunless
                     </ul>
                 </div>
             </nav>

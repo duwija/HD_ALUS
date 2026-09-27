@@ -9,12 +9,29 @@
                     <h3 class="mb-0">
                         <i class="fas fa-users"></i> Customers: {{ $tenant->app_name }}
                     </h3>
-                    <a href="{{ route('admin.tenants.show', $tenant->id) }}" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Kembali
-                    </a>
+                    <div>
+                        @if(auth('admin')->user()->isSupervisor())
+                            <a href="{{ route('admin.tenants.transactions', $tenant->id) }}" class="btn btn-primary">
+                                <i class="fas fa-money-bill-wave"></i> Transaksi
+                            </a>
+                            <a href="{{ route('admin.tenants.index') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Kembali
+                            </a>
+                        @else
+                            <a href="{{ route('admin.tenants.show', $tenant->id) }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Kembali
+                            </a>
+                        @endif
+                    </div>
                 </div>
 
                 <div class="card-body">
+                    @if(isset($merchantScope) && empty($merchantScope))
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Belum ada merchant yang di-set untuk dilaporkan pada tenant ini, sehingga belum ada data yang bisa ditampilkan. Hubungi Super Admin untuk mengatur cakupan merchant di halaman Edit Tenant.
+                        </div>
+                    @endif
                     <!-- Filters -->
                     <div class="row mb-4">
                         <div class="col-md-2">

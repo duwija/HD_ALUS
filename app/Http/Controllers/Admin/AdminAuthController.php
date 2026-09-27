@@ -12,9 +12,9 @@ class AdminAuthController extends Controller
     public function showLoginForm()
     {
         if (Auth::guard('admin')->check()) {
-            return redirect()->route('admin.tenants.index');
+            return redirect()->route('admin.dashboard');
         }
-        
+
         return view('admin.auth.login');
     }
 
@@ -36,7 +36,7 @@ class AdminAuthController extends Controller
 
         if (Auth::guard('admin')->attempt($credentials, $remember)) {
             $request->session()->regenerate();
-            return redirect()->intended(route('admin.tenants.index'));
+            return redirect()->intended(route('admin.dashboard'));
         }
 
         return redirect()->back()

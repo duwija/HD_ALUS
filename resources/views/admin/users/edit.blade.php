@@ -90,10 +90,10 @@
 
                         <div class="form-group">
                             <div class="custom-control custom-switch">
-                                <input type="checkbox" 
-                                       class="custom-control-input" 
-                                       id="is_active" 
-                                       name="is_active" 
+                                <input type="checkbox"
+                                       class="custom-control-input"
+                                       id="is_active"
+                                       name="is_active"
                                        {{ old('is_active', $admin->is_active) ? 'checked' : '' }}
                                        {{ $admin->id === auth('admin')->id() ? 'disabled' : '' }}>
                                 <label class="custom-control-label" for="is_active">
@@ -106,6 +106,41 @@
                                     <i class="fas fa-info-circle"></i> Anda tidak dapat mengubah status akun sendiri
                                 </small>
                             @endif
+                        </div>
+
+                        <div class="form-group">
+                            <label for="role">Role <span class="text-danger">*</span></label>
+                            <select class="form-control @error('role') is-invalid @enderror" id="role" name="role" required>
+                                <option value="super_admin" {{ old('role', $admin->role) === 'super_admin' ? 'selected' : '' }}>Super Admin</option>
+                                <option value="supervisor" {{ old('role', $admin->role) === 'supervisor' ? 'selected' : '' }}>Supervisor</option>
+                            </select>
+                            @error('role')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                            <small class="form-text text-muted">
+                                <strong>Super Admin:</strong> akses penuh ke semua fitur.
+                                <strong>Supervisor:</strong> menu disederhanakan, hanya bisa melihat (tanpa edit/hapus) data Customer &amp; Transaksi/Invoice dari tenant yang di-assign, terbatas pada merchant yang sudah di-set untuk tenant tersebut.
+                            </small>
+                        </div>
+
+                        <div class="form-group" id="tenant-assignment-group" style="display: none;">
+                            <label>Tenant yang Diizinkan</label>
+                            <div class="border rounded p-3" style="max-height: 220px; overflow-y: auto;">
+                                @forelse ($tenants as $t)
+                                    <div class="custom-control custom-checkbox">
+                                        <input type="checkbox"
+                                               class="custom-control-input"
+                                               id="tenant_{{ $t->id }}"
+                                               name="tenant_ids[]"
+                                               value="{{ $t->id }}"
+                                               {{ in_array($t->id, old('tenant_ids', $assignedTenantIds)) ? 'checked' : '' }}>
+                                        <label class="custom-control-label" for="tenant_{{ $t->id }}">{{ $t->app_name }} ({{ $t->domain }})</label>
+                                    </div>
+                                @empty
+                                    <span class="text-muted">Belum ada tenant.</span>
+                                @endforelse
+                            </div>
+                            <small class="form-text text-muted">Hanya berlaku untuk role Supervisor. Cakupan merchant per tenant diatur di halaman Edit Tenant.</small>
                         </div>
 
                         <div class="alert alert-info">
@@ -132,4 +167,12 @@
 </div>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<script>
+function toggleTenantAssignment() {
+    var isSupervisor = document.getElementById('role').value === 'supervisor';
+    document.getElementById('tenant-assignment-group').style.display = isSupervisor ? 'block' : 'none';
+}
+document.getElementById('role').addEventListener('change', toggleTenantAssignment);
+toggleTenantAssignment();
+</script>
 @endsection

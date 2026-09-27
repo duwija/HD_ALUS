@@ -34,8 +34,157 @@ class TenantManagementController extends Controller
      */
     public function index()
     {
-        $tenants = Tenant::orderBy('created_at', 'desc')->get();
+        $query = Tenant::orderBy('created_at', 'desc');
+
+        $adminUser = auth('admin')->user();
+        if ($adminUser && $adminUser->isSupervisor()) {
+            $query->whereIn('id', $adminUser->assignedTenantIds());
+        }
+
+        $tenants = $query->get();
         return view('tenants.index', compact('tenants'));
+    }
+
+    /**
+     * Dashboard summary across all tenants (super admin only — not exposed
+     * to supervisor accounts, since it aggregates data across every tenant).
+     */
+    public function dashboard()
+    {
+        $adminUser = auth('admin')->user();
+        $isSupervisor = $adminUser && $adminUser->isSupervisor();
+
+        $tenantsQuery = Tenant::orderBy('app_name');
+        if ($isSupervisor) {
+            $tenantsQuery->whereIn('id', $adminUser->assignedTenantIds());
+        }
+        $tenants = $tenantsQuery->get();
+
+        $rows = [];
+        $totals = [
+            'tenants' => $tenants->count(),
+            'tenants_active' => 0,
+            'tenants_inactive' => 0,
+            'customers' => 0,
+            'customers_active' => 0,
+            'customers_potential' => 0,
+            'unpaid_invoices' => 0,
+            'revenue_this_month' => 0,
+        ];
+
+        $startOfMonth = \Carbon\Carbon::now()->startOfMonth();
+        $endOfMonth = \Carbon\Carbon::now()->endOfMonth();
+
+        foreach ($tenants as $tenant) {
+            if ($tenant->is_active) {
+                $totals['tenants_active']++;
+            } else {
+                $totals['tenants_inactive']++;
+            }
+
+            $row = [
+                'tenant' => $tenant,
+                'customers_total' => null,
+                'customers_active' => null,
+                'customers_potential' => null,
+                'unpaid_invoices' => null,
+                'revenue_this_month' => null,
+                'merchant_scope_empty' => false,
+                'error' => null,
+            ];
+
+            // For supervisors, restrict this tenant's numbers to the merchants
+            // configured for it. An empty (but non-null) scope means the tenant
+            // hasn't been configured yet — show zero data rather than everything.
+            $merchantScope = $this->supervisorMerchantScope($tenant);
+            if ($merchantScope !== null && empty($merchantScope)) {
+                $row['customers_total'] = 0;
+                $row['customers_active'] = 0;
+                $row['customers_potential'] = 0;
+                $row['unpaid_invoices'] = 0;
+                $row['revenue_this_month'] = 0;
+                $row['merchant_scope_empty'] = true;
+                $rows[] = $row;
+                continue;
+            }
+
+            \Config::set('database.connections.tenant_temp', [
+                'driver' => 'mysql',
+                'host' => $tenant->db_host ?? '127.0.0.1',
+                'port' => $tenant->db_port ?? '3306',
+                'database' => $tenant->db_database,
+                'username' => $tenant->db_username,
+                'password' => $tenant->db_password,
+                'charset' => 'utf8mb4',
+                'collation' => 'utf8mb4_unicode_ci',
+                'prefix' => '',
+                'strict' => false,
+            ]);
+
+            try {
+                $customersBase = \DB::connection('tenant_temp')->table('customers')
+                    ->whereNull('deleted_at')
+                    ->when($merchantScope !== null, fn($q) => $q->whereIn('id_merchant', $merchantScope));
+
+                $customersTotal = (clone $customersBase)->count();
+                $customersActive = (clone $customersBase)->where('id_status', 2)->count();
+                $customersPotential = (clone $customersBase)->where('id_status', 1)->count();
+
+                $allowedCustomerIds = $merchantScope !== null
+                    ? \DB::connection('tenant_temp')->table('customers')
+                        ->whereIn('id_merchant', $merchantScope)->pluck('id')->toArray()
+                    : null;
+
+                $unpaidInvoices = \DB::connection('tenant_temp')->table('suminvoices')
+                    ->where('payment_status', 0)
+                    ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
+                    ->count();
+                $revenueThisMonth = \DB::connection('tenant_temp')->table('suminvoices')
+                    ->whereBetween('payment_date', [$startOfMonth, $endOfMonth])
+                    ->where('payment_status', 1)
+                    ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
+                    ->sum('recieve_payment');
+
+                $row['customers_total'] = $customersTotal;
+                $row['customers_active'] = $customersActive;
+                $row['customers_potential'] = $customersPotential;
+                $row['unpaid_invoices'] = $unpaidInvoices;
+                $row['revenue_this_month'] = $revenueThisMonth;
+
+                $totals['customers'] += $customersTotal;
+                $totals['customers_active'] += $customersActive;
+                $totals['customers_potential'] += $customersPotential;
+                $totals['unpaid_invoices'] += $unpaidInvoices;
+                $totals['revenue_this_month'] += $revenueThisMonth;
+            } catch (\Exception $e) {
+                $row['error'] = 'Tidak bisa terhubung ke database tenant.';
+            }
+
+            \DB::purge('tenant_temp');
+
+            $rows[] = $row;
+        }
+
+        return view('tenants.dashboard', [
+            'rows' => $rows,
+            'totals' => $totals,
+            'isSupervisor' => $isSupervisor,
+        ]);
+    }
+
+    /**
+     * Merchant IDs a supervisor account is scoped to for this tenant.
+     * Returns null when unrestricted (super admin), or an array (possibly
+     * empty) of merchant IDs when the viewer is a supervisor.
+     */
+    private function supervisorMerchantScope(Tenant $tenant): ?array
+    {
+        $adminUser = auth('admin')->user();
+        if (!$adminUser || !$adminUser->isSupervisor()) {
+            return null;
+        }
+
+        return $tenant->reported_merchant_ids ?? [];
     }
 
     /**
@@ -274,7 +423,30 @@ class TenantManagementController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
         $licensePlans = \App\LicensePlan::allActive();
-        return view('tenants.edit', compact('tenant', 'licensePlans'));
+
+        \Config::set('database.connections.tenant_temp', [
+            'driver' => 'mysql',
+            'host' => $tenant->db_host ?? '127.0.0.1',
+            'port' => $tenant->db_port ?? '3306',
+            'database' => $tenant->db_database,
+            'username' => $tenant->db_username,
+            'password' => $tenant->db_password,
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => false,
+        ]);
+
+        try {
+            $tenantMerchants = \DB::connection('tenant_temp')->table('merchants')
+                ->whereNull('deleted_at')->orderBy('name')->get();
+        } catch (\Exception $e) {
+            $tenantMerchants = collect();
+        }
+
+        \DB::purge('tenant_temp');
+
+        return view('tenants.edit', compact('tenant', 'licensePlans', 'tenantMerchants'));
     }
 
     /**
@@ -344,6 +516,7 @@ class TenantManagementController extends Controller
                 'license_plan_id' => $request->license_plan_id ?: null,
                 'license_status' => $request->license_status ?: null,
                 'license_expires_at' => $request->license_expires_at ?: null,
+                'reported_merchant_ids' => array_map('intval', (array) $request->input('reported_merchant_ids', [])),
             ]);
 
             // Update password if provided
@@ -1459,11 +1632,16 @@ class TenantManagementController extends Controller
         $statuses = \DB::connection('tenant_temp')->table('statuscustomers')->pluck('name', 'id');
         $plans = \DB::connection('tenant_temp')->table('plans')->pluck('name', 'id');
         $merchants = \DB::connection('tenant_temp')->table('merchants')->pluck('name', 'id');
-        
+
         // Purge temporary connection
         \DB::purge('tenant_temp');
-        
-        return view('tenants.customers', compact('tenant', 'statuses', 'plans', 'merchants'));
+
+        $merchantScope = $this->supervisorMerchantScope($tenant);
+        if ($merchantScope !== null) {
+            $merchants = $merchants->only($merchantScope);
+        }
+
+        return view('tenants.customers', compact('tenant', 'statuses', 'plans', 'merchants', 'merchantScope'));
     }
     
     /**
@@ -1503,12 +1681,21 @@ class TenantManagementController extends Controller
                 'customers.notification'
             )
             ->whereNull('customers.deleted_at');
-        
+
+        // Supervisor accounts are restricted to a tenant-configured merchant scope
+        $merchantScope = $this->supervisorMerchantScope($tenant);
+        if ($merchantScope !== null) {
+            $customerQuery->whereIn('customers.id_merchant', $merchantScope);
+        }
+
         // Calculate customer counts by status
         $customerCounts = \DB::connection('tenant_temp')
             ->table('customers')
             ->select('id_status', \DB::raw('count(*) as total'))
             ->whereNull('deleted_at')
+            ->when($merchantScope !== null, function ($query) use ($merchantScope) {
+                $query->whereIn('id_merchant', $merchantScope);
+            })
             ->when(!empty($request->filter) && !empty($request->parameter), function ($query) use ($request) {
                 if ($request->filter === 'isolir_date') {
                     $query->where($request->filter, $request->parameter);
@@ -1563,8 +1750,9 @@ class TenantManagementController extends Controller
         
         return \DataTables::of($customerQuery)
             ->addIndexColumn()
-            ->editColumn('customer_id', function ($customer) {
-                return '<span class="badge badge-primary">' . $customer->customer_id . '</span>';
+            ->editColumn('customer_id', function ($customer) use ($id) {
+                $url = route('admin.tenants.customers.show', ['id' => $id, 'customerId' => $customer->id]);
+                return '<a href="' . $url . '"><span class="badge badge-primary">' . e($customer->customer_id) . '</span></a>';
             })
             ->addColumn('merchant', function ($customer) {
                 $merchant = \DB::connection('tenant_temp')
@@ -1627,6 +1815,142 @@ class TenantManagementController extends Controller
     }
 
     /**
+     * Display a single customer's detail (read-only) for a tenant
+     */
+    public function customerShow($id, $customerId)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        // Configure tenant database connection
+        \Config::set('database.connections.tenant_temp', [
+            'driver' => 'mysql',
+            'host' => $tenant->db_host ?? '127.0.0.1',
+            'port' => $tenant->db_port ?? '3306',
+            'database' => $tenant->db_database,
+            'username' => $tenant->db_username,
+            'password' => $tenant->db_password,
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => false,
+        ]);
+
+        $customer = \DB::connection('tenant_temp')->table('customers')
+            ->where('id', $customerId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$customer) {
+            \DB::purge('tenant_temp');
+            abort(404, 'Customer tidak ditemukan');
+        }
+
+        $merchantScope = $this->supervisorMerchantScope($tenant);
+        if ($merchantScope !== null && !in_array((int) $customer->id_merchant, $merchantScope, true)) {
+            \DB::purge('tenant_temp');
+            abort(403, 'Anda tidak memiliki akses ke customer ini.');
+        }
+
+        $plan = $customer->id_plan
+            ? \DB::connection('tenant_temp')->table('plans')->where('id', $customer->id_plan)->first()
+            : null;
+
+        $status = $customer->id_status
+            ? \DB::connection('tenant_temp')->table('statuscustomers')->where('id', $customer->id_status)->first()
+            : null;
+
+        $merchant = $customer->id_merchant
+            ? \DB::connection('tenant_temp')->table('merchants')->where('id', $customer->id_merchant)->first()
+            : null;
+
+        $olt = $customer->id_olt
+            ? \DB::connection('tenant_temp')->table('olts')->where('id', $customer->id_olt)->first()
+            : null;
+
+        $distpoint = $customer->id_distpoint
+            ? \DB::connection('tenant_temp')->table('distpoints')->where('id', $customer->id_distpoint)->first()
+            : null;
+
+        $distrouter = $customer->id_distrouter
+            ? \DB::connection('tenant_temp')->table('distrouters')->where('id', $customer->id_distrouter)->first()
+            : null;
+
+        $invoices = \DB::connection('tenant_temp')->table('suminvoices')
+            ->where('id_customer', $customer->id)
+            ->orderBy('id', 'desc')
+            ->limit(20)
+            ->get();
+
+        \DB::purge('tenant_temp');
+
+        return view('tenants.customer-show', compact(
+            'tenant', 'customer', 'plan', 'status', 'merchant', 'olt', 'distpoint', 'distrouter', 'invoices'
+        ));
+    }
+
+    /**
+     * Display a single invoice's detail (read-only) for a tenant customer
+     */
+    public function invoiceShow($id, $customerId, $invoiceId)
+    {
+        $tenant = Tenant::findOrFail($id);
+
+        // Configure tenant database connection
+        \Config::set('database.connections.tenant_temp', [
+            'driver' => 'mysql',
+            'host' => $tenant->db_host ?? '127.0.0.1',
+            'port' => $tenant->db_port ?? '3306',
+            'database' => $tenant->db_database,
+            'username' => $tenant->db_username,
+            'password' => $tenant->db_password,
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => false,
+        ]);
+
+        $customer = \DB::connection('tenant_temp')->table('customers')
+            ->where('id', $customerId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$customer) {
+            \DB::purge('tenant_temp');
+            abort(404, 'Customer tidak ditemukan');
+        }
+
+        $merchantScope = $this->supervisorMerchantScope($tenant);
+        if ($merchantScope !== null && !in_array((int) $customer->id_merchant, $merchantScope, true)) {
+            \DB::purge('tenant_temp');
+            abort(403, 'Anda tidak memiliki akses ke invoice ini.');
+        }
+
+        $suminvoice = \DB::connection('tenant_temp')->table('suminvoices')
+            ->where('id', $invoiceId)
+            ->where('id_customer', $customerId)
+            ->first();
+
+        if (!$suminvoice) {
+            \DB::purge('tenant_temp');
+            abort(404, 'Invoice tidak ditemukan');
+        }
+
+        $items = \DB::connection('tenant_temp')->table('invoices')
+            ->where('tempcode', $suminvoice->tempcode)
+            ->get();
+
+        $merchant = $customer->id_merchant
+            ? \DB::connection('tenant_temp')->table('merchants')->where('id', $customer->id_merchant)->first()
+            : null;
+
+        \DB::purge('tenant_temp');
+
+        return view('tenants.invoice-show', compact(
+            'tenant', 'customer', 'suminvoice', 'items', 'merchant'
+        ));
+    }
+
+    /**
      * Display tenant transactions
      */
     public function transactions($id)
@@ -1652,11 +1976,24 @@ class TenantManagementController extends Controller
         $endOfWeek = \Carbon\Carbon::now()->endOfWeek();
         $startOfMonth = \Carbon\Carbon::now()->startOfMonth();
         $endOfMonth = \Carbon\Carbon::now()->endOfMonth();
-        
+
+        // Supervisor accounts are restricted to a tenant-configured merchant scope.
+        // suminvoices has no id_merchant column, so scoping is done via the list of
+        // customer IDs belonging to the allowed merchants.
+        $merchantScope = $this->supervisorMerchantScope($tenant);
+        $allowedCustomerIds = null;
+        if ($merchantScope !== null) {
+            $allowedCustomerIds = \DB::connection('tenant_temp')->table('customers')
+                ->whereIn('id_merchant', $merchantScope)
+                ->pluck('id')
+                ->toArray();
+        }
+
         // Get grouped transactions by user
         $groupedTransactionsUser = \DB::connection('tenant_temp')
             ->table('suminvoices')
             ->whereBetween('payment_date', [$startOfMonth, $today->copy()->addDay()])
+            ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
             ->groupBy('updated_by')
             ->get();
 
@@ -1664,61 +2001,72 @@ class TenantManagementController extends Controller
         $users = \DB::connection('tenant_temp')
             ->table('users')
             ->pluck('name', 'id');
-        
+
         // Daily transactions report (only paid)
         $dailyTransactions = \DB::connection('tenant_temp')
             ->table('suminvoices')
             ->whereBetween('payment_date', [$startOfMonth, $endOfMonth])
             ->where('payment_status', 1)
+            ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
             ->selectRaw('DATE(payment_date) as date, COUNT(*) as volume, SUM(recieve_payment) as total_paid')
             ->groupBy(\DB::raw('DATE(payment_date)'))
             ->orderBy('date')
             ->get();
-        
+
         // Total payment today
         $totalPaymentToday = \DB::connection('tenant_temp')
             ->table('suminvoices')
             ->whereDate('payment_date', \Carbon\Carbon::today())
+            ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
             ->sum('recieve_payment');
-        
+
         // Total transaction this week
         $totalTransactionThisWeek = \DB::connection('tenant_temp')
             ->table('suminvoices')
             ->whereBetween('payment_date', [$startOfWeek, $endOfWeek])
+            ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
             ->sum('recieve_payment');
-        
+
         // Total transaction this month
         $totalTransactionThisMonth = \DB::connection('tenant_temp')
             ->table('suminvoices')
             ->whereBetween('payment_date', [$startOfMonth, $endOfMonth])
+            ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
             ->sum('recieve_payment');
-        
+
         // Total receivable
         $totalReceivable = \DB::connection('tenant_temp')
             ->table('suminvoices')
             ->where('payment_status', 0)
+            ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
             ->sum('total_amount');
-        
+
         // Grouped transactions by user with total
         $groupedTransactions = \DB::connection('tenant_temp')
             ->table('suminvoices')
             ->whereBetween('payment_date', [$startOfMonth, $endOfMonth])
+            ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
             ->select('updated_by', \DB::raw('SUM(recieve_payment) as total_amount'))
             ->groupBy('updated_by')
             ->get();
-        
+
         // Get suminvoices for the last week
         $suminvoice = \DB::connection('tenant_temp')
             ->table('suminvoices')
             ->orderBy('updated_at', 'DESC')
             ->whereNotNull('updated_by')
             ->whereBetween('payment_date', [date('Y-m-d', strtotime("-1 week")), date('Y-m-d')])
+            ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
             ->get();
-        
+
         // Get merchants
         $merchant = \DB::connection('tenant_temp')
             ->table('merchants')
             ->pluck('name', 'id');
+
+        if ($merchantScope !== null) {
+            $merchant = $merchant->only($merchantScope);
+        }
         
         // Get kas bank accounts
         $parentAkuns = \DB::connection('tenant_temp')
@@ -1747,7 +2095,8 @@ class TenantManagementController extends Controller
             'groupedTransactions' => $groupedTransactions,
             'merchant' => $merchant,
             'kasbank' => $kasbank,
-            'users' => $users
+            'users' => $users,
+            'merchantScope' => $merchantScope,
         ]);
     }
 
@@ -1925,7 +2274,10 @@ class TenantManagementController extends Controller
         $updatedBy = $request->input('updatedBy');
         $id_merchant = $request->input('id_merchant');
         $kasbank = $request->input('kasbank');
-        
+
+        // Supervisor accounts are restricted to a tenant-configured merchant scope
+        $merchantScope = $this->supervisorMerchantScope($tenant);
+
         // Grouped by user
         $groupedTransactionsUser = \DB::connection('tenant_temp')
             ->table('suminvoices')
@@ -1938,23 +2290,27 @@ class TenantManagementController extends Controller
                 \DB::raw('SUM(suminvoices.total_amount) as total_amount'),
                 \DB::raw('SUM(suminvoices.merchant_fee) as total_fee')
             );
-        
+
         if (!empty($updatedBy)) {
             $groupedTransactionsUser->where('suminvoices.updated_by', $updatedBy);
         }
-        
+
         if (!empty($id_merchant)) {
             $groupedTransactionsUser->where('customers.id_merchant', $id_merchant);
         }
-        
+
         if (!empty($kasbank)) {
             $groupedTransactionsUser->where('suminvoices.payment_point', $kasbank);
         }
-        
+
+        if ($merchantScope !== null) {
+            $groupedTransactionsUser->whereIn('customers.id_merchant', $merchantScope);
+        }
+
         $groupedTransactionsUser = $groupedTransactionsUser
             ->groupBy('suminvoices.updated_by')
             ->get();
-        
+
         // Grouped by merchant
         $groupedTransactionsMerchant = \DB::connection('tenant_temp')
             ->table('suminvoices')
@@ -1965,23 +2321,27 @@ class TenantManagementController extends Controller
                 'customers.id_merchant',
                 \DB::raw('SUM(suminvoices.recieve_payment) as total_payment')
             );
-        
+
         if (!empty($updatedBy)) {
             $groupedTransactionsMerchant->where('suminvoices.updated_by', $updatedBy);
         }
-        
+
         if (!empty($id_merchant)) {
             $groupedTransactionsMerchant->where('customers.id_merchant', $id_merchant);
         }
-        
+
         if (!empty($kasbank)) {
             $groupedTransactionsMerchant->where('suminvoices.payment_point', $kasbank);
         }
-        
+
+        if ($merchantScope !== null) {
+            $groupedTransactionsMerchant->whereIn('customers.id_merchant', $merchantScope);
+        }
+
         $groupedTransactionsMerchant = $groupedTransactionsMerchant
             ->groupBy('customers.id_merchant')
             ->get();
-        
+
         // Grouped by kasbank
         $groupedTransactionsKasbank = \DB::connection('tenant_temp')
             ->table('suminvoices')
@@ -1992,7 +2352,7 @@ class TenantManagementController extends Controller
                 'suminvoices.payment_point',
                 \DB::raw('SUM(suminvoices.recieve_payment) as total_payment')
             );
-        
+
         if (!empty($updatedBy)) {
             $groupedTransactionsKasbank->where('suminvoices.updated_by', $updatedBy);
         }
@@ -2004,16 +2364,21 @@ class TenantManagementController extends Controller
         if (!empty($kasbank)) {
             $groupedTransactionsKasbank->where('suminvoices.payment_point', $kasbank);
         }
-        
+
+        if ($merchantScope !== null) {
+            $groupedTransactionsKasbank->whereIn('customers.id_merchant', $merchantScope);
+        }
+
         $groupedTransactionsKasbank = $groupedTransactionsKasbank
             ->groupBy('suminvoices.payment_point')
             ->get();
-        
+
         // Get merchants
         $merchants = \DB::connection('tenant_temp')
             ->table('merchants')
+            ->when($merchantScope !== null, fn($q) => $q->whereIn('id', $merchantScope))
             ->get();
-        
+
         // Get kasbank accounts
         $parentAkuns = \DB::connection('tenant_temp')
             ->table('akuns')
@@ -2069,7 +2434,11 @@ class TenantManagementController extends Controller
         if (!empty($kasbank)) {
             $query->where('suminvoices.payment_point', $kasbank);
         }
-        
+
+        if ($merchantScope !== null) {
+            $query->whereIn('customers.id_merchant', $merchantScope);
+        }
+
         // Get total counts and sums
         $totalRecords = $query->count();
         $totalAmount = $query->sum('suminvoices.total_amount');

@@ -31,9 +31,10 @@
                             <thead class="thead-dark">
                                 <tr>
                                     <th width="5%">#</th>
-                                    <th width="20%">Name</th>
-                                    <th width="25%">Email</th>
-                                    <th width="15%">Status</th>
+                                    <th width="18%">Name</th>
+                                    <th width="20%">Email</th>
+                                    <th width="10%">Role</th>
+                                    <th width="12%">Status</th>
                                     <th width="15%">Created At</th>
                                     <th width="10%">Last Login</th>
                                     <th width="10%" class="text-center">Actions</th>
@@ -50,6 +51,13 @@
                                             @endif
                                         </td>
                                         <td>{{ $admin->email }}</td>
+                                        <td>
+                                            @if($admin->isSupervisor())
+                                                <span class="badge badge-secondary">Supervisor</span>
+                                            @else
+                                                <span class="badge badge-primary">Super Admin</span>
+                                            @endif
+                                        </td>
                                         <td>
                                             @if($admin->is_active)
                                                 <span class="badge badge-success">
@@ -109,7 +117,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-4">
+                                        <td colspan="8" class="text-center text-muted py-4">
                                             <i class="fas fa-users-slash fa-3x mb-3"></i>
                                             <p>Belum ada admin user.</p>
                                         </td>

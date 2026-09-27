@@ -138,8 +138,9 @@ Route::prefix('admin')->middleware('admin')->group(function() {
 });
 
 // Tenant Management Routes (Protected by admin guard)
-Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
+Route::middleware(['admin', 'auth:admin', 'supervisor.scope'])->prefix('admin')->group(function() {
     // Tenant Management
+    Route::get('/dashboard', [TenantManagementController::class, 'dashboard'])->name('admin.dashboard');
     Route::get('/tenants', [TenantManagementController::class, 'index'])->name('admin.tenants.index');
     Route::get('/tenants/create', [TenantManagementController::class, 'create'])->name('admin.tenants.create');
     Route::post('/tenants', [TenantManagementController::class, 'store'])->name('admin.tenants.store');
@@ -152,6 +153,8 @@ Route::middleware(['admin', 'auth:admin'])->prefix('admin')->group(function() {
     Route::delete('/tenants/{id}/backups/{filename}', [TenantManagementController::class, 'deleteBackup'])->name('admin.tenants.backups.delete');
     Route::get('/tenants/{id}/customers', [TenantManagementController::class, 'customers'])->name('admin.tenants.customers');
     Route::get('/tenants/{id}/customers/data', [TenantManagementController::class, 'customersData'])->name('admin.tenants.customers.data');
+    Route::get('/tenants/{id}/customers/{customerId}', [TenantManagementController::class, 'customerShow'])->name('admin.tenants.customers.show');
+    Route::get('/tenants/{id}/customers/{customerId}/invoices/{invoiceId}', [TenantManagementController::class, 'invoiceShow'])->name('admin.tenants.customers.invoices.show');
 
     // Tenant Users Management
     Route::get('/tenants/{id}/users', [TenantManagementController::class, 'tenantUsers'])->name('admin.tenants.users');
