@@ -127,10 +127,10 @@
       <label for="address">Privilege</label>
       <select name="privilege" id="privilege" class="form-control" onchange="toggleMerchantInput()">
         @php
-        $privileges = ["admin", "hrd", "management", "accounting", "marketing", "payment", "noc", "user", "merchant", "vendor"];
+        $privileges = ["admin", "hrd", "management", "accounting", "marketing", "payment", "noc", "user", "merchant", "admin_billing", "vendor"];
         @endphp
         @foreach ($privileges as $item)
-        <option value="{{ $item }}" {{ $item == $user->privilege ? 'selected' : '' }}>{{ ucfirst($item) }}</option>
+        <option value="{{ $item }}" {{ $item == $user->privilege ? 'selected' : '' }}>{{ ucwords(str_replace('_', ' ', $item)) }}</option>
         @endforeach
       </select>
     </div>

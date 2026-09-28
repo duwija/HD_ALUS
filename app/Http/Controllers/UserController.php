@@ -470,6 +470,95 @@ else
     abort(404, 'You dont have permision to view this page');
 }
 }
+
+    /**
+     * Let a logged-in user update their own profile picture.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function updateMyPhoto(Request $request, $id)
+    {
+        if ($id != Auth::user()->id) {
+            abort(403, 'You dont have permission to update this profile.');
+        }
+
+        $request->validate([
+            'photo' => 'nullable|image|mimes:jpg,jpeg,png,gif|max:2048',
+            'cropped_photo' => 'nullable|string',
+        ]);
+
+        if (!$request->hasFile('photo') && !$request->filled('cropped_photo')) {
+            return redirect()->back()->with('error', 'Please choose a photo first.');
+        }
+
+        $user = \App\User::findOrFail($id);
+
+        try {
+            $this->handleProfilePhotoUpload($request, $user);
+            $user->save();
+
+            return redirect()->back()->with('success', 'Profile picture updated successfully!');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Failed to update profile picture: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Apply an uploaded/cropped photo to $user->photo (not persisted here).
+     * Shared by the admin user-edit form and the self-service myprofile photo update.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\User  $user
+     * @return void
+     */
+    private function handleProfilePhotoUpload(Request $request, \App\User $user)
+    {
+        if ($request->filled('cropped_photo')) {
+            $base64Image = $request->cropped_photo;
+
+            // Only allow a small, known set of image types — the type here comes
+            // straight from the client-supplied data URI, so it must be whitelisted
+            // (not just pattern-matched) before it's used as a file extension.
+            if (preg_match('/^data:image\/(png|jpe?g|gif);base64,/i', $base64Image, $type)) {
+                $data = substr($base64Image, strpos($base64Image, ',') + 1);
+                $ext = strtolower($type[1]) === 'jpeg' ? 'jpg' : strtolower($type[1]);
+
+                $data = str_replace(' ', '+', $data);
+                $decodedImage = base64_decode($data, true);
+
+                if ($decodedImage === false || @getimagesizefromstring($decodedImage) === false) {
+                    throw new \Exception('Invalid cropped image data');
+                }
+
+                if ($user->photo && $user->photo != 'user.png' && file_exists(public_path("storage/users/{$user->photo}"))) {
+                    @unlink(public_path("storage/users/{$user->photo}"));
+                }
+
+                $fileName = 'user_' . time() . '_' . uniqid() . '.' . $ext;
+                $filePath = public_path('storage/users/' . $fileName);
+
+                if (!file_exists(public_path('storage/users'))) {
+                    mkdir(public_path('storage/users'), 0777, true);
+                }
+
+                if (file_put_contents($filePath, $decodedImage) === false) {
+                    throw new \Exception('Failed to save cropped image');
+                }
+
+                $user->photo = $fileName;
+            }
+        } elseif ($request->hasFile('photo')) {
+            if ($user->photo && $user->photo != 'user.png' && file_exists(public_path("storage/users/{$user->photo}"))) {
+                @unlink(public_path("storage/users/{$user->photo}"));
+            }
+
+            $imageName = time() . '_' . uniqid() . '.' . $request->photo->getClientOriginalExtension();
+            $request->photo->move(public_path('storage/users'), $imageName);
+            $user->photo = $imageName;
+        }
+    }
     /**
      * Update the specified resource in storage.
      *
@@ -523,59 +612,7 @@ else
             $password = strlen($request->password) >= 50 ? $request->password : Hash::make($request->password);
 
         // Handle photo upload - Prioritaskan cropped photo
-            if ($request->filled('cropped_photo')) {
-                // Handle cropped photo from base64
-                $base64Image = $request->cropped_photo;
-                
-                // Extract base64 string
-                if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $type)) {
-                    $data = substr($base64Image, strpos($base64Image, ',') + 1);
-                    $type = strtolower($type[1]); // jpg, png, gif
-                    
-                    // Decode base64
-                    $data = str_replace(' ', '+', $data);
-                    $decodedImage = base64_decode($data);
-                    
-                    if ($decodedImage === false) {
-                        throw new \Exception('Base64 decode failed');
-                    }
-                    
-                    // Delete old photo if exists and not default
-                    if ($user->photo && $user->photo != 'user.png' && file_exists(public_path("storage/users/{$user->photo}"))) {
-                        @unlink(public_path("storage/users/{$user->photo}"));
-                    }
-                    
-                    // Generate unique filename
-                    $fileName = 'user_' . time() . '_' . uniqid() . '.' . $type;
-                    
-                    // Save directly to public/storage/users/
-                    $filePath = public_path('storage/users/' . $fileName);
-                    
-                    // Ensure directory exists
-                    if (!file_exists(public_path('storage/users'))) {
-                        mkdir(public_path('storage/users'), 0777, true);
-                    }
-                    
-                    $saved = file_put_contents($filePath, $decodedImage);
-                    
-                    if (!$saved) {
-                        throw new \Exception('Failed to save cropped image');
-                    }
-                    
-                    $user->photo = $fileName;
-                }
-            } elseif ($request->hasFile('photo')) {
-                // Fallback to original file if no crop
-            // Delete the old photo if exists
-                if ($user->photo && $user->photo != 'user.png' && file_exists(public_path("storage/users/{$user->photo}"))) {
-                    @unlink(public_path("storage/users/{$user->photo}"));
-                }
-
-            // Store the new photo
-                $imageName = time() . '.' . $request->photo->getClientOriginalExtension();
-                $request->photo->move(public_path('storage/users'), $imageName);
-                $user->photo = $imageName;
-            }
+            $this->handleProfilePhotoUpload($request, $user);
 
         // Update user details
             $user->update([

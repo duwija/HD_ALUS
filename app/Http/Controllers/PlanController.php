@@ -9,7 +9,9 @@ class PlanController extends Controller
    public function __construct()
    {
     $this->middleware('auth');
-    $this->middleware('checkPrivilege:admin,noc,accounting,marketing,payment,user');
+    $this->middleware('checkPrivilege:admin,noc,accounting,marketing,payment,user')->except(['index']);
+    // admin_billing gets read-only access to the plan catalog (view only, no create/edit/delete)
+    $this->middleware('checkPrivilege:admin,noc,accounting,marketing,payment,user,admin_billing')->only(['index']);
 }
 
     /**

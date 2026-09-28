@@ -19,6 +19,18 @@ class Tenant extends Model
      */
     protected $connection = 'isp_master';
 
+    public const TIERS = [
+        1 => ['name' => 'Mitra Utama',      'split' => '35% / 65%', 'badge' => 'success'],
+        2 => ['name' => 'Mitra Berkembang', 'split' => '45% / 55%', 'badge' => 'primary'],
+        3 => ['name' => 'Mitra Pemula',     'split' => '50% / 50%', 'badge' => 'warning'],
+    ];
+
+    public function getTierLabelAttribute()
+    {
+        $t = self::TIERS[$this->tier] ?? null;
+        return $t ? "Tier {$this->tier} · {$t['name']} ({$t['split']})" : null;
+    }
+
     /**
      * The attributes that are mass assignable.
      *
@@ -48,6 +60,7 @@ class Tenant extends Model
         'license_plan_id',
         'license_status',
         'license_expires_at',
+        'tier',
     ];
 
     /**
@@ -270,6 +283,24 @@ class Tenant extends Model
     public function hasMerchantFilter(): bool
     {
         return !empty($this->reported_merchant_ids);
+    }
+
+    /**
+     * Merchant IDs configured (via the central admin panel's Edit Tenant page)
+     * as the reporting scope for the tenant currently running this request.
+     * Used by the tenant-side "admin_billing" privilege to restrict data to
+     * only these merchants. Returns an empty array if not configured or if
+     * running outside a tenant request context (no 'tenant_id' resolved).
+     */
+    public static function currentReportedMerchantIds(): array
+    {
+        if (!function_exists('tenant_id') || !tenant_id()) {
+            return [];
+        }
+
+        $tenant = static::on('isp_master')->find(tenant_id());
+
+        return $tenant->reported_merchant_ids ?? [];
     }
 
     /**

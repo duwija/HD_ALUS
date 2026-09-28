@@ -41,6 +41,7 @@
                                     <th>App Name</th>
                                     <th>Rescode</th>
                                     <th>Database</th>
+                                    <th>Jenis Tier</th>
                                     <th>Features</th>
                                     <th width="100" class="text-center">Status</th>
                                     <th width="200" class="text-center">Actions</th>
@@ -64,6 +65,15 @@
                                     <td>
                                         <code>{{ $tenant->db_database }}</code><br>
                                         <small class="text-muted">{{ $tenant->db_host }}:{{ $tenant->db_port }}</small>
+                                    </td>
+                                    <td>
+                                        @php $tierInfo = \App\Tenant::TIERS[$tenant->tier] ?? null; @endphp
+                                        @if($tierInfo)
+                                            <span class="badge badge-{{ $tierInfo['badge'] }}">Tier {{ $tenant->tier }} · {{ $tierInfo['name'] }}</span><br>
+                                            <small class="text-muted">{{ $tierInfo['split'] }}</small>
+                                        @else
+                                            <span class="text-muted">-</span>
+                                        @endif
                                     </td>
                                     <td>
                                         @if($tenant->features['accounting'] ?? false)
@@ -144,7 +154,7 @@
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-4">
+                                    <td colspan="9" class="text-center text-muted py-4">
                                         <i class="fas fa-inbox fa-3x mb-3"></i><br>
                                         Belum ada tenant. <a href="{{ route('admin.tenants.create') }}">Tambah tenant pertama</a>
                                     </td>

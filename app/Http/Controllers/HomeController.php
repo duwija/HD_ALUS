@@ -903,9 +903,10 @@ if (in_array($userPrivilege, $dashboardRoles)) {
 
     // Redirect khusus
 return match ($userPrivilege) {
-    'vendor'   => redirect()->to('/vendorticket'),
-    'merchant' => redirect()->to('/payment'),
-    default    => abort(403, 'You do not have permission to access this page.'),
+    'vendor'        => redirect()->to('/vendorticket'),
+    'merchant'      => redirect()->to('/payment'),
+    'admin_billing' => redirect()->to('/billing/customers'),
+    default         => abort(403, 'You do not have permission to access this page.'),
 };
 }
 

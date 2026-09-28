@@ -79,6 +79,7 @@
             <option value="payment" {{ old('privilege') == 'payment' ? 'selected' : '' }}>Payment</option>
             <option value="noc" {{ old('privilege') == 'noc' ? 'selected' : '' }}>Noc</option>
             <option value="merchant" {{ old('privilege') == 'merchant' ? 'selected' : '' }}>Merchant</option>
+            <option value="admin_billing" {{ old('privilege') == 'admin_billing' ? 'selected' : '' }}>Admin Billing</option>
             <option value="vendor" {{ old('privilege') == 'vendor' ? 'selected' : '' }}>Vendor</option>
           </select>
           @error('privilege')

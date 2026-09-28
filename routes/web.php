@@ -354,6 +354,11 @@ Route::patch('/customer/{id}','CustomerController@update');
 Route::delete('/customer/{id}','CustomerController@destroy');
 Route::post('/customer/searchforjurnal', 'CustomerController@searchforjurnal');
 Route::get('/customermerchant', [CustomerController::class, 'customermerchant'])->name('customer.merchant');
+
+// Privilege "admin_billing": read-only, scoped to the tenant's configured merchant(s)
+Route::get('/billing/customers', 'AdminBillingController@customers')->name('adminbilling.customers');
+Route::post('/billing/customers/data', 'AdminBillingController@customersData')->name('adminbilling.customers.data');
+Route::get('/billing/accounting', 'AdminBillingController@accounting')->name('adminbilling.accounting');
 Route::post('/customer/createtunnel', 'CustomerController@createtunnel');
 Route::put('/customer/{id}/update-lead', 'CustomerController@updateLead');
 Route::post('/customer/{id}/convert-to-active', 'CustomerController@convertToActive');
@@ -673,6 +678,7 @@ Route::patch('/user/{id}','UserController@update');
 Route::delete('/user/{id}','UserController@destroy');
 Route::post('/user/{id}/toggle-active','UserController@toggleActive')->name('user.toggle-active');
 Route::get('/user/{id}/myprofile','UserController@myprofile');
+Route::post('/user/{id}/myprofile/photo','UserController@updateMyPhoto')->name('user.myprofile.photo');
 Route::post('/user/searchforjurnal', 'UserController@searchforjurnal');
 
 Route::get('/probe', [ProbeController::class, 'index']);

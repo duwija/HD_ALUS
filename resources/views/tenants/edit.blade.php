@@ -646,6 +646,16 @@
                                 </div>
 
                                 <div class="form-group">
+                                    <label for="tier">Jenis Tier</label>
+                                    <select class="form-control" id="tier" name="tier">
+                                        <option value="">-- Pilih Tier --</option>
+                                        @foreach(\App\Tenant::TIERS as $k => $t)
+                                            <option value="{{ $k }}" {{ (string) old('tier', $tenant->tier) === (string) $k ? 'selected' : '' }}>Tier {{ $k }} · {{ $t['name'] }} ({{ $t['split'] }})</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
                                     <label for="notes">Catatan</label>
                                     <textarea class="form-control" 
                                               id="notes" 

@@ -214,6 +214,20 @@
                         </div>
 
                         <div class="card mb-3">
+                            <div class="card-header bg-info text-white">
+                                <strong>Jenis Tier</strong>
+                            </div>
+                            <div class="card-body">
+                                <select name="tier" class="form-control">
+                                        <option value="">-- Pilih Tier --</option>
+                                        @foreach(\App\Tenant::TIERS as $k => $t)
+                                            <option value="{{ $k }}" {{ (string) old('tier', null) === (string) $k ? 'selected' : '' }}>Tier {{ $k }} · {{ $t['name'] }} ({{ $t['split'] }})</option>
+                                        @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="card mb-3">
                             <div class="card-header bg-secondary text-white">
                                 <strong>Catatan</strong>
                             </div>

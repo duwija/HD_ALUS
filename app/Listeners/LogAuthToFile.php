@@ -19,7 +19,7 @@ class LogAuthToFile
             'user_agent' => $req?->userAgent(),
             'route'      => $req?->path(),
             'session'    => $req?->session()?->getId(),
-            'guard'      => method_exists($event, 'guard') ? $event->guard : null,
+            'guard'      => $event->guard ?? null,
         ];
 
         if ($event instanceof Login) {
@@ -40,9 +40,14 @@ class LogAuthToFile
         }
 
         if ($event instanceof Logout) {
+            // Use $event->user (the account that was actually logged out of $event->guard)
+            // rather than the bare default-guard auth()->user() — the wrong guard's user
+            // could be resolved here, and doing so against a route that has switched the
+            // default DB connection (e.g. the admin panel, which switches to 'admin') can
+            // throw a QueryException, since App\User's table only exists on tenant DBs.
             Log::channel('auth')->info('logout', [
-                'user_id' => optional(auth()->user())->id,
-                'email'   => optional(auth()->user())->email,
+                'user_id' => $event->user?->id,
+                'email'   => $event->user?->email,
             ] + $ctx);
             return;
         }

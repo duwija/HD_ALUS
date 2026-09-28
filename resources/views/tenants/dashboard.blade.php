@@ -1,5 +1,26 @@
 @extends('admin.layouts.app')
 
+@section('styles')
+<style>
+    .tax-panel { background: linear-gradient(180deg,#f8fafc,#fff); }
+    .tax-tile { position: relative; overflow: hidden; border-radius: 12px; padding: 16px 18px; color: #fff; height: 100%; box-shadow: 0 4px 14px rgba(0,0,0,.12); transition: transform .15s; }
+    .tax-tile:hover { transform: translateY(-3px); }
+    .tax-tile .tax-icon { position: absolute; right: 12px; top: 10px; font-size: 3rem; opacity: .18; }
+    .tax-label { font-size: .8rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .95; }
+    .tax-rate { background: rgba(255,255,255,.25); border-radius: 10px; padding: 1px 8px; margin-left: 4px; font-size: .75rem; }
+    .tax-value { font-size: 1.5rem; font-weight: 700; margin: 6px 0 2px; }
+    .tax-sub { font-size: .75rem; opacity: .85; }
+    .tile-dpp { background: linear-gradient(135deg,#64748b,#334155); }
+    .tile-ppn { background: linear-gradient(135deg,#06b6d4,#0e7490); }
+    .tile-bhp { background: linear-gradient(135deg,#8b5cf6,#5b21b6); }
+    .tile-uso { background: linear-gradient(135deg,#f59e0b,#b45309); }
+    .tax-total { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; background: linear-gradient(135deg,#ef4444,#991b1b); color: #fff; border-radius: 12px; padding: 16px 22px; box-shadow: 0 6px 18px rgba(185,28,28,.35); }
+    .tax-total-label { font-size: 1.05rem; font-weight: 700; }
+    .tax-total-sub { font-size: .78rem; opacity: .85; }
+    .tax-total-value { font-size: 2rem; font-weight: 800; }
+</style>
+@endsection
+
 @section('content')
 <div class="container-fluid">
     <div class="row">
@@ -14,9 +35,20 @@
                             Dashboard &mdash; Resume Seluruh Tenant
                         @endif
                     </h3>
-                    <a href="{{ route('admin.tenants.index') }}" class="btn btn-secondary btn-sm">
-                        <i class="fas fa-building"></i> Tenant Management
-                    </a>
+                    <div class="d-flex align-items-center">
+                        <form method="GET" action="{{ route('admin.dashboard') }}" class="mr-2 mb-0">
+                            <select name="month" class="form-control form-control-sm" onchange="this.form.submit()">
+                                @foreach ($monthOptions as $m)
+                                    <option value="{{ $m->format('Y-m') }}" {{ $m->format('Y-m') === $selectedMonth->format('Y-m') ? 'selected' : '' }}>
+                                        {{ $m->translatedFormat('F Y') }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </form>
+                        <a href="{{ route('admin.tenants.index') }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-building"></i> Tenant Management
+                        </a>
+                    </div>
                 </div>
 
                 <div class="card-body">
@@ -71,7 +103,7 @@
                             <div class="card text-white bg-dark h-100">
                                 <div class="card-body text-center">
                                     <div class="h6 mb-0">Rp {{ number_format($totals['revenue_this_month'], 0, ',', '.') }}</div>
-                                    <small>Pendapatan Bulan Ini</small>
+                                    <small>Pendapatan {{ $selectedMonth->translatedFormat('F Y') }}</small>
                                 </div>
                             </div>
                         </div>
@@ -83,6 +115,57 @@
                         <i class="fas fa-user-clock"></i> Customer Potential (semua tenant): <strong>{{ number_format($totals['customers_potential']) }}</strong>
                     </div>
 
+                    <!-- Tax summary -->
+                    <div class="card mb-4">
+                        <div class="card-body tax-panel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0"><i class="fas fa-file-invoice-dollar text-danger"></i> Ringkasan Pajak {{ $selectedMonth->translatedFormat('F Y') }} (Semua Tenant)</h5>
+                                <small class="text-muted">Pendapatan sudah termasuk PPN &middot; BHP &amp; USO dihitung dari DPP</small>
+                            </div>
+                            <div class="row">
+                                <div class="col-lg-3 col-6 mb-3">
+                                    <div class="tax-tile tile-dpp">
+                                        <i class="fas fa-coins tax-icon"></i>
+                                        <div class="tax-label">DPP</div>
+                                        <div class="tax-value">Rp {{ number_format($totals['tax']['dpp'], 0, ',', '.') }}</div>
+                                        <div class="tax-sub">Pendapatan &divide; 1,11</div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6 mb-3">
+                                    <div class="tax-tile tile-ppn">
+                                        <i class="fas fa-percent tax-icon"></i>
+                                        <div class="tax-label">PPN <span class="tax-rate">{{ number_format($totals['tax']['ppn_rate'], 0, ',', '.') }}%</span></div>
+                                        <div class="tax-value">Rp {{ number_format($totals['tax']['ppn'], 0, ',', '.') }}</div>
+                                        <div class="tax-sub">Pendapatan &minus; DPP</div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6 mb-3">
+                                    <div class="tax-tile tile-bhp">
+                                        <i class="fas fa-broadcast-tower tax-icon"></i>
+                                        <div class="tax-label">BHP Telekomunikasi <span class="tax-rate">{{ number_format($totals['tax']['bhp_rate'], 1, ',', '.') }}%</span></div>
+                                        <div class="tax-value">Rp {{ number_format($totals['tax']['bhp'], 0, ',', '.') }}</div>
+                                        <div class="tax-sub">dari DPP</div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6 mb-3">
+                                    <div class="tax-tile tile-uso">
+                                        <i class="fas fa-network-wired tax-icon"></i>
+                                        <div class="tax-label">USO <span class="tax-rate">{{ number_format($totals['tax']['uso_rate'], 2, ',', '.') }}%</span></div>
+                                        <div class="tax-value">Rp {{ number_format($totals['tax']['uso'], 0, ',', '.') }}</div>
+                                        <div class="tax-sub">dari DPP</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tax-total">
+                                <div>
+                                    <div class="tax-total-label"><i class="fas fa-landmark"></i> Total Kewajiban Pajak</div>
+                                    <div class="tax-total-sub">PPN + BHP Telekomunikasi + USO &middot; semua tenant</div>
+                                </div>
+                                <div class="tax-total-value">Rp {{ number_format($totals['tax']['total_kewajiban'], 0, ',', '.') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Per-tenant breakdown -->
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped table-hover table-sm">
@@ -90,11 +173,13 @@
                                 <tr>
                                     <th width="40">#</th>
                                     <th>Tenant</th>
+                                    <th class="text-center">Jenis Tier</th>
                                     <th class="text-center">Status</th>
                                     <th class="text-right">Total Customer</th>
                                     <th class="text-right">Customer Aktif</th>
                                     <th class="text-right">Invoice Belum Lunas</th>
-                                    <th class="text-right">Pendapatan Bulan Ini</th>
+                                    <th class="text-right">Pendapatan {{ $selectedMonth->translatedFormat('M Y') }}</th>
+                                    <th class="text-right">Pajak {{ $selectedMonth->translatedFormat('M Y') }}</th>
                                     <th class="text-center" width="140">Aksi</th>
                                 </tr>
                             </thead>
@@ -107,6 +192,15 @@
                                         <small class="text-muted">{{ $row['tenant']->domain }}</small>
                                     </td>
                                     <td class="text-center">
+                                        @php $tierInfo = \App\Tenant::TIERS[$row['tenant']->tier] ?? null; @endphp
+                                        @if ($tierInfo)
+                                            <span class="badge badge-{{ $tierInfo['badge'] }}">Tier {{ $row['tenant']->tier }} · {{ $tierInfo['name'] }}</span><br>
+                                            <small class="text-muted">{{ $tierInfo['split'] }}</small>
+                                        @else
+                                            <span class="text-muted">-</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
                                         @if ($row['tenant']->is_active)
                                             <span class="badge badge-success">Active</span>
                                         @else
@@ -114,11 +208,11 @@
                                         @endif
                                     </td>
                                     @if ($row['error'])
-                                        <td colspan="4" class="text-danger text-center">
+                                        <td colspan="5" class="text-danger text-center">
                                             <i class="fas fa-exclamation-triangle"></i> {{ $row['error'] }}
                                         </td>
                                     @elseif ($row['merchant_scope_empty'])
-                                        <td colspan="4" class="text-warning text-center">
+                                        <td colspan="5" class="text-warning text-center">
                                             <i class="fas fa-exclamation-triangle"></i> Belum ada merchant yang di-set untuk tenant ini.
                                         </td>
                                     @else
@@ -132,6 +226,10 @@
                                             @endif
                                         </td>
                                         <td class="text-right">Rp {{ number_format($row['revenue_this_month'], 0, ',', '.') }}</td>
+                                        <td class="text-right"
+                                            title="DPP Rp {{ number_format($row['tax']['dpp'], 0, ',', '.') }} · PPN Rp {{ number_format($row['tax']['ppn'], 0, ',', '.') }} · BHP Rp {{ number_format($row['tax']['bhp'], 0, ',', '.') }} · USO Rp {{ number_format($row['tax']['uso'], 0, ',', '.') }}">
+                                            Rp {{ number_format($row['tax']['total_kewajiban'], 0, ',', '.') }}
+                                        </td>
                                     @endif
                                     <td class="text-center">
                                         <div class="btn-group" role="group">
@@ -154,7 +252,7 @@
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-4">Belum ada tenant.</td>
+                                    <td colspan="10" class="text-center text-muted py-4">Belum ada tenant.</td>
                                 </tr>
                                 @endforelse
                             </tbody>

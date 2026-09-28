@@ -106,7 +106,6 @@
             <nav class="col-md-2 d-none d-md-block sidebar">
                 <div class="sidebar-sticky">
                     <ul class="nav flex-column">
-                        @unless(auth('admin')->user() && auth('admin')->user()->isSupervisor())
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}"
                                href="{{ route('admin.dashboard') }}">
@@ -114,7 +113,6 @@
                                 Dashboard
                             </a>
                         </li>
-                        @endunless
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.tenants.*') ? 'active' : '' }}"
                                href="{{ route('admin.tenants.index') }}">

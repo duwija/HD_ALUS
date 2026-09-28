@@ -269,6 +269,53 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="card-body tax-panel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0"><i class="fas fa-file-invoice-dollar text-danger"></i> Perhitungan Pajak</h5>
+                                <small class="text-muted">Total Payment sudah termasuk PPN &middot; BHP &amp; USO dihitung dari DPP</small>
+                            </div>
+                            <div class="row">
+                                <div class="col-lg-3 col-6 mb-3">
+                                    <div class="tax-tile tile-dpp">
+                                        <i class="fas fa-coins tax-icon"></i>
+                                        <div class="tax-label">DPP</div>
+                                        <div class="tax-value">Rp <span id="tax_dpp">0</span></div>
+                                        <div class="tax-sub">Total Payment &divide; 1,11</div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6 mb-3">
+                                    <div class="tax-tile tile-ppn">
+                                        <i class="fas fa-percent tax-icon"></i>
+                                        <div class="tax-label">PPN <span class="tax-rate"><span id="tax_ppn_rate">11</span>%</span></div>
+                                        <div class="tax-value">Rp <span id="tax_ppn">0</span></div>
+                                        <div class="tax-sub">Total Payment &minus; DPP</div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6 mb-3">
+                                    <div class="tax-tile tile-bhp">
+                                        <i class="fas fa-broadcast-tower tax-icon"></i>
+                                        <div class="tax-label">BHP Telekomunikasi <span class="tax-rate"><span id="tax_bhp_rate">0,5</span>%</span></div>
+                                        <div class="tax-value">Rp <span id="tax_bhp">0</span></div>
+                                        <div class="tax-sub">dari DPP</div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6 mb-3">
+                                    <div class="tax-tile tile-uso">
+                                        <i class="fas fa-network-wired tax-icon"></i>
+                                        <div class="tax-label">USO <span class="tax-rate"><span id="tax_uso_rate">1,25</span>%</span></div>
+                                        <div class="tax-value">Rp <span id="tax_uso">0</span></div>
+                                        <div class="tax-sub">dari DPP</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tax-total">
+                                <div>
+                                    <div class="tax-total-label"><i class="fas fa-landmark"></i> Total Kewajiban Pajak</div>
+                                    <div class="tax-total-sub">PPN + BHP Telekomunikasi + USO</div>
+                                </div>
+                                <div class="tax-total-value">Rp <span id="tax_total">0</span></div>
+                            </div>
+                        </div>
                         <div class="card-body">
                             <div class="table-responsive">
                                 <table id="table-transaction-list" class="table table-bordered table-striped table-sm text-nowrap">
@@ -310,6 +357,24 @@
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css" rel="stylesheet" />
 <!-- Tempus Dominus DateTimePicker CSS -->
+<style>
+    .tax-panel { background: linear-gradient(180deg,#f8fafc,#fff); border-top: 1px solid #e5e9f0; }
+    .tax-tile { position: relative; overflow: hidden; border-radius: 12px; padding: 16px 18px; color: #fff; height: 100%; box-shadow: 0 4px 14px rgba(0,0,0,.12); transition: transform .15s; }
+    .tax-tile:hover { transform: translateY(-3px); }
+    .tax-tile .tax-icon { position: absolute; right: 12px; top: 10px; font-size: 3rem; opacity: .18; }
+    .tax-label { font-size: .8rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .95; }
+    .tax-rate { background: rgba(255,255,255,.25); border-radius: 10px; padding: 1px 8px; margin-left: 4px; font-size: .75rem; }
+    .tax-value { font-size: 1.5rem; font-weight: 700; margin: 6px 0 2px; }
+    .tax-sub { font-size: .75rem; opacity: .85; }
+    .tile-dpp { background: linear-gradient(135deg,#64748b,#334155); }
+    .tile-ppn { background: linear-gradient(135deg,#06b6d4,#0e7490); }
+    .tile-bhp { background: linear-gradient(135deg,#8b5cf6,#5b21b6); }
+    .tile-uso { background: linear-gradient(135deg,#f59e0b,#b45309); }
+    .tax-total { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; background: linear-gradient(135deg,#ef4444,#991b1b); color: #fff; border-radius: 12px; padding: 16px 22px; box-shadow: 0 6px 18px rgba(185,28,28,.35); }
+    .tax-total-label { font-size: 1.05rem; font-weight: 700; }
+    .tax-total-sub { font-size: .78rem; opacity: .85; }
+    .tax-total-value { font-size: 2rem; font-weight: 800; }
+</style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tempusdominus-bootstrap-4/5.39.0/css/tempusdominus-bootstrap-4.min.css" />
 
 <style>
@@ -606,6 +671,16 @@ $(document).ready(function() {
                 $('#total_paid').text(new Intl.NumberFormat('id-ID').format(json.totalAmount || 0));
                 $('#fee_counter').text(new Intl.NumberFormat('id-ID').format(json.totalFee || 0));
                 $('#total_payment').text(new Intl.NumberFormat('id-ID').format(json.totalPayment || 0));
+
+                var tx = json.tax || {}, nf = new Intl.NumberFormat('id-ID');
+                $('#tax_dpp').text(nf.format(tx.dpp || 0));
+                $('#tax_ppn').text(nf.format(tx.ppn || 0));
+                $('#tax_bhp').text(nf.format(tx.bhp || 0));
+                $('#tax_uso').text(nf.format(tx.uso || 0));
+                $('#tax_total').text(nf.format(tx.total_kewajiban || 0));
+                $('#tax_ppn_rate').text(nf.format(tx.ppn_rate || 0));
+                $('#tax_bhp_rate').text(nf.format(tx.bhp_rate || 0));
+                $('#tax_uso_rate').text(nf.format(tx.uso_rate || 0));
                 
                 return json.data;
             },

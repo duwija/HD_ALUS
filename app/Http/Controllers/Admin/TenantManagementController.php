@@ -49,10 +49,17 @@ class TenantManagementController extends Controller
      * Dashboard summary across all tenants (super admin only — not exposed
      * to supervisor accounts, since it aggregates data across every tenant).
      */
-    public function dashboard()
+    public function dashboard(Request $request)
     {
         $adminUser = auth('admin')->user();
         $isSupervisor = $adminUser && $adminUser->isSupervisor();
+
+        // Bulan yang ditampilkan — default bulan berjalan, bisa dipilih mundur lewat ?month=YYYY-MM.
+        try {
+            $selectedMonth = \Carbon\Carbon::createFromFormat('Y-m', $request->query('month'))->startOfMonth();
+        } catch (\Exception $e) {
+            $selectedMonth = \Carbon\Carbon::now()->startOfMonth();
+        }
 
         $tenantsQuery = Tenant::orderBy('app_name');
         if ($isSupervisor) {
@@ -72,8 +79,13 @@ class TenantManagementController extends Controller
             'revenue_this_month' => 0,
         ];
 
-        $startOfMonth = \Carbon\Carbon::now()->startOfMonth();
-        $endOfMonth = \Carbon\Carbon::now()->endOfMonth();
+        $startOfMonth = $selectedMonth->copy()->startOfMonth();
+        $endOfMonth = $selectedMonth->copy()->endOfMonth();
+
+        // Pilihan bulan untuk dropdown: 12 bulan terakhir dari bulan berjalan.
+        $monthOptions = collect(range(0, 11))->map(function ($i) {
+            return \Carbon\Carbon::now()->startOfMonth()->subMonths($i);
+        });
 
         foreach ($tenants as $tenant) {
             if ($tenant->is_active) {
@@ -89,6 +101,7 @@ class TenantManagementController extends Controller
                 'customers_potential' => null,
                 'unpaid_invoices' => null,
                 'revenue_this_month' => null,
+                'tax' => $this->computeTax(0),
                 'merchant_scope_empty' => false,
                 'error' => null,
             ];
@@ -150,6 +163,7 @@ class TenantManagementController extends Controller
                 $row['customers_potential'] = $customersPotential;
                 $row['unpaid_invoices'] = $unpaidInvoices;
                 $row['revenue_this_month'] = $revenueThisMonth;
+                $row['tax'] = $this->computeTax($revenueThisMonth);
 
                 $totals['customers'] += $customersTotal;
                 $totals['customers_active'] += $customersActive;
@@ -165,11 +179,41 @@ class TenantManagementController extends Controller
             $rows[] = $row;
         }
 
+        $totals['tax'] = $this->computeTax($totals['revenue_this_month']);
+
         return view('tenants.dashboard', [
             'rows' => $rows,
             'totals' => $totals,
             'isSupervisor' => $isSupervisor,
+            'selectedMonth' => $selectedMonth,
+            'monthOptions' => $monthOptions,
         ]);
+    }
+
+    /**
+     * Pajak: nilai pembayaran yang diterima ($amount) sudah termasuk PPN.
+     * BHP Telekomunikasi & USO dihitung dari DPP (bukan dari total pembayaran).
+     */
+    private function computeTax(float $amount): array
+    {
+        $ppnRate = 0.11;
+        $bhpRate = 0.005;
+        $usoRate = 0.0125;
+        $dpp = round($amount / (1 + $ppnRate));
+        $ppn = round($amount) - $dpp;
+        $bhp = round($dpp * $bhpRate);
+        $uso = round($dpp * $usoRate);
+
+        return [
+            'dpp' => $dpp,
+            'ppn' => $ppn,
+            'bhp' => $bhp,
+            'uso' => $uso,
+            'total_kewajiban' => $ppn + $bhp + $uso,
+            'ppn_rate' => $ppnRate * 100,
+            'bhp_rate' => $bhpRate * 100,
+            'uso_rate' => $usoRate * 100,
+        ];
     }
 
     /**
@@ -207,6 +251,7 @@ class TenantManagementController extends Controller
             'db_database' => 'required',
             'db_username' => 'required',
             'db_password' => 'required',
+            'tier' => 'nullable|in:1,2,3',
         ], [
             'domain.required' => 'Domain wajib diisi.',
             'domain.unique' => 'Domain sudah digunakan oleh tenant lain.',
@@ -298,6 +343,7 @@ class TenantManagementController extends Controller
                 'env_variables' => $this->processEnvVariables($request),
                 'is_active' => true,
                 'notes' => $request->notes,
+                'tier' => $request->tier ?: null,
             ]);
 
             // Create storage directories
@@ -476,6 +522,7 @@ class TenantManagementController extends Controller
             'license_plan_id' => 'nullable|exists:isp_master.license_plans,id',
             'license_status' => 'nullable|in:active,suspended,expired,trial',
             'license_expires_at' => 'nullable|date',
+            'tier' => 'nullable|in:1,2,3',
         ], [
             'domain.required' => 'Domain wajib diisi.',
             'domain.unique' => 'Domain sudah digunakan oleh tenant lain.',
@@ -516,6 +563,7 @@ class TenantManagementController extends Controller
                 'license_plan_id' => $request->license_plan_id ?: null,
                 'license_status' => $request->license_status ?: null,
                 'license_expires_at' => $request->license_expires_at ?: null,
+                'tier' => $request->tier ?: null,
                 'reported_merchant_ids' => array_map('intval', (array) $request->input('reported_merchant_ids', [])),
             ]);
 
@@ -2457,8 +2505,9 @@ class TenantManagementController extends Controller
         
         // Purge temporary connection
         \DB::purge('tenant_temp');
-        
+
         return response()->json([
+            'tax' => $this->computeTax($totalPayment),
             'draw' => intval($request->input('draw')),
             'recordsTotal' => $totalRecords,
             'recordsFiltered' => $totalRecords,

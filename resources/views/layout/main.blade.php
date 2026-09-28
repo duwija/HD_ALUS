@@ -921,11 +921,14 @@
             {{ " My Transaction"}}
           </a>
           @break
-          @case ("merchant") 
+          @case ("merchant")
 
           <a class="dropdown-item" href="/payment/mytransaction">
             {{ "Transaction"}}
           </a>
+          @break
+
+          @case ("admin_billing")
           @break
 
           @default
@@ -1137,7 +1140,12 @@
 
           @case ("merchant")
           @include('layout/customermerchant')
-          
+
+
+          @break
+
+          @case ("admin_billing")
+          @include('layout/adminbilling')
 
           @break
 

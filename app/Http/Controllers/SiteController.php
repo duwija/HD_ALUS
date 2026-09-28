@@ -10,7 +10,9 @@ class SiteController extends Controller
  public function __construct()
  {
     $this->middleware('auth');
-    $this->middleware('checkPrivilege:admin,noc,user');
+    $this->middleware('checkPrivilege:admin,noc,user')->except(['index']);
+    // admin_billing gets read-only access to the site list (view only, no create/edit/delete)
+    $this->middleware('checkPrivilege:admin,noc,user,admin_billing')->only(['index']);
 }
 
     /**
