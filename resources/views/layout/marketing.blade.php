@@ -20,6 +20,12 @@
         </a>
       </li>
       <li class="nav-item">
+        <a href="{{ route('marketing.customer-age') }}" class="nav-link {{ request()->is('marketing/customer-age*') ? 'active' : '' }}">
+          <i class="far fa-circle nav-icon text-info"></i>
+          <p>Customer Report</p>
+        </a>
+      </li>
+      <li class="nav-item">
         <a href="{{ route('lead-workflow.index') }}" class="nav-link {{ request()->is('settings/lead-workflow*') ? 'active' : '' }}">
           <i class="far fa-circle nav-icon text-warning"></i>
           <p>Template Workflow Lead</p>
