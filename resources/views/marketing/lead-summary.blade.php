@@ -21,6 +21,8 @@
 <section class="content">
 <div class="container-fluid">
 
+  @include('marketing.partials.lead-summary-tabs', ['activeTab' => 'pipeline'])
+
   {{-- ── FILTER BAR ─────────────────────────────────────────────────────────── --}}
   <div class="card card-outline card-primary mb-3">
     <div class="card-body p-2">

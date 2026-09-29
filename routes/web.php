@@ -5,6 +5,7 @@ Route::post('/customer/{id}/workflow', [App\Http\Controllers\CustomerController:
 Route::post('/customer/{id}/workflow-stage', [App\Http\Controllers\LeadWorkflowController::class, 'updateCustomer'])->name('customer.workflow-stage');
 // Marketing: Lead Conversion Summary
 Route::get('/marketing/lead-summary', [App\Http\Controllers\CustomerController::class, 'leadSummary'])->name('marketing.lead-summary');
+Route::get('/marketing/lead-summary/conversion', [App\Http\Controllers\LeadConversionController::class, 'index'])->name('marketing.lead-conversion');
 // Marketing: Report Umur Customer
 Route::get('/marketing/customer-age', [App\Http\Controllers\CustomerAgeReportController::class, 'index'])->name('marketing.customer-age');
 Route::get('/marketing/customer-age/data', [App\Http\Controllers\CustomerAgeReportController::class, 'data'])->name('marketing.customer-age.data');
