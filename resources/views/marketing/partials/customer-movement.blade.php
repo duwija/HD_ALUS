@@ -129,7 +129,8 @@
 <div class="card card-outline card-secondary">
   <div class="card-header"><h3 class="card-title"><i class="fas fa-table"></i> Rincian {{ $movement['granularity'] === 'harian' ? 'per Hari' : 'per Bulan' }}</h3></div>
   <div class="card-body p-0 table-responsive" style="max-height: 420px;">
-    <table class="table table-sm table-bordered table-hover text-center mb-0">
+    <table class="table table-sm table-bordered table-hover text-center mb-0 export-table"
+           data-export-title="Pergerakan Customer {{ $movement['granularity'] }} - {{ $fmtDate($periodFrom) }} sd {{ $fmtDate($periodTo) }}">
       <thead class="thead-light" style="position: sticky; top: 0;">
         <tr>
           <th class="text-left">{{ $movement['granularity'] === 'harian' ? 'Tanggal' : 'Bulan' }}</th>

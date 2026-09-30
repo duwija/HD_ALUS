@@ -193,7 +193,7 @@
             $bucketRanges['b'.$i] = [$b[1], $b[2]];
         }
       @endphp
-      <table class="table table-sm table-bordered table-hover text-center mb-0">
+      <table class="table table-sm table-bordered table-hover text-center mb-0 export-table" data-export-title="Ringkasan Umur x Status - {{ $periodLabel }}">
         <thead class="thead-light">
           <tr>
             <th class="text-left">Umur</th>
@@ -241,7 +241,14 @@
 
   {{-- ── DAFTAR CUSTOMER ───────────────────────────────────────────────────── --}}
   <div class="card card-outline card-secondary" id="customerTable">
-    <div class="card-header"><h3 class="card-title"><i class="fas fa-users"></i> Daftar Customer</h3></div>
+    <div class="card-header">
+      <h3 class="card-title"><i class="fas fa-users"></i> Daftar Customer</h3>
+      <div class="card-tools">
+        <a href="{{ route('marketing.customer-age.export', $filters) }}" class="btn btn-sm btn-success">
+          <i class="fas fa-file-excel"></i> Export Excel <small>(semua hasil filter)</small>
+        </a>
+      </div>
+    </div>
     <div class="card-body table-responsive">
       <table id="ageTable" class="table table-bordered table-striped table-sm" style="width:100%">
         <thead>
@@ -365,6 +372,8 @@ $(function () {
     $('#date_from').val(ymd(from));
     $('#date_to').val(ymd(today));
   });
+
+  @include('marketing.partials.export-table-js')
 
   $('#ageTable').DataTable({
     processing: true,

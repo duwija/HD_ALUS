@@ -225,6 +225,14 @@ class CustomerController extends Controller
             $lead->workflow_passed  = $passed;
         });
 
+        // ── Success leads (definisi sama dengan KPI "Sukses") ────────────────────────
+        $successLeads = \App\Customer::where('id_status', 2)
+            ->whereNotNull('converted_at')
+            ->tap($periodFilter)
+            ->with(['sale_name', 'plan_name'])
+            ->orderBy('converted_at', 'desc')
+            ->get();
+
         // ── Lost leads ────────────────────────────────────────────────────────────────
         $lostLeads = \App\Customer::where('id_status', 1)
             ->whereNotNull('lost_at')
@@ -283,7 +291,7 @@ class CustomerController extends Controller
             'start', 'end', 'filterSale', 'allSales',
             'totalLeads', 'totalInprogress', 'totalConverted', 'totalLost',
             'pctInprogress', 'pctConverted', 'pctLost',
-            'salesPerf', 'inprogressLeads', 'lostLeads', 'potentialMapPoints'
+            'salesPerf', 'inprogressLeads', 'successLeads', 'lostLeads', 'potentialMapPoints'
         ));
     }
     /**

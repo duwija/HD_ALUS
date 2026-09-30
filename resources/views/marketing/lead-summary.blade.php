@@ -176,36 +176,50 @@
     </div>
   </div>
 
-  {{-- ── IN-PROGRESS LEADS ───────────────────────────────────────────────────── --}}
-  <div class="card card-outline card-warning">
-    <div class="card-header">
-      <h3 class="card-title">
-        <i class="fas fa-spinner text-warning"></i> Lead In Progress
-        <span class="badge badge-warning ml-1">{{ $inprogressLeads->count() }}</span>
-      </h3>
-      <div class="card-tools">
-        <input type="text" id="searchInprogress" class="form-control form-control-sm" placeholder="Cari nama / sales..." style="width:200px;">
-      </div>
+  {{-- ── TABEL LEAD: IN PROGRESS / SUKSES / GAGAL ─────────────────────────────── --}}
+  <div class="card card-outline card-primary card-tabs">
+    <div class="card-header p-0 pt-1 border-bottom-0">
+      <ul class="nav nav-tabs" id="leadTableTabs" role="tablist">
+        <li class="nav-item">
+          <a class="nav-link active" data-toggle="pill" href="#tabInprogress" role="tab">
+            <i class="fas fa-spinner text-warning"></i> In Progress
+            <span class="badge badge-warning ml-1">{{ $inprogressLeads->count() }}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-toggle="pill" href="#tabSuccess" role="tab">
+            <i class="fas fa-check-circle text-success"></i> Sukses
+            <span class="badge badge-success ml-1">{{ $successLeads->count() }}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-toggle="pill" href="#tabLost" role="tab">
+            <i class="fas fa-times-circle text-danger"></i> Gagal
+            <span class="badge badge-danger ml-1">{{ $lostLeads->count() }}</span>
+          </a>
+        </li>
+      </ul>
     </div>
-    <div class="card-body p-0">
-      @if($inprogressLeads->isEmpty())
-        <div class="p-3 text-center text-muted">Tidak ada lead in-progress pada periode ini.</div>
-      @else
-      <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0" id="tableInprogress">
-          <thead class="thead-light">
-            <tr>
-              <th>#</th>
-              <th>Nama Lead</th>
-              <th>Sales</th>
-              <th>Lead Source</th>
-              <th class="text-center">Step Sekarang</th>
-              <th style="min-width:140px;">Progress Workflow</th>
-              <th>Update Terakhir</th>
-              <th>Tgl Daftar</th>
-              <th></th>
-            </tr>
-          </thead>
+    <div class="card-body">
+      <div class="tab-content">
+
+        {{-- In Progress --}}
+        <div class="tab-pane fade show active" id="tabInprogress" role="tabpanel">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 lead-table" id="tableInprogress" data-export-title="Lead In Progress">
+              <thead class="thead-light">
+                <tr>
+                  <th>#</th>
+                  <th>Nama Lead</th>
+                  <th>Sales</th>
+                  <th>Lead Source</th>
+                  <th class="text-center">Step Sekarang</th>
+                  <th style="min-width:140px;">Progress Workflow</th>
+                  <th>Update Terakhir</th>
+                  <th>Tgl Daftar</th>
+                  <th class="no-export"></th>
+                </tr>
+              </thead>
           <tbody>
             @php $hasStaleRow = false; @endphp
             @foreach($inprogressLeads as $i => $lead)
@@ -287,7 +301,7 @@
                 <small>{{ \Carbon\Carbon::parse($lead->created_at)->format('d M Y') }}</small>
                 <br><small class="text-muted">{{ $daysOld }} hr lalu</small>
               </td>
-              <td>
+              <td class="no-export">
                 <a href="/customer/{{ $lead->id }}" class="btn btn-xs btn-outline-primary" title="Detail">
                   <i class="fas fa-eye"></i>
                 </a>
@@ -295,74 +309,124 @@
             </tr>
             @endforeach
           </tbody>
-        </table>
-      </div>
-      <div class="px-2 py-1">
-        @if($hasStaleRow ?? false)
-        <small class="text-muted">
-          <span class="badge badge-danger py-0">Follow-up!</span> = Tidak ada update &gt; 14 hari
-        </small>
-        @endif
-      </div>
-      @endif
-    </div>
-  </div>
+            </table>
+          </div>
+          @if($hasStaleRow ?? false)
+            <small class="text-muted d-block mt-1">
+              <span class="badge badge-danger py-0">Follow-up!</span> = Tidak ada update &gt; 14 hari
+            </small>
+          @endif
+        </div>
 
-  {{-- ── LOST LEADS ──────────────────────────────────────────────────────────── --}}
-  @if($lostLeads->isNotEmpty())
-  <div class="card card-outline card-danger collapsed-card">
-    <div class="card-header">
-      <h3 class="card-title">
-        <i class="fas fa-times-circle text-danger"></i> Lead Gagal / Lost
-        <span class="badge badge-danger ml-1">{{ $lostLeads->count() }}</span>
-      </h3>
-      <div class="card-tools">
-        <button type="button" class="btn btn-tool" data-card-widget="collapse">
-          <i class="fas fa-plus"></i>
-        </button>
-      </div>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-          <thead class="thead-light">
-            <tr>
-              <th>#</th>
-              <th>Nama Lead</th>
-              <th>Sales</th>
-              <th>Alasan Gagal</th>
-              <th>Catatan</th>
-              <th>Tanggal Gagal</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            @foreach($lostLeads as $i => $lead)
-            <tr>
-              <td>{{ $i+1 }}</td>
-              <td>
-                <a href="/customer/{{ $lead->id }}" class="font-weight-bold text-danger">{{ $lead->name }}</a>
-                <br><small class="text-muted">{{ $lead->phone }}</small>
-              </td>
-              <td>
-                @if($lead->sale_name)
-                  <span class="badge badge-info">{{ $lead->sale_name->name }}</span>
-                @else <span class="text-muted small">-</span> @endif
-              </td>
-              <td><span class="badge badge-danger">{{ $lead->lost_reason ?? '-' }}</span></td>
-              <td><small class="text-muted">{{ $lead->lost_notes ?? '-' }}</small></td>
-              <td><small>{{ $lead->lost_at ? \Carbon\Carbon::parse($lead->lost_at)->format('d M Y') : '-' }}</small></td>
-              <td>
-                <a href="/customer/{{ $lead->id }}" class="btn btn-xs btn-outline-danger"><i class="fas fa-eye"></i></a>
-              </td>
-            </tr>
-            @endforeach
-          </tbody>
-        </table>
+        {{-- Sukses --}}
+        <div class="tab-pane fade" id="tabSuccess" role="tabpanel">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 lead-table" id="tableSuccess" data-export-title="Lead Sukses">
+              <thead class="thead-light">
+                <tr>
+                  <th>#</th>
+                  <th>Nama Lead</th>
+                  <th>Sales</th>
+                  <th>Lead Source</th>
+                  <th>Plan</th>
+                  <th>Tgl Daftar</th>
+                  <th>Tgl Konversi</th>
+                  <th>Lama Konversi</th>
+                  <th class="no-export"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @foreach($successLeads as $i => $lead)
+                @php
+                  $convertedAt = \Carbon\Carbon::parse($lead->converted_at);
+                  $daysToConvert = max(0, \Carbon\Carbon::parse($lead->created_at)->startOfDay()->diffInDays($convertedAt->copy()->startOfDay(), false));
+                @endphp
+                <tr>
+                  <td>{{ $i+1 }}</td>
+                  <td>
+                    <a href="/customer/{{ $lead->id }}" class="font-weight-bold text-success">{{ $lead->name }}</a>
+                    @if($lead->phone)
+                      <br><small class="text-muted"><i class="fas fa-phone fa-xs mr-1"></i>{{ $lead->phone }}</small>
+                    @endif
+                  </td>
+                  <td>
+                    @if($lead->sale_name)
+                      <span class="badge badge-info">{{ $lead->sale_name->name }}</span>
+                    @else <span class="text-muted small">Unassigned</span> @endif
+                  </td>
+                  <td>
+                    @if($lead->lead_source)
+                      <span class="badge badge-secondary">{{ $lead->lead_source }}</span>
+                    @else <span class="text-muted small">-</span> @endif
+                  </td>
+                  <td>{{ $lead->plan_name->name ?? '-' }}</td>
+                  <td data-order="{{ \Carbon\Carbon::parse($lead->created_at)->format('Y-m-d H:i') }}"><small>{{ \Carbon\Carbon::parse($lead->created_at)->format('d M Y') }}</small></td>
+                  <td data-order="{{ $convertedAt->format('Y-m-d H:i') }}"><small>{{ $convertedAt->format('d M Y') }}</small></td>
+                  <td data-order="{{ $daysToConvert }}">{{ $daysToConvert }} hari</td>
+                  <td class="no-export">
+                    <a href="/customer/{{ $lead->id }}" class="btn btn-xs btn-outline-success" title="Detail"><i class="fas fa-eye"></i></a>
+                  </td>
+                </tr>
+                @endforeach
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {{-- Gagal --}}
+        <div class="tab-pane fade" id="tabLost" role="tabpanel">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 lead-table" id="tableLost" data-export-title="Lead Gagal">
+              <thead class="thead-light">
+                <tr>
+                  <th>#</th>
+                  <th>Nama Lead</th>
+                  <th>Sales</th>
+                  <th>Lead Source</th>
+                  <th>Alasan Gagal</th>
+                  <th>Catatan</th>
+                  <th>Tgl Daftar</th>
+                  <th>Tanggal Gagal</th>
+                  <th class="no-export"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @foreach($lostLeads as $i => $lead)
+                <tr>
+                  <td>{{ $i+1 }}</td>
+                  <td>
+                    <a href="/customer/{{ $lead->id }}" class="font-weight-bold text-danger">{{ $lead->name }}</a>
+                    @if($lead->phone)
+                      <br><small class="text-muted"><i class="fas fa-phone fa-xs mr-1"></i>{{ $lead->phone }}</small>
+                    @endif
+                  </td>
+                  <td>
+                    @if($lead->sale_name)
+                      <span class="badge badge-info">{{ $lead->sale_name->name }}</span>
+                    @else <span class="text-muted small">-</span> @endif
+                  </td>
+                  <td>
+                    @if($lead->lead_source)
+                      <span class="badge badge-secondary">{{ $lead->lead_source }}</span>
+                    @else <span class="text-muted small">-</span> @endif
+                  </td>
+                  <td><span class="badge badge-danger">{{ $lead->lost_reason ?? '-' }}</span></td>
+                  <td><small class="text-muted">{{ $lead->lost_notes ?? '-' }}</small></td>
+                  <td data-order="{{ \Carbon\Carbon::parse($lead->created_at)->format('Y-m-d H:i') }}"><small>{{ \Carbon\Carbon::parse($lead->created_at)->format('d M Y') }}</small></td>
+                  <td data-order="{{ $lead->lost_at ? \Carbon\Carbon::parse($lead->lost_at)->format('Y-m-d H:i') : '' }}"><small>{{ $lead->lost_at ? \Carbon\Carbon::parse($lead->lost_at)->format('d M Y') : '-' }}</small></td>
+                  <td class="no-export">
+                    <a href="/customer/{{ $lead->id }}" class="btn btn-xs btn-outline-danger" title="Detail"><i class="fas fa-eye"></i></a>
+                  </td>
+                </tr>
+                @endforeach
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
-  @endif
 
   {{-- ── POTENTIAL LEADS MAP ───────────────────────────────────────────────────── --}}
   <div class="card card-outline card-info mb-3">
@@ -426,14 +490,34 @@
   })();
 
   // Search filter for in-progress table
-  document.getElementById('searchInprogress').addEventListener('input', function() {
-    const q = this.value.toLowerCase();
-    document.querySelectorAll('#tableInprogress tbody tr').forEach(function(row) {
-      const name  = row.getAttribute('data-name') || '';
-      const sales = row.getAttribute('data-sales') || '';
-      row.style.display = (!q || name.includes(q) || sales.includes(q)) ? '' : 'none';
+  // ── DataTables + export untuk tabel In Progress / Sukses / Gagal ──────────
+  (function () {
+    var periodLabel = @json(\Carbon\Carbon::parse($start)->format('d-m-Y') . ' sd ' . \Carbon\Carbon::parse($end)->format('d-m-Y'));
+    // Teks sel untuk export: <br> jadi pemisah, tag HTML dibuang
+    var exportBody = function (data) {
+      return $('<div>').html(String(data).replace(/<br\s*\/?>/gi, ' | ')).text().replace(/\s+/g, ' ').replace(/^\s*\|\s*|\s*\|\s*$/g, '').trim();
+    };
+    $('.lead-table').each(function () {
+      var title = $(this).data('export-title') + ' ' + periodLabel;
+      var exportOptions = { columns: ':not(.no-export)', format: { body: exportBody } };
+      $(this).DataTable({
+        dom: "<'row'<'col-sm-6'B><'col-sm-6'f>>rt<'row'<'col-sm-5'i><'col-sm-7'p>>",
+        pageLength: 25,
+        order: [],
+        columnDefs: [{ targets: 'no-export', orderable: false, searchable: false }],
+        buttons: [
+          { extend: 'excelHtml5', text: '<i class="fas fa-file-excel"></i> Excel', className: 'btn btn-sm btn-success', title: title, exportOptions: exportOptions },
+          { extend: 'csvHtml5', text: '<i class="fas fa-file-csv"></i> CSV', className: 'btn btn-sm btn-secondary', title: title, exportOptions: exportOptions },
+          { extend: 'print', text: '<i class="fas fa-print"></i> Print', className: 'btn btn-sm btn-default', title: title, exportOptions: exportOptions }
+        ],
+        language: { emptyTable: 'Tidak ada data pada periode ini', search: 'Cari:' }
+      });
     });
-  });
+    // Tabel di tab tersembunyi perlu hitung ulang lebar kolom saat tab dibuka
+    $('#leadTableTabs a[data-toggle="pill"]').on('shown.bs.tab', function () {
+      $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+    });
+  })();
 
   // Potential leads map
   (function () {

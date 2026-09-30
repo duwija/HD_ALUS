@@ -2,6 +2,8 @@
 $(function () {
   $('.select2').select2({ width: '100%', allowClear: true });
 
+  @include('marketing.partials.export-table-js')
+
   $('.period-quick').on('click', function () {
     function ymd(d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
