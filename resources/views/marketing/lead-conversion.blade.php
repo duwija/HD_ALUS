@@ -362,10 +362,27 @@ $(function () {
     });
   })();
 
+  // Export: nama/ID dipisah "|", beberapa tag dipisah koma, tag HTML dibuang
+  var exportTitle = @json('Hasil Konversi Lead - ' . ($basis === 'billing' ? 'Billing start' : 'Lead masuk') . ' '
+      . \Carbon\Carbon::parse($start)->format('d-m-Y') . ' sd ' . \Carbon\Carbon::parse($end)->format('d-m-Y'));
+  var exportOptions = {
+    format: {
+      body: function (data) {
+        var html = String(data).replace(/<br\s*\/?>/gi, ' | ').replace(/<\/span>\s*<span/gi, '</span>, <span');
+        return $('<div>').html(html).text().replace(/\s+/g, ' ').trim();
+      }
+    }
+  };
   $('#conversionTable').DataTable({
+    dom: "<'row'<'col-sm-6'B><'col-sm-6'f>>rt<'row'<'col-sm-5'i><'col-sm-7'p>>",
     pageLength: 25,
     order: [[8, 'desc']],
-    language: { emptyTable: 'Tidak ada lead terkonversi di periode ini' }
+    buttons: [
+      { extend: 'excelHtml5', text: '<i class="fas fa-file-excel"></i> Excel', title: exportTitle, exportOptions: exportOptions },
+      { extend: 'csvHtml5', text: '<i class="fas fa-file-csv"></i> CSV', title: exportTitle, exportOptions: exportOptions },
+      { extend: 'print', text: '<i class="fas fa-print"></i> Print', title: exportTitle, exportOptions: exportOptions }
+    ],
+    language: { emptyTable: 'Tidak ada lead terkonversi di periode ini', search: 'Cari:' }
   });
 });
 </script>
