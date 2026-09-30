@@ -323,6 +323,12 @@ class TenantManagementController extends Controller
                     throw new \Exception('Gagal import struktur ke database baru: ' . implode(' ', $importOutput));
                 }
 
+                // mysqldump --no-data membuat tabel `migrations` ikut kosong, sehingga DB baru
+                // menganggap semua migration belum jalan padahal skemanya sudah lengkap
+                // (migrate berikutnya gagal "already exists"). Salin catatannya dari template.
+                $targetDbQuoted = '`' . str_replace('`', '``', $request->db_database) . '`';
+                DB::statement("INSERT INTO {$targetDbQuoted}.`migrations` (`migration`, `batch`) SELECT `migration`, `batch` FROM `{$sourceDb}`.`migrations`");
+
                 \Log::info("Tenant DB created: {$request->db_database} cloned from {$sourceDb}");
             }
 
@@ -445,6 +451,22 @@ class TenantManagementController extends Controller
             }
             if (!empty($directoriesFailed)) {
                 \Log::warning("Tenant {$rescode} directories failed: " . implode(', ', $directoriesFailed));
+            }
+
+            // Jalankan migration yang belum ada di template, supaya DB tenant baru
+            // langsung mengikuti skema terbaru walaupun `kencana` tertinggal.
+            if ($request->create_database) {
+                try {
+                    $migrateExit = \Artisan::call('tenant:migrate-all', ['--tenant' => $tenant->id]);
+                    $migrateOutput = trim(\Artisan::output());
+                    if ($migrateExit !== 0) {
+                        \Log::warning("Tenant {$rescode} migration gagal: " . $migrateOutput);
+                    } else {
+                        \Log::info("Tenant {$rescode} migration: " . $migrateOutput);
+                    }
+                } catch (\Exception $migrateException) {
+                    \Log::warning("Tenant {$rescode} migration gagal: " . $migrateException->getMessage());
+                }
             }
 
             // Inisialisasi provider payment gateway default jika tabel tersedia.
