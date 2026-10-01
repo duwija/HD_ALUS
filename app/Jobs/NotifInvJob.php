@@ -241,6 +241,8 @@ class NotifInvJob implements ShouldQueue
             // Set app config dari tenant
             Config::set('app.name',      $tenant['app_name']  ?? 'ISP Management');
             Config::set('app.signature', $tenant['signature'] ?? $tenant['app_name'] ?? '');
+            // Link di template email pakai config('app.url') — tanpa ini worker pakai APP_URL pusat
+            Config::set('app.url',       'https://' . ($tenant['domain'] ?? $this->tenantDomain));
 
             Log::channel('notif')->info("[TENANT] Context restored: domain={$this->tenantDomain} db={$tenant['db_database']} mail=" . ($tenant['mail_username'] ?? '-'));
 

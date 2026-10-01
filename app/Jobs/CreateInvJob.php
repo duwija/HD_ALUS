@@ -348,6 +348,8 @@ class CreateInvJob implements ShouldQueue
 
             Config::set('app.name',      $tenant['app_name']  ?? 'ISP Management');
             Config::set('app.signature', $tenant['signature'] ?? $tenant['app_name'] ?? '');
+            // Link di template email pakai config('app.url') — tanpa ini worker pakai APP_URL pusat
+            Config::set('app.url',       'https://' . ($tenant['domain'] ?? $this->tenantDomain));
 
             \Log::channel('invoice')->info("[TENANT] Context restored: domain={$this->tenantDomain} db={$tenant['db_database']}");
 
