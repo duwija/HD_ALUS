@@ -57,6 +57,12 @@ public function akuns()
     return $this->belongsToMany(Akun::class, 'akunusers', 'id_user', 'akun_code');
 }
 
+// Hanya Full Time & Fixed-Term Contract; TRIM karena form edit user menyimpan ' Fixed-Term Contract'
+public function scopeAttendanceEmployee($query)
+{
+    return $query->whereRaw('TRIM(employee_type) IN (?, ?)', ['Full Time', 'Fixed-Term Contract']);
+}
+
 // ── Employee / Attendance Relations ────────────────────────────────────
 public function supervisor()
 {

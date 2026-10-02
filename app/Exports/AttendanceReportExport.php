@@ -27,7 +27,7 @@ class AttendanceReportExport implements FromView
         $monthStart = Carbon::parse($this->month . '-01')->startOfMonth();
         $monthEnd = Carbon::parse($this->month . '-01')->endOfMonth();
 
-        $employees = User::where('is_active_employee', true)->orderBy('name')->get();
+        $employees = User::where('is_active_employee', true)->attendanceEmployee()->orderBy('name')->get();
         $targetEmployees = $this->userId
             ? $employees->where('id', (int) $this->userId)->values()
             : $employees->values();

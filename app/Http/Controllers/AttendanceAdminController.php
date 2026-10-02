@@ -16,6 +16,11 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class AttendanceAdminController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     // ── Dashboard ────────────────────────────────────────────────────────────
 
     public function dashboard(Request $request)
@@ -23,10 +28,13 @@ class AttendanceAdminController extends Controller
         $month  = $request->get('month', now()->format('Y-m'));
         [$year, $m] = explode('-', $month);
 
-        $totalEmployees = User::where('is_active_employee', true)->count();
+        // Semua angka di dashboard hanya untuk karyawan Full Time & Fixed-Term Contract
+        $empIds = User::attendanceEmployee()->pluck('id');
+
+        $totalEmployees = User::where('is_active_employee', true)->attendanceEmployee()->count();
 
         // ── Statistik bulan ini ──────────────────────────────────────────
-        $monthAtt = Attendance::whereYear('date', $year)->whereMonth('date', $m)->get();
+        $monthAtt = Attendance::whereIn('user_id', $empIds)->whereYear('date', $year)->whereMonth('date', $m)->get();
         $stats = [
             'present'  => $monthAtt->whereIn('status', ['present', 'late'])->count(),
             'late'     => $monthAtt->where('status', 'late')->count(),
@@ -36,27 +44,27 @@ class AttendanceAdminController extends Controller
         ];
 
         // ── Hari ini ─────────────────────────────────────────────────────
-        $todayAtt   = Attendance::with(['user', 'shift'])->whereDate('date', today())->get();
+        $todayAtt   = Attendance::with(['user', 'shift'])->whereIn('user_id', $empIds)->whereDate('date', today())->get();
         $clockedIn  = $todayAtt->whereNotNull('clock_in')->count();
         $clockedOut = $todayAtt->whereNotNull('clock_out')->count();
         $notYet     = $totalEmployees - $clockedIn;
         $late       = $todayAtt->where('status', 'late')->count();
 
         // ── Pending approvals ─────────────────────────────────────────────
-        $pendingLeave    = LeaveRequest::where('status', 'pending')->count();
-        $pendingOvertime = OvertimeRequest::where('status', 'pending')->count();
+        $pendingLeave    = LeaveRequest::whereIn('user_id', $empIds)->where('status', 'pending')->count();
+        $pendingOvertime = OvertimeRequest::whereIn('user_id', $empIds)->where('status', 'pending')->count();
 
         // ── Izin/Cuti bulan ini ───────────────────────────────────────────
-        $leaveSummary = LeaveRequest::whereRaw("DATE_FORMAT(start_date,'%Y-%m') = ?", [$month])
+        $leaveSummary = LeaveRequest::whereIn('user_id', $empIds)->whereRaw("DATE_FORMAT(start_date,'%Y-%m') = ?", [$month])
             ->selectRaw('type, status, COUNT(*) as total')
             ->groupBy('type', 'status')
             ->get();
 
         // ── Lembur bulan ini ──────────────────────────────────────────────
-        $overtimeSummary = OvertimeRequest::whereRaw("DATE_FORMAT(date,'%Y-%m') = ?", [$month])
+        $overtimeSummary = OvertimeRequest::whereIn('user_id', $empIds)->whereRaw("DATE_FORMAT(date,'%Y-%m') = ?", [$month])
             ->where('status', 'approved')
             ->sum('duration_hours');
-        $overtimePending = OvertimeRequest::whereRaw("DATE_FORMAT(date,'%Y-%m') = ?", [$month])
+        $overtimePending = OvertimeRequest::whereIn('user_id', $empIds)->whereRaw("DATE_FORMAT(date,'%Y-%m') = ?", [$month])
             ->where('status', 'pending')->count();
 
         // ── Tren 14 hari terakhir ──────────────────────────────────────────
@@ -65,7 +73,7 @@ class AttendanceAdminController extends Controller
         for ($i = $trendDays - 1; $i >= 0; $i--) {
             $day = Carbon::today()->subDays($i);
             $ds  = $day->format('Y-m-d');
-            $att = Attendance::whereDate('date', $ds)->get();
+            $att = Attendance::whereIn('user_id', $empIds)->whereDate('date', $ds)->get();
             $trend[] = [
                 'date'    => $day->isoFormat('D MMM'),
                 'present' => $att->whereIn('status', ['present', 'late'])->count(),
@@ -75,8 +83,8 @@ class AttendanceAdminController extends Controller
         }
 
         // ── 10 pengajuan leave terbaru ────────────────────────────────────
-        $latestLeaves    = LeaveRequest::with('user')->orderByDesc('created_at')->limit(6)->get();
-        $latestOvertimes = OvertimeRequest::with('user')->orderByDesc('created_at')->limit(6)->get();
+        $latestLeaves    = LeaveRequest::with('user')->whereIn('user_id', $empIds)->orderByDesc('created_at')->limit(6)->get();
+        $latestOvertimes = OvertimeRequest::with('user')->whereIn('user_id', $empIds)->orderByDesc('created_at')->limit(6)->get();
 
         // ── Karyawan yang belum absen hari ini ────────────────────────────
         $today        = Carbon::today()->toDateString();
@@ -93,12 +101,12 @@ class AttendanceAdminController extends Controller
 
         $excludeIds   = $presentIds->merge($offTodayIds)->merge($onLeaveIds)->unique();
 
-        $notCheckedIn = User::where('is_active_employee', true)
+        $notCheckedIn = User::where('is_active_employee', true)->attendanceEmployee()
             ->whereNotIn('id', $excludeIds)
             ->orderBy('name')->limit(8)->get();
 
         // Update notYet to reflect exclusions
-        $notYet = User::where('is_active_employee', true)
+        $notYet = User::where('is_active_employee', true)->attendanceEmployee()
             ->whereNotIn('id', $excludeIds)
             ->count();
 
@@ -231,7 +239,7 @@ class AttendanceAdminController extends Controller
         $month     = $request->get('month', now()->format('Y-m'));
         [$year, $m] = explode('-', $month);
 
-        $employees = User::where('is_active_employee', true)->orderBy('name')->get();
+        $employees = User::where('is_active_employee', true)->attendanceEmployee()->orderBy('name')->get();
         $shifts    = Shift::where('is_active', true)->orderBy('start_time')->get();
 
         $schedules = ShiftSchedule::with(['user','shift'])
@@ -284,7 +292,7 @@ class AttendanceAdminController extends Controller
         $monthStart = Carbon::parse($month . '-01')->startOfMonth();
         $monthEnd   = Carbon::parse($month . '-01')->endOfMonth();
 
-        $employees = User::where('is_active_employee', true)->orderBy('name')->get();
+        $employees = User::where('is_active_employee', true)->attendanceEmployee()->orderBy('name')->get();
         $targetEmployees = $userId
             ? $employees->where('id', (int) $userId)->values()
             : $employees->values();
@@ -476,6 +484,7 @@ class AttendanceAdminController extends Controller
     {
         $date   = $request->get('date', today()->format('Y-m-d'));
         $records = Attendance::with(['user','shift','locationIn'])
+            ->whereIn('user_id', User::attendanceEmployee()->pluck('id'))
             ->whereDate('date', $date)
             ->orderBy('clock_in')
             ->get();
@@ -487,7 +496,7 @@ class AttendanceAdminController extends Controller
 
     public function employees()
     {
-        $employees  = User::with('supervisor')->orderBy('name')->get();
+        $employees  = User::with('supervisor')->attendanceEmployee()->orderBy('name')->get();
         $supervisors = User::orderBy('name')->get();
         return view('attendance.employees', compact('employees','supervisors'));
     }
