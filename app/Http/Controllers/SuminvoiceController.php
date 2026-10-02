@@ -1604,7 +1604,8 @@ public function customerisolirJob(Request $request)
     foreach ($customer as $cust) {
         $count++;
 
-        $delay = $this->messageDelay($count, $longPauseEvery);
+        // $delay = $this->messageDelay($count, $longPauseEvery);
+        $delay = 5;
 
         IsolirJob::dispatch($cust->id, $cust->id_status)
             ->onQueue($tenantQueue)

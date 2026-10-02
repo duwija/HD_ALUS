@@ -68,6 +68,20 @@ class IsolirJob implements ShouldQueue
             return; // Tidak perlu retry — data memang tidak ada
         }
 
+        // ===== VALIDASI: CEK TUNGGAKAN TAGIHAN =====
+        // Jika customer sudah melunasi semua invoice, JANGAN jalankan isolir
+        $unpaidInvoice = \App\Suminvoice::where('id_customer', $this->id)
+            ->where('payment_status', 0)
+            ->exists();
+
+        if (!$unpaidInvoice) {
+            Log::channel('isolir')->warning(
+                "Customer {$customers->customer_id} ({$customers->name}) tidak memiliki tunggakan tagihan. "
+                . "Proses isolir dibatalkan."
+            );
+            return;
+        }
+
         $oldStatus = optional($customers->status_name)->name ?? 'Unknown';
 
 
