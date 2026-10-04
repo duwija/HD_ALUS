@@ -47,6 +47,15 @@
           @endforeach
         </select>
       </div>
+      <div class="form-group col-md-2">
+        <label>Sales</label>
+        <select name="id_sale" class="form-control select2" data-placeholder="Semua sales">
+          <option value="">Semua</option>
+          @foreach ($sales as $id => $name)
+            <option value="{{ $id }}" {{ (string)($filters['id_sale'] ?? '') === (string)$id ? 'selected' : '' }}>{{ $name }}</option>
+          @endforeach
+        </select>
+      </div>
       @if ($tags->isNotEmpty())
       <div class="form-group col-md-2">
         <label>Tag</label>

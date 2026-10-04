@@ -970,6 +970,7 @@ public function trash()
     $merchant = \App\Merchant::pluck('name', 'id');
     $plan = \App\Plan::pluck('name', 'id');
     $tags = \App\CustomerTag::pluck('name', 'id');
+    $sales = \App\Sale::orderBy('name')->pluck('name', 'id');
     
     // Chart data - deleted customers per day (last 30 days)
     $startDate = Carbon::now()->subDays(30)->startOfDay();
@@ -1038,14 +1039,17 @@ public function trash()
         $merchantData[] = $item->count;
     }
     
-    return view ('customer/trash', compact('deletedCustomersCount', 'status', 'plan', 'merchant', 'tags', 'dailyDeletedCustomers', 'dailyDeletedByType', 'totalDeletedCustomers', 'planLabels', 'planData', 'merchantLabels', 'merchantData'));
+    return view ('customer/trash', compact('deletedCustomersCount', 'status', 'plan', 'merchant', 'tags', 'sales', 'dailyDeletedCustomers', 'dailyDeletedByType', 'totalDeletedCustomers', 'planLabels', 'planData', 'merchantLabels', 'merchantData'));
 }
 
 public function trashData(Request $request)
 {
     $hasDeletionTypeColumn = Schema::hasColumn('customers', 'deletion_type');
 
-    $query = \App\Customer::onlyTrashed()->with(['merchant_name', 'plan_name', 'status_name'])
+    // Umur langganan = billing_start s/d tanggal dihapus
+    $query = \App\Customer::onlyTrashed()->with(['merchant_name', 'plan_name', 'status_name', 'sale_name'])
+        ->select('customers.*')
+        ->selectRaw('DATEDIFF(DATE(customers.deleted_at), customers.billing_start) as age_days')
         ->orderBy('deleted_at', 'desc');
 
     $filterableColumns = [
@@ -1073,6 +1077,10 @@ public function trashData(Request $request)
 
     if ($request->has('id_status') && $request->id_status != '') {
         $query->where('id_status', $request->id_status);
+    }
+
+    if ($request->filled('id_sale')) {
+        $query->where('id_sale', $request->id_sale);
     }
 
     if ($request->has('id_plan') && $request->id_plan != '') {
@@ -1121,6 +1129,12 @@ public function trashData(Request $request)
             }
             return '<span class="badge badge-light">No Merchant</span>';
         })
+        ->addColumn('sale', function($row) {
+            if ($row->id_sale && $row->sale_name) {
+                return e($row->sale_name->name);
+            }
+            return '<span class="badge badge-light">-</span>';
+        })
         ->addColumn('plan', function($row) {
             if ($row->id_plan && $row->plan_name) {
                 return e($row->plan_name->name) . ' <small class="text-muted">(Rp ' . number_format($row->plan_name->price) . ')</small>';
@@ -1145,6 +1159,22 @@ public function trashData(Request $request)
                 . '<i class="far fa-calendar-times mr-1"></i>' . $row->deleted_at->format('d M Y')
                 . '<br><i class="far fa-clock mr-1"></i>' . $row->deleted_at->format('H:i:s')
                 . '</small>';
+        })
+        ->editColumn('age_days', function($row) {
+            if ($row->age_days === null) {
+                return '<small class="text-muted">Belum billing</small>';
+            }
+            $days = max(0, (int) $row->age_days);
+            $html = number_format($days, 0, ',', '.') . ' hari';
+            if ($days >= 30) {
+                $years = intdiv($days, 365);
+                $months = intdiv($days % 365, 30);
+                $parts = [];
+                if ($years) $parts[] = $years . ' thn';
+                if ($months) $parts[] = $months . ' bln';
+                if ($parts) $html .= '<br><small class="text-muted">± ' . implode(' ', $parts) . '</small>';
+            }
+            return $html;
         })
         ->addColumn('deletion_type', function($row) {
             if (empty($row->deletion_type)) {
@@ -1210,7 +1240,10 @@ public function trashData(Request $request)
         ->orderColumn('deleted_at', function($query, $order) {
             $query->orderBy('deleted_at', $order);
         })
-        ->rawColumns(['phone', 'customer_id', 'address', 'merchant', 'plan', 'status', 'deleted_at', 'deletion_type', 'deletion_reason', 'action'])
+        ->orderColumn('age_days', function($query, $order) {
+            $query->orderBy('age_days', $order);
+        })
+        ->rawColumns(['phone', 'customer_id', 'address', 'merchant', 'sale', 'age_days', 'plan', 'status', 'deleted_at', 'deletion_type', 'deletion_reason', 'action'])
         ->make(true);
 }
 

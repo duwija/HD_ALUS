@@ -119,6 +119,15 @@
             @endforeach
           </select>
         </div>
+        <div class="form-group col-md-3">
+          <label>Sales</label>
+          <select name="id_sale" class="form-control select2" data-placeholder="Semua sales">
+            <option value="">Semua</option>
+            @foreach ($sales as $id => $name)
+              <option value="{{ $id }}" {{ (string)($filters['id_sale'] ?? '') === (string)$id ? 'selected' : '' }}>{{ $name }}</option>
+            @endforeach
+          </select>
+        </div>
         @if ($tags->isNotEmpty())
         <div class="form-group col-md-3">
           <label>Tag</label>
@@ -258,6 +267,7 @@
             <th>Nama</th>
             <th>Plan</th>
             <th>Merchant</th>
+            <th>Sales</th>
             <th>Status</th>
             <th>Billing Start</th>
             <th>Umur</th>
@@ -379,7 +389,7 @@ $(function () {
     processing: true,
     serverSide: true,
     pageLength: 25,
-    order: [[6, 'desc']],
+    order: [[7, 'desc']],
     ajax: {
       url: '{{ route('marketing.customer-age.data') }}',
       data: function (d) {
@@ -392,6 +402,7 @@ $(function () {
       { data: 'name', name: 'customers.name' },
       { data: 'plan', orderable: false, searchable: false },
       { data: 'merchant', orderable: false, searchable: false },
+      { data: 'sale', orderable: false, searchable: false },
       { data: 'status', orderable: false, searchable: false },
       { data: 'billing_start', name: 'customers.billing_start', searchable: false },
       { data: 'age_days', name: 'age_days', searchable: false },

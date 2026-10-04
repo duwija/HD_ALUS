@@ -52,6 +52,7 @@ class CustomerAgeReportController extends Controller
         $statuses = \App\Statuscustomer::pluck('name', 'id');
         $plans = \App\Plan::pluck('name', 'id');
         $merchants = \App\Merchant::pluck('name', 'id');
+        $sales = \App\Sale::orderBy('name')->pluck('name', 'id');
         $tags = $this->hasTagTables() ? \App\CustomerTag::pluck('name', 'id') : collect();
 
         $tab = $request->input('tab') === 'movement' ? 'movement' : 'age';
@@ -60,6 +61,7 @@ class CustomerAgeReportController extends Controller
             'statuses'           => $statuses,
             'plans'              => $plans,
             'merchants'          => $merchants,
+            'sales'              => $sales,
             'tags'               => $tags,
             'deletedCategories'  => self::DELETED_CATEGORIES,
             'filters'            => $this->cleanFilters($request),
@@ -100,6 +102,9 @@ class CustomerAgeReportController extends Controller
             })
             ->addColumn('merchant', function ($row) {
                 return $row->merchant_name ? e($row->merchant_name->name) : '-';
+            })
+            ->addColumn('sale', function ($row) {
+                return $row->sale_name ? e($row->sale_name->name) : '-';
             })
             ->addColumn('status', function ($row) {
                 $statusName = $row->status_name ? $row->status_name->name : '-';
@@ -172,7 +177,7 @@ class CustomerAgeReportController extends Controller
 
         $columns = [
             'customers.id', 'customers.customer_id', 'customers.name', 'customers.id_plan',
-            'customers.id_merchant', 'customers.id_status', 'customers.billing_start', 'customers.deleted_at',
+            'customers.id_merchant', 'customers.id_sale', 'customers.id_status', 'customers.billing_start', 'customers.deleted_at',
         ];
         if ($hasDeletionColumns) {
             $columns[] = 'customers.deletion_type';
@@ -184,7 +189,7 @@ class CustomerAgeReportController extends Controller
             ->selectRaw(self::AGE_SQL . ' as age_days')
             ->selectRaw('COALESCE(unpaid.unpaid_count, 0) as unpaid_count')
             ->selectRaw('COALESCE(unpaid.unpaid_total, 0) as unpaid_total')
-            ->with(['plan_name', 'status_name', 'merchant_name']);
+            ->with(['plan_name', 'status_name', 'merchant_name', 'sale_name']);
 
         return $this->applyAgeFilter($query, $request);
     }
@@ -306,7 +311,7 @@ class CustomerAgeReportController extends Controller
     }
 
     /**
-     * Filter Plan / Merchant / Tag, dipakai tab umur dan tab pergerakan.
+     * Filter Plan / Merchant / Sales / Tag, dipakai tab umur dan tab pergerakan.
      */
     private function applyCommonFilters($query, Request $request)
     {
@@ -315,6 +320,9 @@ class CustomerAgeReportController extends Controller
         }
         if ($request->filled('id_merchant')) {
             $query->where('customers.id_merchant', $request->input('id_merchant'));
+        }
+        if ($request->filled('id_sale')) {
+            $query->where('customers.id_sale', $request->input('id_sale'));
         }
         if ($request->filled('id_tag') && $this->hasTagTables()) {
             foreach ((array) $request->input('id_tag') as $tagId) {

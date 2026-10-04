@@ -29,7 +29,7 @@ class CustomerAgeReportExport implements FromCollection, WithHeadings, WithMappi
     public function headings(): array
     {
         return [
-            'Customer ID', 'Nama', 'Plan', 'Merchant', 'Status', 'Billing Start', 'Umur (hari)',
+            'Customer ID', 'Nama', 'Plan', 'Merchant', 'Sales', 'Status', 'Billing Start', 'Umur (hari)',
             'Tanggal Dihapus', 'Alasan Hapus', 'Invoice Belum Paid', 'Total Tunggakan (Rp)',
         ];
     }
@@ -47,6 +47,7 @@ class CustomerAgeReportExport implements FromCollection, WithHeadings, WithMappi
             $row->name,
             $row->plan_name ? $row->plan_name->name : '-',
             $row->merchant_name ? $row->merchant_name->name : '-',
+            $row->sale_name ? $row->sale_name->name : '-',
             $statusName,
             $row->billing_start ?: 'Belum billing',
             $row->age_days,

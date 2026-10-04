@@ -81,6 +81,16 @@
       </div>
 
       <div class="form-group col-md-2">
+        <label for="id_sale">Sales</label>
+        <select name="id_sale" id="id_sale" class="form-control select2" data-placeholder="Cari sales...">
+          <option value="">All</option>
+          @foreach ($sales as $id => $name)
+          <option value="{{ $id }}">{{ $name }}</option>
+          @endforeach
+        </select>
+      </div>
+
+      <div class="form-group col-md-2">
         <label for="id_status">Status</label>
         <select name="id_status" id="id_status" class="form-control">
           <option value="">All</option>
@@ -163,9 +173,11 @@
             <th scope="col">Phone</th>
             <th scope="col">Address</th>
             <th scope="col">Merchant</th>
+            <th scope="col">Sales</th>
             <th scope="col">Plan</th>
             <th scope="col">Status</th>
             <th scope="col">Deleted At</th>
+            <th scope="col">Umur Langganan</th>
             <th scope="col">Status Berhenti</th>
             <th scope="col">Alasan Hapus</th>
             <th scope="col">Action</th>
@@ -416,13 +428,14 @@ $(document).ready(function() {
     pageLength: 25,
     processing: true,
     serverSide: true,
-    order: [[8, 'desc']],
+    order: [[9, 'desc']],
     ajax: {
       url: '{{ route('trash.data') }}',
       data: function(d) {
         d.filter = $('#filter').val();
         d.parameter = $('#parameter').val();
         d.id_merchant = $('#id_merchant').val();
+        d.id_sale = $('#id_sale').val();
         d.id_status = $('#id_status').val();
         d.deletion_type = $('#deletion_type_filter').val();
         d.start_date = $('#start_date').val();
@@ -438,9 +451,11 @@ $(document).ready(function() {
       { data: 'phone', name: 'phone', orderable: false },
       { data: 'address', name: 'address', orderable: false },
       { data: 'merchant', name: 'merchant', orderable: false, searchable: false },
+      { data: 'sale', name: 'sale', orderable: false, searchable: false },
       { data: 'plan', name: 'plan', orderable: false, searchable: false },
       { data: 'status', name: 'status', orderable: false, searchable: false },
       { data: 'deleted_at', name: 'deleted_at' },
+      { data: 'age_days', name: 'age_days', searchable: false },
       { data: 'deletion_type', name: 'deletion_type', orderable: false, searchable: false },
       { data: 'deletion_reason', name: 'deletion_reason', orderable: false, searchable: false },
       { data: 'action', name: 'action', orderable: false, searchable: false }
@@ -456,6 +471,12 @@ $(document).ready(function() {
       placeholder: 'Cari plan...'
     });
 
+    $('#id_sale').select2({
+      width: '100%',
+      allowClear: true,
+      placeholder: 'Cari sales...'
+    });
+
     $('#id_tag').select2({
       width: '100%',
       placeholder: 'Semua Tag'
@@ -467,7 +488,7 @@ $(document).ready(function() {
   }
 
   $('#trash_filter').on('click', applyFilters);
-  $('#id_merchant, #id_status, #deletion_type_filter, #id_plan, #id_tag, #start_date, #end_date').on('change', applyFilters);
+  $('#id_merchant, #id_sale, #id_status, #deletion_type_filter, #id_plan, #id_tag, #start_date, #end_date').on('change', applyFilters);
   $('#parameter').on('keypress', function(e) {
     if (e.which === 13) {
       e.preventDefault();
