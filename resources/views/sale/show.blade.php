@@ -255,6 +255,90 @@
 </div>
 </div>
 
+  <!-- Lost Revenue / Deleted Customers -->
+  <div class="card card-danger card-outline">
+    <div class="card-header">
+      <h3 class="card-title"><i class="fas fa-user-slash text-danger mr-1"></i> {{$sale->name}}'s Lost Customers (Lost Revenue)</h3>
+    </div>
+
+    <div class="row pt-2 pl-4">
+      <div class="form-group col-md-2">
+        <label for="lost_from">Dihapus Dari</label>
+        <input type="date" class="form-control" id="lost_from" value="{{ $dateFrom }}">
+      </div>
+      <div class="form-group col-md-2">
+        <label for="lost_to">Sampai</label>
+        <input type="date" class="form-control" id="lost_to" value="{{ $dateTo }}">
+      </div>
+      <div class="form-group col-md-3">
+        <label for="deletion_type">Jenis</label>
+        <select id="deletion_type" class="form-control">
+          <option value="">Semua</option>
+          <option value="terminate">Berhenti Berlangganan</option>
+          <option value="cancel">Tidak Jadi Berlangganan</option>
+          <option value="none">Tanpa Keterangan</option>
+        </select>
+      </div>
+      <div class="form-group col-md-3">
+        <label>&nbsp;</label>
+        <div>
+          <button type="button" id="lost_customer_filter" class="btn btn-warning">Filter</button>
+          <button type="button" id="lost_customer_all" class="btn btn-secondary">Semua Tanggal</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row px-4">
+      <div class="col-md-4">
+        <div class="info-box bg-light">
+          <span class="info-box-icon bg-secondary elevation-1"><i class="fas fa-user-minus"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Total Lost</span>
+            <span class="info-box-number"><span id="lost_total_count">0</span> customer &middot; Rp <span id="lost_total_revenue">0</span>/bln</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="info-box bg-light">
+          <span class="info-box-icon bg-danger elevation-1"><i class="fas fa-door-open"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Berhenti Berlangganan</span>
+            <span class="info-box-number"><span id="lost_terminate_count">0</span> customer &middot; Rp <span id="lost_terminate_revenue">0</span>/bln</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="info-box bg-light">
+          <span class="info-box-icon bg-warning elevation-1"><i class="fas fa-times-circle"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Tidak Jadi Berlangganan</span>
+            <span class="info-box-number"><span id="lost_cancel_count">0</span> customer &middot; Rp <span id="lost_cancel_revenue">0</span>/bln</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <table id="table-sale-lost-customer" class="table table-bordered table-striped" style="width:100%">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Customer Id</th>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Plan</th>
+            <th>Price</th>
+            <th>Billing Start</th>
+            <th>Dihapus</th>
+            <th>Umur Langganan</th>
+            <th>Jenis</th>
+            <th>Alasan</th>
+          </tr>
+        </thead>
+      </table>
+    </div>
+  </div>
+
 </section>
 </div>
 
@@ -516,6 +600,63 @@ $(document).ready(function() {
                 }]
             }
         }
+    });
+
+    // Lost customers (terhapus: berhenti / tidak jadi berlangganan)
+    var fmtRp = function(n) { return Number(n || 0).toLocaleString('id-ID'); };
+    var lostTable = $('#table-sale-lost-customer').DataTable({
+        responsive: false,
+        autoWidth: false,
+        searching: true,
+        processing: true,
+        serverSide: true,
+        order: [[7, 'desc']],
+        dom: 'Bfrtip',
+        buttons: ['pageLength', 'copy', 'excel', 'csv', 'print'],
+        language: { processing: "<i class='fa fa-spinner fa-spin'></i>&emsp;Processing ..." },
+        ajax: {
+            url: '/sale/table_sale_lost_customer',
+            method: 'POST',
+            data: function(d) {
+                return $.extend({}, d, {
+                    _token: '{{ csrf_token() }}',
+                    id_sale: $('#id_sale').val(),
+                    lost_from: $('#lost_from').val(),
+                    lost_to: $('#lost_to').val(),
+                    deletion_type: $('#deletion_type').val()
+                });
+            },
+            dataSrc: function(json) {
+                var s = json.summary || {};
+                $('#lost_total_count').text(s.total_count || 0);
+                $('#lost_total_revenue').text(fmtRp(s.total_revenue));
+                $('#lost_terminate_count').text(s.terminate_count || 0);
+                $('#lost_terminate_revenue').text(fmtRp(s.terminate_revenue));
+                $('#lost_cancel_count').text(s.cancel_count || 0);
+                $('#lost_cancel_revenue').text(fmtRp(s.cancel_revenue));
+                return json.data;
+            }
+        },
+        columns: [
+            { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
+            { data: 'customer_id', name: 'customers.customer_id' },
+            { data: 'name', name: 'customers.name' },
+            { data: 'address', name: 'customers.address' },
+            { data: 'plan', name: 'plan' },
+            { data: 'price', name: 'price', className: 'text-right', searchable: false },
+            { data: 'billing_start', name: 'customers.billing_start', className: 'text-center' },
+            { data: 'deleted_at', name: 'customers.deleted_at', className: 'text-center' },
+            { data: 'age_days', name: 'age_days', className: 'text-center', searchable: false },
+            { data: 'deletion_type', name: 'deletion_type', orderable: false, searchable: false },
+            { data: 'deletion_reason', name: 'deletion_reason', orderable: false, searchable: false }
+        ]
+    });
+
+    $('#lost_customer_filter').click(function() { lostTable.ajax.reload(); });
+    $('#lost_customer_all').click(function() {
+        $('#lost_from').val('');
+        $('#lost_to').val('');
+        lostTable.ajax.reload();
     });
 });
 </script>

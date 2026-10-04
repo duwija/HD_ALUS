@@ -11,6 +11,40 @@
 
     <!-- /.card-header -->
     <div class="card-body">
+      <form method="GET" action="{{ url('/sale') }}" class="row mb-3">
+        <div class="form-group col-md-3">
+          <label for="keyword">Cari</label>
+          <input type="text" class="form-control" id="keyword" name="keyword" value="{{ request('keyword') }}" placeholder="Nama / email / phone / alamat">
+        </div>
+        <div class="form-group col-md-2">
+          <label for="sale_type">Sales Type</label>
+          <select class="form-control" id="sale_type" name="sale_type">
+            <option value="">All</option>
+            @foreach ($saleTypes as $type)
+            <option value="{{ $type }}" {{ request('sale_type') == $type ? 'selected' : '' }}>{{ $type }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="form-group col-md-2">
+          <label for="date_from">Dari Tanggal</label>
+          <input type="date" class="form-control" id="date_from" name="date_from" value="{{ $from }}">
+        </div>
+        <div class="form-group col-md-2">
+          <label for="date_end">Sampai Tanggal</label>
+          <input type="date" class="form-control" id="date_end" name="date_end" value="{{ $to }}">
+        </div>
+        <div class="form-group col-md-3">
+          <label>&nbsp;</label>
+          <div>
+            <button type="submit" class="btn btn-warning"><i class="fas fa-filter"></i> Filter</button>
+            <a href="{{ url('/sale') }}" class="btn btn-secondary"><i class="fas fa-redo"></i> Reset</a>
+          </div>
+        </div>
+      </form>
+      <p class="text-muted small mb-2">
+        Total / Active = jumlah customer saat ini. New = billing start, Lost = customer terhapus (berhenti / tidak jadi berlangganan) pada periode
+        {{ \Carbon\Carbon::parse($from)->format('d M Y') }} - {{ \Carbon\Carbon::parse($to)->format('d M Y') }}.
+      </p>
       <div class="table-responsive">
         <table class="table table-bordered table-striped">
 
@@ -22,7 +56,10 @@
               <th scope="col">Sales Type</th>
               <th scope="col">Phone</th>
               <th scope="col">Address</th>
-              <!-- <th scope="col">Customer</th> -->
+              <th scope="col">Total / Active</th>
+              <th scope="col">New</th>
+              <th scope="col">Lost</th>
+              <th scope="col">Lost Revenue</th>
               <th scope="col">Action</th>
             </tr>
           </thead>
@@ -35,7 +72,10 @@
             <td>{{ $sale->sale_type }}</td>
             <td>{{ $sale->phone }}</td>
             <td>{{ $sale->address }}</td>
-            <!-- <td>{{ $sale->count }}</td> -->
+            <td class="text-center">{{ $sale->total_customers }} / <span class="text-success">{{ $sale->active_customers }}</span></td>
+            <td class="text-center"><span class="badge badge-success">{{ $sale->new_customers }}</span></td>
+            <td class="text-center"><span class="badge {{ $sale->lost_customers ? 'badge-danger' : 'badge-light' }}">{{ $sale->lost_customers }}</span></td>
+            <td class="text-right">{{ number_format((int) $sale->lost_revenue, 0, ',', '.') }}</td>
             <td >
               <!-- <div class="float-right " > -->
                 <button type="button" class="btn btn-primary btn-sm m-1" data-toggle="modal" data-target="#modal-sale-detail{{ $sale->id }}">Detail </button>

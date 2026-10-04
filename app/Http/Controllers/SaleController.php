@@ -31,30 +31,42 @@ class SaleController extends Controller
        if ((Auth::user()->privilege)=="admin" OR (Auth::user()->privilege)=="noc" OR (Auth::user()->privilege)=="marketing"  )
        {     
 
-    if (($request->date_from == null) or ($request->date_end == null))
-       {
-       $from=date('Y-m-1');
-       $to=date('y-m-d');
-     
-     }
-     else
-     {
-       $from=$request->date_from;
-       $to=$request->date_end;
-      
-     }
-       
+    $from = $request->filled('date_from') ? $request->date_from : date('Y-m-01');
+    $to = $request->filled('date_end') ? $request->date_end : date('Y-m-d');
 
-    //      $sale = \App\Sale::Join('customers', 'sales.id', '=', 'customers.id_sale')
-    // ->whereBetween('customers.billing_start', [$from, $to])
-    // ->groupBy('sales.id')
-    // ->select('sales.name','sales.email', 'sales.sale_type', 'sales.phone', 'sales.address', DB::raw("count(customers.id_sale) as count"))
-    // ->get();
+    $query = \App\Sale::query()->select('sales.*');
 
+    if ($request->filled('keyword')) {
+        $keyword = '%' . $request->keyword . '%';
+        $query->where(function ($q) use ($keyword) {
+            $q->where('sales.name', 'like', $keyword)
+              ->orWhere('sales.full_name', 'like', $keyword)
+              ->orWhere('sales.email', 'like', $keyword)
+              ->orWhere('sales.phone', 'like', $keyword)
+              ->orWhere('sales.address', 'like', $keyword);
+        });
+    }
 
-       $sale = \App\Sale::all();
+    if ($request->filled('sale_type')) {
+        $query->where('sales.sale_type', $request->sale_type);
+    }
 
-        return view ('sale/index',['sale' =>$sale]);
+    // Jumlah customer per sales: aktif saat ini, baru & hilang pada periode filter
+    $query->selectSub(Customer::selectRaw('COUNT(*)')->whereColumn('customers.id_sale', 'sales.id'), 'total_customers')
+        ->selectSub(Customer::selectRaw('COUNT(*)')->whereColumn('customers.id_sale', 'sales.id')->where('id_status', 2), 'active_customers')
+        ->selectSub(Customer::selectRaw('COUNT(*)')->whereColumn('customers.id_sale', 'sales.id')
+            ->whereBetween('billing_start', [$from, $to]), 'new_customers')
+        ->selectSub(Customer::onlyTrashed()->selectRaw('COUNT(*)')->whereColumn('customers.id_sale', 'sales.id')
+            ->whereDate('customers.deleted_at', '>=', $from)->whereDate('customers.deleted_at', '<=', $to), 'lost_customers')
+        ->selectSub(Customer::onlyTrashed()->join('plans', 'customers.id_plan', '=', 'plans.id')
+            ->selectRaw('COALESCE(SUM(plans.price),0)')->whereColumn('customers.id_sale', 'sales.id')
+            ->whereDate('customers.deleted_at', '>=', $from)->whereDate('customers.deleted_at', '<=', $to), 'lost_revenue');
+
+    $sale = $query->orderBy('sales.name')->get();
+    $saleTypes = \App\Sale::whereNotNull('sale_type')->where('sale_type', '!=', '')
+        ->distinct()->orderBy('sale_type')->pluck('sale_type');
+
+        return view ('sale/index',['sale' =>$sale, 'saleTypes' => $saleTypes, 'from' => $from, 'to' => $to]);
     }
     else
     {
@@ -297,6 +309,128 @@ class SaleController extends Controller
             'status' => $status,
             'plan' => $plan
         ]);
+    }
+
+    /**
+     * Customer milik sales yang terhapus (lost revenue): berhenti berlangganan
+     * maupun tidak jadi berlangganan, difilter menurut tanggal dihapus.
+     */
+    private function lostCustomerQuery(Request $request)
+    {
+        $query = Customer::onlyTrashed()
+            ->where('customers.id_sale', $request->id_sale)
+            ->leftJoin('plans', 'customers.id_plan', '=', 'plans.id');
+
+        if ($request->filled('lost_from')) {
+            $query->whereDate('customers.deleted_at', '>=', $request->lost_from);
+        }
+        if ($request->filled('lost_to')) {
+            $query->whereDate('customers.deleted_at', '<=', $request->lost_to);
+        }
+
+        if (\Schema::hasColumn('customers', 'deletion_type') && $request->filled('deletion_type')) {
+            if ($request->deletion_type === 'terminate') {
+                $query->whereIn('customers.deletion_type', ['terminate', 'berhenti_berlangganan']);
+            } elseif ($request->deletion_type === 'cancel') {
+                $query->whereIn('customers.deletion_type', ['cancel', 'tidak_jadi_berlangganan']);
+            } elseif ($request->deletion_type === 'none') {
+                $query->where(function ($q) {
+                    $q->whereNull('customers.deletion_type')
+                      ->orWhereNotIn('customers.deletion_type', ['terminate', 'berhenti_berlangganan', 'cancel', 'tidak_jadi_berlangganan']);
+                });
+            }
+        }
+
+        return $query;
+    }
+
+    public function table_sale_lost_customer(Request $request)
+    {
+        $hasDeletionType = \Schema::hasColumn('customers', 'deletion_type');
+
+        $query = $this->lostCustomerQuery($request)
+            ->select('customers.id', 'customers.customer_id', 'customers.name', 'customers.address',
+                'customers.billing_start', 'customers.deleted_at', 'plans.name as plan', 'plans.price as price')
+            ->selectRaw('DATEDIFF(DATE(customers.deleted_at), customers.billing_start) as age_days');
+        if ($hasDeletionType) {
+            $query->addSelect('customers.deletion_type', 'customers.deletion_reason');
+        }
+
+        // Ringkasan untuk header tabel (mengikuti filter yang sama)
+        $summaryQuery = $this->lostCustomerQuery($request);
+        $summary = $hasDeletionType
+            ? $summaryQuery->selectRaw("
+                COUNT(*) as total_count,
+                COALESCE(SUM(plans.price),0) as total_revenue,
+                SUM(customers.deletion_type IN ('terminate','berhenti_berlangganan')) as terminate_count,
+                COALESCE(SUM(CASE WHEN customers.deletion_type IN ('terminate','berhenti_berlangganan') THEN plans.price END),0) as terminate_revenue,
+                SUM(customers.deletion_type IN ('cancel','tidak_jadi_berlangganan')) as cancel_count,
+                COALESCE(SUM(CASE WHEN customers.deletion_type IN ('cancel','tidak_jadi_berlangganan') THEN plans.price END),0) as cancel_revenue")
+                ->first()
+            : $summaryQuery->selectRaw('COUNT(*) as total_count, COALESCE(SUM(plans.price),0) as total_revenue')->first();
+
+        return DataTables::of($query)
+            ->addIndexColumn()
+            ->editColumn('customer_id', function ($row) {
+                return '<span class="badge badge-secondary">' . e($row->customer_id) . '</span>';
+            })
+            ->editColumn('address', function ($row) {
+                return '<small class="text-muted">' . e($row->address) . '</small>';
+            })
+            ->editColumn('plan', function ($row) {
+                return e($row->plan ?? '-');
+            })
+            ->editColumn('price', function ($row) {
+                return number_format((int) $row->price, 0, ',', '.');
+            })
+            ->editColumn('deleted_at', function ($row) {
+                return $row->deleted_at ? $row->deleted_at->format('d M Y H:i') : '-';
+            })
+            ->editColumn('age_days', function ($row) {
+                if ($row->age_days === null) {
+                    return '<small class="text-muted">Belum billing</small>';
+                }
+                $days = max(0, (int) $row->age_days);
+                $html = number_format($days, 0, ',', '.') . ' hari';
+                if ($days >= 30) {
+                    $years = intdiv($days, 365);
+                    $months = intdiv($days % 365, 30);
+                    $parts = [];
+                    if ($years) $parts[] = $years . ' thn';
+                    if ($months) $parts[] = $months . ' bln';
+                    if ($parts) $html .= '<br><small class="text-muted">± ' . implode(' ', $parts) . '</small>';
+                }
+                return $html;
+            })
+            ->addColumn('deletion_type', function ($row) {
+                $type = $row->deletion_type ?? null;
+                if (in_array($type, ['terminate', 'berhenti_berlangganan'])) {
+                    return '<span class="badge badge-danger">Berhenti Berlangganan</span>';
+                }
+                if (in_array($type, ['cancel', 'tidak_jadi_berlangganan'])) {
+                    return '<span class="badge badge-warning text-dark">Tidak Jadi Berlangganan</span>';
+                }
+                return $type ? e($type) : '<span class="badge badge-light">-</span>';
+            })
+            ->addColumn('deletion_reason', function ($row) {
+                return empty($row->deletion_reason) ? '<small class="text-muted">-</small>' : '<small>' . e($row->deletion_reason) . '</small>';
+            })
+            ->filterColumn('plan', function ($q, $keyword) {
+                $q->where('plans.name', 'like', "%{$keyword}%");
+            })
+            ->orderColumn('plan', 'plans.name $1')
+            ->orderColumn('price', 'plans.price $1')
+            ->orderColumn('age_days', 'age_days $1')
+            ->with('summary', [
+                'total_count' => (int) ($summary->total_count ?? 0),
+                'total_revenue' => (int) ($summary->total_revenue ?? 0),
+                'terminate_count' => (int) ($summary->terminate_count ?? 0),
+                'terminate_revenue' => (int) ($summary->terminate_revenue ?? 0),
+                'cancel_count' => (int) ($summary->cancel_count ?? 0),
+                'cancel_revenue' => (int) ($summary->cancel_revenue ?? 0),
+            ])
+            ->rawColumns(['customer_id', 'address', 'age_days', 'deletion_type', 'deletion_reason'])
+            ->make(true);
     }
 
     public function table_sale_customer(Request $request){

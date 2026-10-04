@@ -462,6 +462,7 @@ Route::patch('/sale/customer/{id}','SaleController@customer');
 Route::get('/sale/{id}','SaleController@show');
 Route::delete('/sale/{id}','SaleController@destroy');
 Route::post('/sale/table_sale_customer','SaleController@table_sale_customer');
+Route::post('/sale/table_sale_lost_customer','SaleController@table_sale_lost_customer');
 
 
 
