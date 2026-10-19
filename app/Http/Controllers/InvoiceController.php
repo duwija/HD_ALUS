@@ -880,6 +880,11 @@ public function custinv($encrypted)
         ->orderBy('sort_order')
         ->get();
 
+    // Daftar loket untuk pilihan "Bumdes / Payment Point" (hanya kalau gateway bumdes aktif)
+    $paymentPoints = $gateways->contains('provider', 'bumdes')
+        ? \App\Merchant::where('payment_point', 1)->orderBy('name')->get(['name', 'address', 'phone', 'coordinate'])
+        : collect();
+
     // Deteksi bundle payment pending untuk invoice customer ini
     $invoiceIds = $suminvoice->pluck('id');
     $pendingBundleByInvoice = collect();
@@ -909,6 +914,7 @@ public function custinv($encrypted)
         'companyAddress2'        => $companyAddress2,
         'invNote'                => $invNote,
         'gateways'               => $gateways,
+        'paymentPoints'          => $paymentPoints,
         'encrypted'              => $encrypted,
         'pendingBundleByInvoice' => $pendingBundleByInvoice,
     ]);

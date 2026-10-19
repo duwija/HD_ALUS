@@ -797,6 +797,17 @@
                             @endif
                         </button>
                     @break
+                    @case('bumdes')
+                        {{-- Bayar tunai di loket: tidak membuat transaksi online, hanya menampilkan daftar payment point --}}
+                        <button type="button" class="gw-btn" onclick="showBumdesPoints()">
+                            <div class="gw-icon"><i class="{{ $gw->icon }}"></i></div>
+                            <div class="gw-name">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
+                            <div class="gw-sub">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? 'Bayar di loket terdekat' }}</div>
+                            @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
+                            <div class="gw-sub" style="color:#ef4444;margin-top:4px;">{{ $gw->feeDescription() }}</div>
+                            @endif
+                        </button>
+                    @break
                 @endswitch
                 @endforeach
             </div>
@@ -828,6 +839,32 @@
                 <button type="button" class="ch-btn" onclick="submitGateway('tripay','ALFAMART')"><i class="fas fa-store"></i><br>Alfamart</button>
                 <button type="button" class="ch-btn" onclick="submitGateway('tripay','INDOMARET')"><i class="fas fa-store"></i><br>Indomaret</button>
             </div>
+        </div>
+
+        {{-- Bumdes / payment point: daftar loket pembayaran tunai --}}
+        <div id="viewBumdes" style="display:none;">
+            <button class="ch-back" onclick="showMainView()">
+                <i class="fas fa-arrow-left"></i> Kembali
+            </button>
+            <div class="modal-title">Bayar di Payment Point</div>
+            <div class="modal-subtitle">Datang langsung ke loket terdekat dan sebutkan ID pelanggan Anda: <strong>{{ $customer->customer_id }}</strong></div>
+            @forelse($paymentPoints as $pp)
+                <div style="border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:600;font-size:14px;">{{ $pp->name }}</div>
+                        @if($pp->address)<div style="font-size:12px;color:var(--gray-600);">{{ $pp->address }}</div>@endif
+                        @if($pp->phone)<div style="font-size:12px;color:var(--gray-600);"><i class="fas fa-phone"></i> {{ $pp->phone }}</div>@endif
+                    </div>
+                    @if($pp->coordinate)
+                        <a href="https://www.google.com/maps/search/?api=1&query={{ urlencode($pp->coordinate) }}" target="_blank" rel="noopener"
+                           style="flex-shrink:0;padding:6px 10px;border-radius:8px;background:var(--primary);color:#fff;font-size:12px;text-decoration:none;">
+                            <i class="fas fa-map-marker-alt"></i> Maps
+                        </a>
+                    @endif
+                </div>
+            @empty
+                <p style="color:var(--gray-400);font-size:13px;text-align:center;padding:20px 0;">Belum ada payment point terdaftar.</p>
+            @endforelse
         </div>
     </div>
 </div>
@@ -930,8 +967,15 @@
         document.body.style.overflow = '';
     }
     function closeModalOutside(e) { if (e.target === document.getElementById('payModal')) closeModal(); }
-    function showMainView()    { document.getElementById('viewMain').style.display = ''; document.getElementById('viewTripay').style.display = 'none'; }
-    function showTripayChannels() { document.getElementById('viewMain').style.display = 'none'; document.getElementById('viewTripay').style.display = ''; }
+    function showOnlyView(id) {
+        ['viewMain', 'viewTripay', 'viewBumdes'].forEach(function (v) {
+            var el = document.getElementById(v);
+            if (el) el.style.display = (v === id) ? '' : 'none';
+        });
+    }
+    function showMainView()       { showOnlyView('viewMain'); }
+    function showTripayChannels() { showOnlyView('viewTripay'); }
+    function showBumdesPoints()   { showOnlyView('viewBumdes'); }
 
     function buildSummary() {
         const total = getTotal();
