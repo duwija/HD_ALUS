@@ -344,7 +344,7 @@ class InvoiceController extends Controller
         $parameter      = $request->parameter;
         $id_merchant    = $request->id_merchant;
         $id_plan        = $request->id_plan;
-    $monthly_fee    = $request->invoicetype; // 1 = monthly, else general
+    $invoiceType    = $request->invoicetype; // 0 = all, 1 = monthly only, 2 = general only, 3 = monthly + general
 
 
     /** ================= BASE QUERY ================= **/
@@ -397,6 +397,24 @@ class InvoiceController extends Controller
         $baseQuery->where('customers.id_plan', $id_plan);
     }
 
+    // Invoice type: based on monthly_fee of invoices sharing the suminvoice tempcode
+    $hasInvoice = function($fee){
+        return function($q) use ($fee){
+            $q->select(DB::raw(1))
+            ->from('invoices')
+            ->whereColumn('invoices.tempcode','suminvoices.tempcode')
+            ->where('invoices.monthly_fee', $fee);
+        };
+    };
+
+    if($invoiceType == 1){
+        $baseQuery->whereExists($hasInvoice(1))->whereNotExists($hasInvoice(0));
+    } elseif($invoiceType == 2){
+        $baseQuery->whereExists($hasInvoice(0))->whereNotExists($hasInvoice(1));
+    } elseif($invoiceType == 3){
+        $baseQuery->whereExists($hasInvoice(1))->whereExists($hasInvoice(0));
+    }
+
 
     /** ================= LOAD INVOICE DETAIL 1x ================= **/
     $invoiceMap = \App\Invoice::select('tempcode','periode','monthly_fee','amount')
@@ -405,50 +423,24 @@ class InvoiceController extends Controller
 
 
     /** ================= SUMMARY TOTAL ================= **/
-    if($monthly_fee == 1){
 
-        // Hitung total berdasarkan invoice amount + tax
-        $summary = (clone $baseQuery)->get()->map(function($row) use ($invoiceMap){
-            $sum = 0;
-            if(isset($invoiceMap[$row->tempcode])){
-                foreach($invoiceMap[$row->tempcode] as $inv){
-                    $sum += (($row->tax * $inv->amount)/100) + $inv->amount;
-                }
-            }
-            return [
-                'status' => $row->payment_status,
-                'amount' => $sum
-            ];
-        });
+    $summary = (clone $baseQuery)
+    ->selectRaw('
+        SUM(total_amount) as total,
+        SUM(CASE WHEN payment_status=1 THEN total_amount ELSE 0 END) as paid,
+        SUM(CASE WHEN payment_status=0 THEN total_amount ELSE 0 END) as unpaid,
+        SUM(CASE WHEN payment_status=2 THEN total_amount ELSE 0 END) as cancel,
+        SUM(CASE WHEN payment_status=1 THEN recieve_payment ELSE 0 END) as receive,
+        SUM(CASE WHEN payment_status=2 THEN recieve_payment ELSE 0 END) as refund
+        ')->first();
 
-        $total            = $summary->sum('amount');
-        $paid_payment     = $summary->where('status',1)->sum('amount');
-        $unpaid_payment   = $summary->where('status',0)->sum('amount');
-        $cancel_payment  = $summary->where('status',2)->sum('amount');
-        $recieve_payment = $paid_payment;
-        $refund          = 0;
-        $fee_counter     = '*Exclude Payment point fee : '.number_format(0,2,'.',',');
-
-    } else {
-
-        $summary = (clone $baseQuery)
-        ->selectRaw('
-            SUM(total_amount) as total,
-            SUM(CASE WHEN payment_status=1 THEN total_amount ELSE 0 END) as paid,
-            SUM(CASE WHEN payment_status=0 THEN total_amount ELSE 0 END) as unpaid,
-            SUM(CASE WHEN payment_status=2 THEN total_amount ELSE 0 END) as cancel,
-            SUM(CASE WHEN payment_status=1 THEN recieve_payment ELSE 0 END) as receive,
-            SUM(CASE WHEN payment_status=2 THEN recieve_payment ELSE 0 END) as refund
-            ')->first();
-
-        $total            = $summary->total ?? 0;
-        $paid_payment     = $summary->paid ?? 0;
-        $unpaid_payment   = $summary->unpaid ?? 0;
-        $cancel_payment  = $summary->cancel ?? 0;
-        $recieve_payment = $summary->receive ?? 0;
-        $refund          = $summary->refund ?? 0;
-        $fee_counter     = '*Exclude Payment point fee : '.number_format($recieve_payment - $paid_payment,2,'.',',');
-    }
+    $total            = $summary->total ?? 0;
+    $paid_payment     = $summary->paid ?? 0;
+    $unpaid_payment   = $summary->unpaid ?? 0;
+    $cancel_payment  = $summary->cancel ?? 0;
+    $recieve_payment = $summary->receive ?? 0;
+    $refund          = $summary->refund ?? 0;
+    $fee_counter     = '*Exclude Payment point fee : '.number_format($recieve_payment - $paid_payment,2,'.',',');
 
 
     /** ================= DATATABLE ================= **/
@@ -486,16 +478,7 @@ class InvoiceController extends Controller
         return implode('<br>',$out);
     })
 
-    ->editColumn('total_amount', function($s) use ($monthly_fee,$invoiceMap){
-        if($monthly_fee==1 && isset($invoiceMap[$s->tempcode])){
-            $sum=0;
-            foreach($invoiceMap[$s->tempcode] as $inv){
-                $sum += (($s->tax * $inv->amount)/100) + $inv->amount;
-            }
-            return number_format($sum,2,'.',',');
-        }
-        return number_format($s->total_amount,2,'.',',');
-    })
+    ->editColumn('total_amount', fn($s)=> number_format($s->total_amount,2,'.',','))
 
     ->addColumn('status', function($s){
         if ($s->payment_status == 1){ $b="success"; $t="PAID";}

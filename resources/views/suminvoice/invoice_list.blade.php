@@ -81,9 +81,11 @@
 
           <div>
             <label class="small text-muted d-block mb-0">Invoice Type</label>
-            <select name="invoicetype" id="invoicetype" class="form-control form-control-sm" style="width:130px">
+            <select name="invoicetype" id="invoicetype" class="form-control form-control-sm" style="width:180px">
               <option value="0">All</option>
+              <option value="3">Monthly Fee + General</option>
               <option value="1">Monthly Fee</option>
+              <option value="2">General</option>
             </select>
           </div>
 
