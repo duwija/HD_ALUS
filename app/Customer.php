@@ -27,6 +27,35 @@ class Customer extends Authenticatable
     ];
 
     /**
+     * Kunci pembanding nomor telepon: hanya angka, tanpa 0 di depan dan tanpa kode negara 62.
+     * "0812-3456-789", "62812 3456 789", "+62 812 3456 789", "8123456789" → "8123456789".
+     * Nomor luar negeri tetap utuh ("+90 535 290 45 11" → "905352904511").
+     */
+    public static function phoneSearchKey(?string $phone): string
+    {
+        $digits = ltrim(preg_replace('/\D+/', '', (string) $phone), '0');
+
+        return str_starts_with($digits, '62') ? substr($digits, 2) : $digits;
+    }
+
+    /**
+     * Cari pelanggan berdasarkan no. telepon tanpa peduli format penulisan (0 / 62 / +62 / spasi / strip).
+     * Normalisasi di SQL sama persis dengan phoneSearchKey().
+     */
+    public function scopeWherePhone($query, ?string $phone)
+    {
+        $key = static::phoneSearchKey($phone);
+        if (strlen($key) < 6) {
+            return $query->whereRaw('1 = 0'); // terlalu pendek, hindari kecocokan acak
+        }
+
+        $col = $query->getModel()->qualifyColumn('phone');
+        $digits = "TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE({$col}, ''), '[^0-9]', ''))";
+
+        return $query->whereRaw("(CASE WHEN {$digits} LIKE '62%' THEN SUBSTRING({$digits}, 3) ELSE {$digits} END) = ?", [$key]);
+    }
+
+    /**
      * Get the password for authentication (use portal_password instead of password)
      */
     public function getAuthPassword()

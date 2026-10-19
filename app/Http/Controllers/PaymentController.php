@@ -29,9 +29,18 @@ class PaymentController extends Controller
     }
     public function show(Request $request)
     {
-        $filter ='customers.'.$request->filter;
-        $val =$request->parameter ;
-        $customer_count = \App\Customer::where($filter,$val)->get();
+        // Hanya kolom yang ada di form pencarian — nama kolom tidak boleh diambil mentah dari input.
+        $filter = in_array($request->filter, ['customer_id', 'name', 'phone'], true) ? $request->filter : 'customer_id';
+        $val = trim((string) $request->parameter);
+
+        // No. telepon dicocokkan tanpa peduli format (0 / 62 / +62 / spasi / strip), kolom lain persis.
+        $applyFilter = function ($query) use ($filter, $val) {
+            return $filter === 'phone'
+                ? $query->wherePhone($val)
+                : $query->where('customers.' . $filter, $val);
+        };
+
+        $customer_count = $applyFilter(\App\Customer::query())->get();
 
         if ($customer_count->count() > 1)
         {
@@ -40,7 +49,7 @@ class PaymentController extends Controller
         else
         {
 
-            $customer = \App\Customer::where($filter,$val)
+            $customer = $applyFilter(\App\Customer::query())
 
             ->Join('statuscustomers', 'customers.id_status', '=', 'statuscustomers.id')
             ->Join('plans', 'customers.id_plan', '=', 'plans.id')
@@ -61,7 +70,19 @@ class PaymentController extends Controller
 
 
 
-                return view ('payment/show',['suminvoice' =>$suminvoice, 'customer'=>$customer]);
+                // Invoice belum bayar yang terbit paling awal — hanya ini yang boleh dibayar lebih dulu
+                $nextUnpaid = \App\Suminvoice::where('id_customer', $customer->id)
+                    ->where('payment_status', 0)
+                    ->orderBy('date', 'asc')->orderBy('id', 'asc')
+                    ->first();
+
+                // Ringkasan semua tagihan belum dibayar (tabel hanya menampilkan 15 invoice terakhir)
+                $unpaidSummary = \App\Suminvoice::where('id_customer', $customer->id)
+                    ->where('payment_status', 0)
+                    ->selectRaw('COUNT(*) AS n, COALESCE(SUM(total_amount), 0) AS total')
+                    ->first();
+
+                return view ('payment/show',['suminvoice' =>$suminvoice, 'customer'=>$customer, 'nextUnpaid' => $nextUnpaid, 'unpaidSummary' => $unpaidSummary]);
             }
         }
     }
@@ -150,7 +171,7 @@ else
 
         $last_active_invoice = \App\Suminvoice::where('payment_status', '=', '0' )
         ->where ('id_customer', '=', $invoice_code->id_customer )
-        ->orderBy('date', 'asc')->first();
+        ->orderBy('date', 'asc')->orderBy('id', 'asc')->first();
         if ($id==$last_active_invoice->tempcode)
         {
             $current_inv_status =0;
@@ -207,8 +228,6 @@ public function edit(Payment $payment)
     public function print($id)
     {
         //
-        $result = "";
-        $resultwinpay="";
         $companyName = tenant_config('APP_NAME', config('app.name', 'INTERNET SERVICE PROVIDER'));
         $companyAddress1 = tenant_config('COMPANY_ADDRESS1', env('COMPANY_ADDRESS1', ''));
         $companyAddress2 = tenant_config('COMPANY_ADDRESS2', env('COMPANY_ADDRESS2', ''));
@@ -239,8 +258,6 @@ public function edit(Payment $payment)
      else
         {$admin_fee  = $suminvoice_number->merchant_fee ?? 0;}
 
-    $merchants = \App\Merchant::where('payment_point', 1)->get();
-    $payment_id = $suminvoice_number->payment_id;
     $customer = \App\Customer::where('customers.id', $invoice_code->id_customer)
 
 
@@ -258,7 +275,7 @@ public function edit(Payment $payment)
 
         $last_active_invoice = \App\Suminvoice::where('payment_status', '=', '0' )
         ->where ('id_customer', '=', $invoice_code->id_customer )
-        ->orderBy('date', 'asc')->first();
+        ->orderBy('date', 'asc')->orderBy('id', 'asc')->first();
         if ($id==$last_active_invoice->tempcode)
         {
             $current_inv_status =0;
@@ -275,98 +292,12 @@ public function edit(Payment $payment)
 
         }
     }
-    if (!empty($payment_id) && $payment_id !== "winpay") 
-    {
-
-        $deleteResponse = app(\App\Http\Controllers\SuminvoiceController::class)->deleteWinpayVA($suminvoice_number->number);
-
-      //  Log::info($deleteResponse);
-        $endpoint     = tenant_config('tripay_endpoint', env("TRIPAY_ENDPOINT"));
-        $apiKey       = tenant_config('tripay_apikey', env("TRIPAY_APIKEY"));
-        $privateKey   = tenant_config('tripay_privatekey', env("TRIPAY_PRIVATEKEY"));
-        $merchantCode = tenant_config('tripay_merchantcode', env("TRIPAY_MERCHANTCODE"));
-
-//$hash = (hash_hmac('sha256', $merchantCode.$merchantRef.$amount, $privateKey));
-
-
-
-        $data = [
-            'reference'         =>$payment_id,
-
-        ];
-
-
-
-        $curl = curl_init();
-
-        curl_setopt_array($curl, [
-            CURLOPT_FRESH_CONNECT  => true,
-            CURLOPT_URL            => 'https://tripay.co.id/api/transaction/detail?'.http_build_query($data),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HEADER         => false,
-            CURLOPT_HTTPHEADER     => ['Authorization: Bearer '.$apiKey],
-            CURLOPT_FAILONERROR    => false,
-            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4
-        ]);
-
-        $response = curl_exec($curl);
-        $error = curl_error($curl);
-        $result = json_decode($response, true);
-        $tripayinv_status = 0;
-//dd($result);
-        if(curl_errno($curl)){
-
-        }
-        else
-        {
-            if (!empty($result['data']['status']) AND ($result['data']['status']=="UNPAID") ) {
-                $tripayinv_status = 1;
-
-       // dd('UNPAIDww');
-            }
-            else
-            {
-
-            }
-
-
-
-
-
-        }
-
-        curl_close($curl);
-    } elseif ($payment_id === "winpay") {
-        $response = app(\App\Http\Controllers\SuminvoiceController::class)->findWinpayVA($suminvoice_number->id);
-
-        if ($response instanceof \Illuminate\Http\JsonResponse) {
-            $resultwinpay = json_decode(json_encode($response->getData()), true);
-
-
-
-
-
-        } else {
-            $resultwinpay = $response;
-        }
-        Log::info(json_encode($resultwinpay));
-
-    }
-    else
-    {
-
-    }
-
-
-
-
-
     $suminvoice_amountdue = \App\Suminvoice::where('id_customer','=', $invoice_code->id_customer )
     ->where('payment_status', '=', 0)
     ->sum('total_amount');
 
 
-    return view ('payment/print',['invoice' =>$invoice, 'suminvoice_amountdue'=>$suminvoice_amountdue, 'customer'=>$customer, 'bank'=>$bank, 'suminvoice_number' => $suminvoice_number, 'current_inv_status' => $current_inv_status, 'encryptedurl'=>$encryptedurl, 'result'=>$result,'resultwinpay'=>$resultwinpay, 'merchants'=>$merchants, 'companyAddress1'=>$companyAddress1, 'companyAddress2'=>$companyAddress2,'companyName'=>$companyName, 'appUrl' =>$appUrl, 'signature' =>$signature, 'admin_fee' =>$admin_fee, 'invNote'=>$invNote]);   
+    return view ('payment/print',['invoice' =>$invoice, 'suminvoice_amountdue'=>$suminvoice_amountdue, 'customer'=>$customer, 'bank'=>$bank, 'suminvoice_number' => $suminvoice_number, 'current_inv_status' => $current_inv_status, 'encryptedurl'=>$encryptedurl, 'companyAddress1'=>$companyAddress1, 'companyAddress2'=>$companyAddress2,'companyName'=>$companyName, 'appUrl' =>$appUrl, 'signature' =>$signature, 'admin_fee' =>$admin_fee, 'invNote'=>$invNote]);   
 }
 }
 

@@ -1,276 +1,157 @@
+@php
+  // Perhitungan sama dengan versi sebelumnya: total = item + PPN - PPh; biaya admin hanya untuk invoice lunas.
+  $taxRate = (float) ($suminvoice_number->tax ?? 0) / 100;
+  $pphRate = (float) ($suminvoice_number->pph ?? 0) / 100;
+
+  $rows = [];
+  $itemsTotal = 0;
+  $pphTotal = 0;
+  foreach ($invoice as $inv) {
+      $base = $inv->qty * $inv->amount;
+      $tax = $base * $taxRate;
+      $pphTotal += $base * $pphRate;
+      $itemsTotal += $base + $tax;
+
+      $desc = $inv->description;
+      if ($inv->monthly_fee == 1) {
+          $desc .= ' - ' . date('F', mktime(0, 0, 0, max(1, (int) substr($inv->periode, -6, 2)), 1)) . ' ' . substr($inv->periode, -4, 4);
+      }
+      $rows[] = ['description' => $desc, 'qty' => $inv->qty, 'price' => $inv->amount + $inv->amount * $taxRate, 'total' => $base + $tax];
+  }
+  $total = $itemsTotal - $pphTotal;
+
+  $status = (int) $suminvoice_number->payment_status;
+  $merchantFee = ($status === 1 && $suminvoice_number->merchant_fee > 0) ? (float) $suminvoice_number->merchant_fee : 0;
+  $statusLabel = [1 => 'LUNAS', 2 => 'DIBATALKAN'][$status] ?? 'BELUM TERBAYAR';
+
+  $paidVia = null;
+  if ($status === 1) {
+      $pg = $suminvoice_number->payment_gateway ? \App\PaymentGateway::findForCurrentTenant($suminvoice_number->payment_gateway) : null;
+      $paidVia = (($pg->settings['invoice_label'] ?? '') ?: null)
+          ?? ($suminvoice_number->kasbank->name ?? null)
+          ?? ($suminvoice_number->payment_gateway ? strtoupper($suminvoice_number->payment_gateway) : null);
+  }
+
+  $n = fn ($v) => number_format((float) $v, 0, ',', '.');
+@endphp
 <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice #{{ $suminvoice_number->number ?? '' }}</title>
+  <title>Struk #{{ $suminvoice_number->number ?? '' }}</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
+    /* Struk printer thermal 58 mm (area cetak ±48 mm) */
+    @page { size: 58mm auto; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eee; color: #000; font: 11px/1.35 "Courier New", Courier, monospace; }
+    .receipt { width: 58mm; margin: 10px auto; padding: 3mm 4mm 5mm; background: #fff; }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .bold { font-weight: 700; }
+    .company { font-size: 14px; font-weight: 700; text-transform: uppercase; }
+    .small { font-size: 9.5px; }
+    .sep { border-top: 1px dashed #000; margin: 5px 0; }
+    .sep.double { border-top: 3px double #000; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 1px 0; vertical-align: top; }
+    .kv td:first-child { white-space: nowrap; padding-right: 4px; }
+    .item-name { padding-top: 3px; }
+    .status { margin: 4px 0; padding: 3px 0; border: 1px solid #000; font-weight: 700; font-size: 13px; letter-spacing: 1px; }
+    .total td { font-size: 13px; font-weight: 700; padding-top: 3px; }
+    .qr svg { width: 26mm; height: 26mm; }
+    .no-print { text-align: center; margin: 10px; }
+    .no-print button { font: 13px sans-serif; padding: 6px 20px; cursor: pointer; }
     @media print {
-      @page { margin: 1mm; size: 58mm auto; }
-      body { margin: 0; padding: 0; }
+      body { background: #fff; }
+      .receipt { margin: 0; }
       .no-print { display: none !important; }
-      html, body { width: 58mm; }
-    }
-
-    body {
-      font-family: 'Arial', Courier, monospace;
-      font-size: 10px;
-      color: #000;
-      background: #fff;
-      width: 218px;
-      margin: 0 auto;
-      padding: 4px 3px;
-    }
-
-    .receipt {
-      width: 100%;
-    }
-
-    .center   { text-align: center; }
-    .right    { text-align: right; }
-    .left     { text-align: left; }
-    .bold     { font-weight: bold; }
-    .big      { font-size: 10px; font-weight: bold; }
-    .small    { font-size: 7px; }
-
-    .divider-eq { border: none; border-top: 1px solid #000; margin: 4px 0; }
-    .divider-dash {
-      text-align: center;
-      font-size: 9px;
-      letter-spacing: 0;
-      margin: 3px 0;
-      overflow: hidden;
-      white-space: nowrap;
-    }
-
-    .header-block { margin-bottom: 4px; }
-    .header-block p { line-height: 1.4; margin: 0; }
-
-    table.items {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 8px;
-    }
-    table.items th {
-      border-top: 1px solid #000;
-      border-bottom: 1px solid #000;
-      padding: 2px 1px;
-      font-weight: bold;
-    }
-    table.items td {
-      padding: 2px 1px;
-      vertical-align: top;
-    }
-    table.items .desc { width: 55%; }
-    table.items .qty  { width: 10%; text-align: center; }
-    table.items .amt  { width: 35%; text-align: right; }
-    table.items .total-row td {
-      border-top: 1px solid #000;
-      font-weight: bold;
-      padding-top: 3px;
-    }
-
-    .status-paid   { font-size: 11px; font-weight: bold; letter-spacing: 2px; }
-    .status-unpaid { font-size: 11px; font-weight: bold; letter-spacing: 2px; }
-
-    .footer-block { margin-top: 6px; }
-    .footer-block p { line-height: 1.5; margin: 0; }
-
-    .qr-block { margin: 6px 0; }
-    .qr-block img, .qr-block svg { display: block; margin: 0 auto; }
-
-    .inv-note {
-      font-size: 8px;
-      line-height: 1.4;
-      margin-top: 4px;
-      border-top: 1px dashed #000;
-      padding-top: 4px;
     }
   </style>
-  <script>
-    window.onload = function() {
-      window.print();
-    };
-  </script>
 </head>
 <body>
-<div class="receipt">
 
-  {{-- ===== HEADER ===== --}}
-  <div class="header-block center">
-    <p class="big">{{ strtoupper($companyName) }}</p>
-    <!-- @if ($companyLegal)
-    <p>{{ $companyLegal }}</p>
-    @endif -->
-    @if ($companyAddress1)
-    <p class="small">{{ trim($companyAddress1) }}</p>
-    @endif
-    @if ($companyAddress2)
-    <p class="small">{{ trim($companyAddress2) }}</p>
-    @endif
-  </div>
-
-  <hr class="divider-eq">
-
-  {{-- ===== TITLE ===== --}}
-  <p class="center bold" style="font-size:9px;margin:2px 0;letter-spacing:2px">INVOICE</p>
-
-  <hr class="divider-eq">
-
-  {{-- ===== INVOICE INFO ===== --}}
-  @php
-    $invDate     = $suminvoice_number->date ?? '-';
-    $invNumber   = $suminvoice_number->number ?? '-';
-    $isPaid      = ($suminvoice_number->payment_status == 1);
-    $payDate     = $suminvoice_number->payment_date ?? $invDate;
-  @endphp
-
-  <table style="width:100%;font-size:10px;border-collapse:collapse">
-    <tr>
-      <td style="width:38%">Tanggal</td>
-      <td style="width:4%">:</td>
-      <td>{{ $invDate }}</td>
-    </tr>
-    <tr>
-      <td>No. Invoice</td>
-      <td>:</td>
-      <td>#{{ $invNumber }}</td>
-    </tr>
-  </table>
-
-  <div class="divider-dash">- - - - - - - - - - - - - - - - - - - - -</div>
-
-  {{-- ===== CUSTOMER ===== --}}
-  <table style="width:100%;font-size:10px;border-collapse:collapse">
-    <tr>
-      <td style="width:38%">Bill To</td>
-      <td style="width:4%">:</td>
-      <td class="bold">{{ $customer->customer_id ?? '' }}</td>
-    </tr>
-    <tr>
-      <td></td>
-      <td></td>
-      <td class="bold">{{ $customer->name ?? '-' }}</td>
-    </tr>
-    @if (!empty($customer->address))
-    <tr>
-      <td></td>
-      <td></td>
-      <td class="small">{{ $customer->address }}</td>
-    </tr>
-    @endif
-  </table>
-
-  <div class="divider-dash">- - - - - - - - - - - - - - - - - - - - -</div>
-
-  {{-- ===== PAYMENT STATUS ===== --}}
-  <p class="center {{ $isPaid ? 'status-paid' : 'status-unpaid' }}">
-    {{ $isPaid ? '** LUNAS **' : '** BELUM LUNAS **' }}
-  </p>
-
-  <hr class="divider-eq">
-
-  {{-- ===== ITEMS ===== --}}
-  @php
-    $subtotal = 0;
-    $taxfee   = (float) ($suminvoice_number->tax ?? 0) / 100;
-    $pph      = 0;
-  @endphp
-
-  <table class="items">
-    <thead>
-      <tr>
-        <th class="desc">Deskripsi</th>
-        <th class="qty">Qty</th>
-        <th class="amt">Jumlah</th>
-      </tr>
-    </thead>
-    <tbody>
-      @foreach($invoice as $inv)
-      @php
-        $isubtotal = $inv->qty * $inv->amount;
-        $itax      = $isubtotal * $taxfee;
-        $itotal    = $isubtotal + $itax;
-        $ippah     = $isubtotal * (float)($suminvoice_number->pph ?? 0) / 100;
-        $subtotal += $itotal - $ippah;
-        $pph      += $ippah;
-
-        // Build description
-        if ($inv->monthly_fee == 1) {
-          $mon   = date("M", mktime(0,0,0, (int)substr($inv->periode,-6,2), 1));
-          $yr    = substr($inv->periode,-4,4);
-          $desc  = $inv->description.' '.$mon.' '.$yr;
-        } else {
-          $desc  = $inv->description;
-        }
-      @endphp
-      <tr>
-        <td class="desc">{{ $desc }}</td>
-        <td class="qty">{{ $inv->qty }}</td>
-        <td class="amt">{{ number_format($itotal, 0, ',', '.') }}</td>
-      </tr>
-      @endforeach
-
-      @if ($pph > 0)
-      <tr>
-        <td class="desc" colspan="2">PPh 23</td>
-        <td class="amt">-{{ number_format($pph, 0, ',', '.') }}</td>
-      </tr>
-      @endif
-    </tbody>
-    <tfoot>
-      @if ($isPaid && $suminvoice_number->merchant_fee > 0)
-      <tr>
-        <td class="desc" colspan="2">Biaya Admin</td>
-        <td class="amt">{{ number_format($suminvoice_number->merchant_fee, 0, ',', '.') }}</td>
-      </tr>
-      <tr class="total-row">
-        <td colspan="2" class="right bold">TOTAL DIBAYAR</td>
-        <td class="amt bold">Rp {{ number_format($subtotal + $suminvoice_number->merchant_fee, 0, ',', '.') }}</td>
-      </tr>
-      @else
-      <tr class="total-row">
-        <td colspan="2" class="right bold">TOTAL</td>
-        <td class="amt bold">Rp {{ number_format($subtotal, 0, ',', '.') }}</td>
-      </tr>
-      @endif
-    </tfoot>
-  </table>
-
-  <hr class="divider-eq">
-
-  {{-- ===== INV NOTE ===== --}}
-  @if ($invNote)
-  <div class="inv-note center">
-      {!! nl2br(e($invNote)) !!}
-  </div>
-  @endif
-
-  {{-- ===== FOOTER ===== --}}
-  <div class="footer-block center" style="margin-top:8px">
-    <p>{{ $isPaid ? $payDate : $invDate }}</p>
-    <div class="qr-block">
-      {!! QrCode::size(120)->generate(url('/suminvoice/'.$suminvoice_number->tempcode.'/viewinvoice')) !!}
+  <div class="receipt">
+    <div class="center">
+      <div class="company">{{ $companyName }}</div>
+      @if($companyAddress1)<div class="small">{{ trim($companyAddress1) }}</div>@endif
+      @if($companyAddress2)<div class="small">{{ trim($companyAddress2) }}</div>@endif
     </div>
-    <p class="small" style="margin-top:3px">Scan untuk verifikasi invoice</p>
-    <p class="bold" style="margin-top:6px">{{ $signature }}</p>
+
+    <div class="sep double"></div>
+    <div class="center bold">INVOICE</div>
+    <div class="center status">{{ $statusLabel }}</div>
+
+    <table class="kv">
+      <tr><td>No</td><td class="right">#{{ $suminvoice_number->number }}</td></tr>
+      <tr><td>Tanggal</td><td class="right">{{ $suminvoice_number->date }}</td></tr>
+      @if($status === 1 && $suminvoice_number->payment_date)
+        <tr><td>Dibayar</td><td class="right">{{ \Carbon\Carbon::parse($suminvoice_number->payment_date)->format('Y-m-d H:i') }}</td></tr>
+      @elseif($status === 0 && $suminvoice_number->due_date)
+        <tr><td>Jatuh tempo</td><td class="right">{{ $suminvoice_number->due_date }}</td></tr>
+      @endif
+    </table>
+
+    <div class="sep"></div>
+    <div class="bold">{{ $customer->name ?? '-' }}</div>
+    <div>{{ $customer->customer_id ?? '' }}</div>
+    @if(!empty($customer->address))<div class="small">{{ $customer->address }}</div>@endif
+
+    <div class="sep"></div>
+    @foreach($rows as $row)
+      <div class="item-name">{{ $row['description'] }}</div>
+      <table>
+        <tr>
+          <td>{{ $row['qty'] }} x {{ $n($row['price']) }}</td>
+          <td class="right">{{ $n($row['total']) }}</td>
+        </tr>
+      </table>
+    @endforeach
+
+    <div class="sep"></div>
+    <table>
+      <tr><td>Subtotal</td><td class="right">{{ $n($itemsTotal) }}</td></tr>
+      @if($pphTotal > 0)
+        <tr><td>PPh 23</td><td class="right">-{{ $n($pphTotal) }}</td></tr>
+      @endif
+      @if($merchantFee > 0)
+        <tr><td>Total Tagihan</td><td class="right">{{ $n($total) }}</td></tr>
+        <tr><td>Biaya Admin</td><td class="right">{{ $n($merchantFee) }}</td></tr>
+        <tr class="total"><td>TOTAL DIBAYAR</td><td class="right">Rp {{ $n($total + $merchantFee) }}</td></tr>
+      @else
+        <tr class="total"><td>TOTAL</td><td class="right">Rp {{ $n($total) }}</td></tr>
+      @endif
+    </table>
+    <div class="small">Harga sudah termasuk PPN</div>
+
+    @if($status === 1)
+      <div class="sep"></div>
+      <table class="kv">
+        @if($paidVia)<tr><td>Dibayar via</td><td class="right">{{ $paidVia }}</td></tr>@endif
+        <tr><td>Diterima oleh</td><td class="right">{{ $suminvoice_number->user->name ?? $suminvoice_number->updated_by }}</td></tr>
+      </table>
+    @endif
+
+    @if($invNote)
+      <div class="sep"></div>
+      <div class="small">{!! nl2br(e($invNote)) !!}</div>
+    @endif
+
+    <div class="sep double"></div>
+    <div class="center">
+      <div class="qr">{!! QrCode::size(100)->margin(0)->generate(url('/suminvoice/' . $suminvoice_number->tempcode . '/viewinvoice')) !!}</div>
+      <div class="small">Scan untuk verifikasi invoice</div>
+      @if($signature)<div style="margin-top:4px">{{ $signature }}</div>@endif
+      <div class="bold">TERIMA KASIH</div>
+      <div class="small">Dicetak {{ now()->format('d-m-Y H:i') }}</div>
+    </div>
   </div>
 
-  <hr class="divider-eq" style="margin-top:6px">
-  <p class="center small" style="margin-top:2px">
-    Terima kasih &mdash; {{ $companyName }}
-  </p>
+  {{-- Tombol cetak (tidak ikut tercetak) --}}
+  <div class="no-print"><button onclick="window.print()">&#128424; Cetak</button></div>
 
-</div>
-
-{{-- Print button (hidden when printing) --}}
-<div class="no-print" style="text-align:center;margin-top:12px">
-  <button onclick="window.print()" style="padding:6px 20px;font-size:12px;cursor:pointer">
-    &#128424; Cetak
-  </button>
-</div>
-
+  <script>
+    window.addEventListener('load', function () { window.print(); });
+  </script>
 </body>
 </html>

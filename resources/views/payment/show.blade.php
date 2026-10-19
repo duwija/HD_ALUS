@@ -85,6 +85,41 @@
         </div>
       </div>
 
+      {{-- RINGKASAN TAGIHAN --}}
+      <div class="row px-3">
+        <div class="col-md-4 col-12 mb-3">
+          <div class="p-3 rounded h-100" style="background:{{ $unpaidSummary->total > 0 ? '#fdecea' : '#e8f5e9' }}">
+            <div class="small text-muted text-uppercase font-weight-bold">Total Tagihan Belum Terbayar</div>
+            <div class="font-weight-bold" style="font-size:1.6rem;color:{{ $unpaidSummary->total > 0 ? '#c62828' : '#2e7d32' }}">
+              Rp {{ number_format($unpaidSummary->total, 0, ',', '.') }}
+            </div>
+            @if($unpaidSummary->total <= 0)
+              <div class="small text-success"><i class="fas fa-check-circle"></i> Tidak ada tunggakan</div>
+            @endif
+          </div>
+        </div>
+        <div class="col-md-4 col-12 mb-3">
+          <div class="p-3 rounded h-100" style="background:#f4f6f9">
+            <div class="small text-muted text-uppercase font-weight-bold">Invoice Belum Terbayar</div>
+            <div class="font-weight-bold" style="font-size:1.6rem">{{ $unpaidSummary->n }} <span class="h6 text-muted">invoice</span></div>
+          </div>
+        </div>
+        <div class="col-md-4 col-12 mb-3">
+          <div class="p-3 rounded h-100" style="background:#e8f5e9">
+            <div class="small text-muted text-uppercase font-weight-bold">Bayar Sekarang</div>
+            @if($nextUnpaid)
+              <div class="font-weight-bold" style="font-size:1.6rem">Rp {{ number_format($nextUnpaid->total_amount, 0, ',', '.') }}</div>
+              <div class="small">
+                #{{ $nextUnpaid->number }} · {{ $nextUnpaid->date }}
+                <a href="/payment/{{ $nextUnpaid->tempcode }}" class="btn btn-success btn-xs ml-1"><i class="fas fa-cash-register"></i> Bayar</a>
+              </div>
+            @else
+              <div class="text-muted mt-2">-</div>
+            @endif
+          </div>
+        </div>
+      </div>
+
       {{-- TABEL INVOICE --}}
       <div class="card-body table-responsive">
         <table id="example1" class="table table-bordered table-striped">
@@ -107,14 +142,23 @@
             $sum_total = ($sub_total * $tax / 100) + $sub_total - $pph;
             @endphp
 
-            <tr>
+            @php
+              $isNext = $nextUnpaid && $suminvoice->id === $nextUnpaid->id;
+              $mustWait = $suminvoice->payment_status == 0 && $nextUnpaid && !$isNext;
+            @endphp
+            <tr @if($isNext) style="background:#e8f5e9" @endif>
               <td>{{ $loop->iteration }}</td>
-              <td>{{ $suminvoice->number }}</td>
+              <td>
+                {{ $suminvoice->number }}
+                @if($isNext)
+                  <br><span class="badge badge-success"><i class="fas fa-arrow-right"></i> Bayar ini dulu</span>
+                @endif
+              </td>
               <td>{{ $suminvoice->date }}</td>
               <td>{{ number_format($sum_total, 0, ',', '.') }}</td>
               <td>
                 @if($suminvoice->payment_status == 0)
-                <span class="badge bg-danger">Belum Dibayar</span>
+                <span class="badge bg-danger">Belum Terbayar</span>
                 @elseif($suminvoice->payment_status == 1)
                 <span class="badge bg-secondary">Sudah Dibayar</span>
                 @elseif($suminvoice->payment_status == 2)
@@ -125,6 +169,9 @@
                 <a href="/payment/{{ $suminvoice->tempcode }}" class="btn btn-primary btn-sm">
                   <i class="fa fa-list-ul"></i> Tampilkan
                 </a>
+                @if($mustWait)
+                  <div class="small text-danger mt-1"><i class="fas fa-lock"></i> Bayar #{{ $nextUnpaid->number }} dulu</div>
+                @endif
               </td>
             </tr>
             @endforeach
