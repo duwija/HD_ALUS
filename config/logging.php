@@ -101,32 +101,37 @@ return [
             'handler' => NullHandler::class,
         ],
         'invoice' => [
-            'driver' => 'daily',
+            'driver' => 'custom',
+            'via' => App\Logging\SafeDailyLogger::class, // gagal tulis log tidak menggagalkan request
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/invoice.log'),
             'level' => 'info',
             'days' => 7,
         ],
 
         'notif' => [
-            'driver' => 'daily',
+            'driver' => 'custom',
+            'via' => App\Logging\SafeDailyLogger::class, // gagal tulis log tidak menggagalkan request
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/notif.log'),
             'level' => 'info',
             'days' => 7,
         ],
         'isolir' => [
-            'driver' => 'daily',
+            'driver' => 'custom',
+            'via' => App\Logging\SafeDailyLogger::class, // gagal tulis log tidak menggagalkan request
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/isolir.log'),
             'level' => 'info',
             'days' => 7,
         ],
         'payment' => [
-            'driver' => 'daily',
+            'driver' => 'custom',
+            'via' => App\Logging\SafeDailyLogger::class, // gagal tulis log tidak menggagalkan request
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/payment.log'),
             'level' => 'info',
             'days' => 7,
         ],
         'mikrotik' => [
-            'driver' => 'daily',
+            'driver' => 'custom',
+            'via' => App\Logging\SafeDailyLogger::class, // gagal tulis log tidak menggagalkan request
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/mikrotik.log'),
             'level' => 'info',
             'days' => 7,
@@ -136,7 +141,8 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
         'auth' => [
-            'driver' => 'daily',
+            'driver' => 'custom',
+            'via' => App\Logging\SafeDailyLogger::class, // gagal tulis log tidak menggagalkan request
             'path' => storage_path('logs/tenant_' . env('DB_DATABASE', 'default') . '/auth.log'),
             'level' => 'info',
             'days' => 7,
