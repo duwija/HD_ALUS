@@ -27,6 +27,9 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         $schedule->command('isolir:auto')->dailyAt('01:00');
+        $schedule->command('isolir:reminder')->dailyAt('09:00');
+        $schedule->command('invoice:auto')->dailyAt('06:00');
+        $schedule->command('report:daily')->dailyAt('07:00');
         $schedule->command('pppoe:collect-stats-all')->everyThreeMinutes();
         $schedule->command('pppoe:sync-sessions-all')->everyFiveMinutes();
         $schedule->command('pings:prune-all')->dailyAt('02:00');

@@ -15,6 +15,9 @@
             <div class="row mb-4 align-items-end">
                 <div class="col-md-6">
                     <a href="/wa/logs" class="btn btn-info">📬 Log Pesan</a>
+                    @if (Auth::user()->privilege === 'admin')
+                        <a href="/wa/settings" class="btn btn-secondary">⚙️ Pengaturan</a>
+                    @endif
                 </div>
 
                 <div class="col-md-6 text-right">

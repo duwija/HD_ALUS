@@ -16,6 +16,14 @@
     </ul>
     <ul class="nav nav-treeview">
       <li class="nav-item">
+        <a href="{{ url('settings/auto-isolir') }}" class="nav-link">
+          <i class="fas fa-sliders-h nav-icon"></i>
+          <p>Settings</p>
+        </a>
+      </li>
+    </ul>
+    <ul class="nav nav-treeview">
+      <li class="nav-item">
         <a href="{{ url ('user')}}" class="nav-link">
           <i class="fas fa-user nav-icon"></i>
           <p>User Management</p>

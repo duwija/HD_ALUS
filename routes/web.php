@@ -320,6 +320,13 @@ Route::middleware('dashboard.pref')->group(function () {
     Route::get('/home-admin', 'HomeController@index')->name('home.admin');
 });
 Route::get('/admin-status', 'AdminStatusController@index')->name('admin.status');
+Route::get('/settings/auto-isolir', 'AutoIsolirSettingController@index')->name('settings.auto-isolir');
+Route::post('/settings/auto-isolir', 'AutoIsolirSettingController@update')->name('settings.auto-isolir.update');
+Route::post('/settings/auto-isolir/reminder', 'AutoIsolirSettingController@updateReminder')->name('settings.auto-isolir.reminder');
+Route::post('/settings/auto-isolir/inv-note', 'AutoIsolirSettingController@updateInvNote')->name('settings.auto-isolir.inv-note');
+Route::post('/settings/auto-isolir/auto-invoice', 'AutoIsolirSettingController@updateAutoInvoice')->name('settings.auto-isolir.auto-invoice');
+Route::post('/settings/auto-isolir/daily-report', 'AutoIsolirSettingController@updateDailyReport')->name('settings.auto-isolir.daily-report');
+Route::post('/settings/auto-isolir/daily-report/send', 'AutoIsolirSettingController@sendDailyReportNow')->name('settings.auto-isolir.daily-report.send');
 Route::get('/warestart', 'HomeController@warestart');
 
 
@@ -961,6 +968,12 @@ Route::post('/file','FileController@store');
 Route::delete('/file/customer/{id}','FileController@destroy');
 
 Route::post('/whatsapp/wa_ticket', [WhatsappController::class, 'wa_ticket']);
+
+// Pengaturan WA Gateway sisi admin tenant (didaftarkan sebelum grup 'wa' agar tidak tertangkap pola {session}/...)
+Route::get('/wa/settings', 'WaGatewaySettingController@index')->name('wa.settings');
+Route::post('/wa/settings/speed', 'WaGatewaySettingController@updateSpeed')->name('wa.settings.speed');
+Route::post('/wa/settings/suppress', 'WaGatewaySettingController@updateSuppress')->name('wa.settings.suppress');
+Route::post('/wa/settings/release', 'WaGatewaySettingController@release')->name('wa.settings.release');
 
 Route::prefix('wa')->group(function () {
 

@@ -550,13 +550,15 @@ class TenantManagementController extends Controller
                 'db_database' => $request->db_database,
                 'db_username' => $request->db_username,
                 'mail_from' => $request->mail_from,
-                'features' => [
+                // Merge: key yang tidak ada di form ini (mis. isolir_reminder_days yang diatur
+                // admin tenant dari /settings/auto-isolir) tetap dipertahankan.
+                'features' => array_merge((array) ($tenant->features ?? []), [
                     'accounting' => (bool) ($featuresInput['accounting'] ?? $request->boolean('feature_accounting')),
                     'ticketing' => (bool) ($featuresInput['ticketing'] ?? $request->boolean('feature_ticketing')),
                     'whatsapp' => (bool) ($featuresInput['whatsapp'] ?? $request->boolean('feature_whatsapp')),
                     'payment_gateway' => (bool) ($featuresInput['payment_gateway'] ?? $request->boolean('feature_payment')),
                     'auto_isolir' => (bool) ($featuresInput['auto_isolir'] ?? $request->boolean('feature_auto_isolir')),
-                ],
+                ]),
                 'env_variables' => $this->processEnvVariables($request),
                 'is_active' => $request->has('is_active'),
                 'notes' => $request->notes,
