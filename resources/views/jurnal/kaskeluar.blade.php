@@ -542,7 +542,7 @@ $(document).ready(function() {
 
 $('#transaksiForm').on('submit', function(e) {
   // Strip pemisah ribuan sebelum submit
-  $('input[name="debet[]"]').each(function() {
+  $('input[name="debet[]"], input[name="kredit"]').each(function() {
     $(this).val(parseFloat(String($(this).val()).replace(/\./g, '').replace(',', '.')) || 0);
   });
   if ($('input[name="name"]').val().trim() === "") {
