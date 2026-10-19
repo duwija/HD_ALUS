@@ -1584,6 +1584,72 @@ public function uncloseticket()
 
 
 
+    /**
+     * Surat tugas (PDF) untuk tim yang menangani tiket — dibuat saat diunduh dari data tiket terbaru.
+     */
+    public function suratTugas($id)
+    {
+        $ticket = \App\Ticket::with(['category', 'assignToUser'])->findOrFail($id);
+        $customer = \App\Customer::withTrashed()
+            ->leftJoin('plans', 'plans.id', '=', 'customers.id_plan')
+            ->select('customers.*', 'plans.name as plan_name')
+            ->find($ticket->id_customer);
+
+        // Petugas: PIC (assign_to) + anggota (kolom member berisi nama, dipisah koma)
+        $pic = $ticket->assignToUser;
+        $memberNames = collect(explode(',', (string) $ticket->member))
+            ->map(fn ($n) => trim($n))
+            ->filter()
+            ->unique()
+            ->reject(fn ($n) => $pic && strcasecmp($n, $pic->name) === 0)
+            ->values();
+        $memberUsers = \App\User::whereIn('name', $memberNames)->get()->keyBy(fn ($u) => strtolower($u->name));
+
+        $officers = collect();
+        if ($pic) {
+            $officers->push(['name' => $pic->full_name ?: $pic->name, 'role' => 'Penanggung Jawab', 'job' => $pic->job_title, 'phone' => $pic->phone]);
+        }
+        foreach ($memberNames as $name) {
+            $u = $memberUsers->get(strtolower($name));
+            $officers->push(['name' => $u ? ($u->full_name ?: $u->name) : $name, 'role' => 'Anggota', 'job' => $u->job_title ?? null, 'phone' => $u->phone ?? null]);
+        }
+
+        $rescode = tenant_rescode() ?: 'ST';
+        $issued = $ticket->created_at ? \Carbon\Carbon::parse($ticket->created_at) : now();
+        $number = sprintf('ST/%s/%s/%s/%04d', strtoupper($rescode), $issued->format('Y'), $issued->format('m'), $ticket->id);
+
+        $ticketUrl = url('/ticket/' . $ticket->id);
+        $qrTicket = base64_encode(\SimpleSoftwareIO\QrCode\Facades\QrCode::format('png')->size(220)->margin(0)->generate($ticketUrl));
+        $qrMaps = null;
+        if ($customer && $customer->coordinate) {
+            $qrMaps = base64_encode(\SimpleSoftwareIO\QrCode\Facades\QrCode::format('png')->size(220)->margin(0)
+                ->generate('https://www.google.com/maps/search/?api=1&query=' . urlencode($customer->coordinate)));
+        }
+
+        $logo = public_path('tenants/' . $rescode . '/img/logoinv.png');
+        if (!is_file($logo)) {
+            $logo = public_path('dashboard/dist/img/logoinv.png');
+        }
+
+        $pdf = PDF::loadView('ticket.surat_tugas', [
+            'ticket'      => $ticket,
+            'customer'    => $customer,
+            'officers'    => $officers,
+            'number'      => $number,
+            'issued'      => $issued,
+            'ticketUrl'   => $ticketUrl,
+            'qrTicket'    => $qrTicket,
+            'qrMaps'      => $qrMaps,
+            'logo'        => is_file($logo) ? $logo : null,
+            'printedBy'   => Auth::user()->name ?? '-',
+        ])->setPaper('a4', 'portrait');
+        // Hanya glyph yang terpakai yang disisipkan (file ~35 KB, bukan ~900 KB).
+        // Ubah opsi yang ada — setOptions() akan membuang pengaturan config/dompdf.php (chroot, dll).
+        $pdf->getDomPDF()->getOptions()->setIsFontSubsettingEnabled(true);
+
+        return $pdf->download('surat-tugas-tiket-' . $ticket->id . '.pdf');
+    }
+
     public function show($id)
     {
         $ticket = \App\Ticket::with('category', 'steps')->findOrFail($id);

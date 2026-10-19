@@ -454,6 +454,7 @@ Route::post('/ticket/table_vendorgroupticket_list','VendorController@table_vendo
 Route::get('/ticket/{id}/create','TicketController@create');
 Route::get('/ticket/{id}/edit','TicketController@edit');
 
+Route::get('/ticket/{id}/surat-tugas','TicketController@suratTugas')->name('ticket.surat-tugas');
 Route::get('/ticket/{id}','TicketController@show');
 
 Route::get('/ticket/view/{id}','TicketController@view');
