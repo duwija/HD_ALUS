@@ -501,6 +501,39 @@ class AttendanceAdminController extends Controller
         return view('attendance.employees', compact('employees','supervisors'));
     }
 
+    /**
+     * Name tag / ID card karyawan (PNG). ?inline=1 untuk tombol Print, selain itu diunduh.
+     */
+    public function employeeNameTag(Request $request, User $user)
+    {
+        $rescode = (string) (tenant_rescode() ?: 'EMP');
+        $logo = public_path('tenants/' . $rescode . '/img/logoinv.png');
+        if (!is_file($logo)) {
+            $logo = public_path('dashboard/dist/img/logoinv.png');
+        }
+
+        // ID karyawan: NIK/employee_id kalau diisi, selain itu kode tenant + ID user
+        $code = trim((string) $user->employee_id) !== ''
+            ? trim((string) $user->employee_id)
+            : sprintf('%s-%04d', strtoupper($rescode), $user->id);
+
+        $png = (new \App\Services\EmployeeNameTagService)->render(
+            $user,
+            (string) tenant_config('company_name', config('app.name')),
+            is_file($logo) ? $logo : null,
+            $code,
+            (string) tenant_config('domain_name', $request->getHost())
+        );
+
+        $file = 'name-tag-' . (preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $user->name) ?: $user->id) . '.png';
+
+        return response($png, 200, [
+            'Content-Type'        => 'image/png',
+            'Content-Disposition' => ($request->boolean('inline') ? 'inline' : 'attachment') . '; filename="' . $file . '"',
+            'Cache-Control'       => 'no-store',
+        ]);
+    }
+
     public function employeeUpdate(Request $request, User $user)
     {
         $data = $request->validate([

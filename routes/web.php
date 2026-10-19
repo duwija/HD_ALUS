@@ -620,6 +620,7 @@ Route::get ('/attendance/daily',                          'AttendanceAdminContro
 Route::get ('/attendance/employees',                      'AttendanceAdminController@employees')->name('attendance.employees');
 Route::patch('/attendance/employees/{user}',              'AttendanceAdminController@employeeUpdate');
 
+Route::get ('/attendance/employees/{user}/name-tag',      'AttendanceAdminController@employeeNameTag')->name('attendance.employees.name-tag');
 // Pengajuan Izin/Cuti/Sakit & Lembur
 Route::get ('/leave',                'LeaveOvertimeAdminController@leaveIndex')->name('leave.index');
 Route::post('/leave/{id}/approve',   'LeaveOvertimeAdminController@leaveApprove')->name('leave.approve');
