@@ -228,9 +228,12 @@ if (!preg_match('/^\d{8,15}$/', $hp)) {
         }
     }
 
-    protected static function suppressionsEnabled(): bool
+    public static function suppressionsEnabled(): bool
     {
-        return (bool) tenant_config('WA_SUPPRESS_ENABLED', env('WA_SUPPRESS_ENABLED', true));
+        // Nilai ENV tenant berupa string — "false"/"0"/"off" harus dibaca false, bukan (bool) "false" === true.
+        $value = tenant_config('WA_SUPPRESS_ENABLED', env('WA_SUPPRESS_ENABLED', true));
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
     }
 
     protected static function hasSuppressionsTable(): bool
@@ -291,9 +294,41 @@ if (!preg_match('/^\d{8,15}$/', $hp)) {
         );
     }
 
+    /**
+     * Error yang berasal dari gateway/sesi (bukan dari nomor tujuan).
+     * Tidak boleh dihitung sebagai kegagalan nomor: kalau gateway mati / sesi logout,
+     * semua nomor akan ikut gagal dan pelanggan normal jadi tersuppress berhari-hari.
+     */
+    public static function isGatewayError(?string $error): bool
+    {
+        $error = (string) $error;
+        if (trim($error) === '' || str_starts_with($error, 'Semua session gagal')) {
+            return true;
+        }
+
+        foreach ([
+            'cURL error', 'Failed to connect', 'Connection refused', 'timed out', 'Could not resolve',
+            'not authenticated', 'session not found', 'Tidak ada session', 'not connected', 'disconnected',
+        ] as $needle) {
+            if (stripos($error, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return (bool) preg_match('/^HTTP 5\d\d\b/', $error);
+    }
+
     protected static function markSendFailure(string $number, string $error): void
     {
         if (!self::suppressionsEnabled() || !self::hasSuppressionsTable()) {
+            return;
+        }
+
+        if (self::isGatewayError($error)) {
+            Log::info('[WA] Gagal karena gangguan gateway, tidak dihitung ke suppress nomor', [
+                'number' => $number,
+                'error'  => mb_substr($error, 0, 200),
+            ]);
             return;
         }
 
