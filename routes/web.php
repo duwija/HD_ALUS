@@ -528,6 +528,7 @@ Route::get('/invoice','InvoiceController@index');
 Route::get('/invoice/{id}','InvoiceController@show');
 Route::post('/invoice/{id}/send-wa-gateway','InvoiceController@sendPaymentLinkWa');
 Route::get('/invoice/{id}/edit','InvoiceController@edit');
+Route::get('/invoice/{id}/payment-qr-card','InvoiceController@paymentQrCard');
 Route::get('/invoice/{id}/create','InvoiceController@create');
 Route::post('/invoice','InvoiceController@store');
 Route::post('/invoice/table_invoice','InvoiceController@table_invoice');

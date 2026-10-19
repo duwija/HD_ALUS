@@ -20,36 +20,42 @@
     <!-- 3-column Cards Row -->
     <div class="row">
 
-      {{-- Col 1: Link Pembayaran --}}
+      {{-- Col 1: Link Pembayaran (desain sama dengan kartu PNG dari PaymentQrCardService) --}}
       <div class="col-md-4 mb-3">
-        <div class="card border-left-success shadow-sm h-100">
-          <div class="card-header bg-gradient-success text-white">
-            <h6 class="font-weight-bold mb-0">
-              <i class="fas fa-qrcode"></i> Link pembayaran
-            </h6>
+        <div class="pay-qr-card shadow-sm h-100">
+          <div class="pay-qr-head">
+            <div class="pay-qr-kicker">LINK PEMBAYARAN</div>
+            <div class="pay-qr-tenant">{{ tenant('app_name') ?: config('app.name') }}</div>
+            <div class="pay-qr-sub">Scan untuk melihat &amp; membayar tagihan</div>
           </div>
-          <div class="card-body d-flex flex-column align-items-center text-center">
-            <div class="mb-2">
-              <a href="/invoice/cst/{{$encryptedurl}}" target="_blank" class="btn btn-sm btn-outline-info">
-                <i class="fas fa-link"></i> Encrypted URL
-              </a>
+          <div class="pay-qr-body">
+            <div class="pay-qr-frame">
+              <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
+              <div class="pay-qr-code">{!! $qrcodePayment !!}</div>
             </div>
-            <img
-              id="paymentQrImage"
-              src="data:image/png;base64,{{ $qrcodePayment }}"
-              alt="QR Link Pembayaran"
-              style="width:160px;height:160px;border:1px solid #dee2e6;border-radius:6px;background:#fff;padding:4px"
-            >
-            <div class="mt-2 small text-muted">Silahkan scan QRcode ini untuk melihat daftar tagihan anda.</div>
-            <div class="mt-3 d-flex flex-wrap justify-content-center" style="gap:6px">
+            <div class="pay-qr-divider"></div>
+            <div class="pay-qr-name" title="{{ $customer->name }}">{{ $customer->name }}</div>
+            <div class="pay-qr-id">ID Pelanggan: {{ $customer->customer_id }}</div>
+
+            <div class="pay-qr-actions">
+              <a href="/invoice/cst/{{$encryptedurl}}" target="_blank" class="btn btn-sm btn-outline-info" title="Buka halaman tagihan pelanggan">
+                <i class="fas fa-external-link-alt"></i> Buka
+              </a>
               <button
                 type="button"
                 id="btnDownloadPaymentQr"
-                data-customer-id="{{ $customer->customer_id }}"
-                data-customer-name="{{ $customer->name }}"
+                data-card-url="/invoice/{{ $customer->id }}/payment-qr-card"
                 class="btn btn-sm btn-success"
               >
                 <i class="fas fa-download"></i> Download QR
+              </button>
+              <button
+                type="button"
+                id="btnPrintPaymentQr"
+                data-card-url="/invoice/{{ $customer->id }}/payment-qr-card?inline=1"
+                class="btn btn-sm btn-secondary"
+              >
+                <i class="fas fa-print"></i> Print
               </button>
               <button
                 type="button"
@@ -68,40 +74,102 @@
         </div>
       </div>
 
-      {{-- Col 2: Customer Information --}}
+<style>
+  .pay-qr-card { border-radius: 14px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+  .pay-qr-head {
+    position: relative; overflow: hidden; text-align: center; color: #fff; padding: 16px 14px 46px;
+    background: linear-gradient(160deg, #0d6efd 0%, #20c997 100%);
+  }
+  .pay-qr-head::after {
+    content: ""; position: absolute; right: -40px; top: -50px; width: 150px; height: 150px;
+    border-radius: 50%; background: rgba(255,255,255,.12);
+  }
+  .pay-qr-kicker { font-size: 11px; font-weight: 700; letter-spacing: 3px; opacity: .85; }
+  .pay-qr-tenant { font-size: 24px; font-weight: 800; line-height: 1.2; letter-spacing: .5px; word-break: break-word; }
+  .pay-qr-sub { font-size: 12px; opacity: .9; }
+  .pay-qr-body {
+    position: relative; margin: -32px 14px 14px; padding: 18px 14px 14px; background: #fff;
+    border-radius: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.08); text-align: center; flex: 1;
+  }
+  .pay-qr-frame { position: relative; display: inline-block; padding: 12px; }
+  .pay-qr-frame .c { position: absolute; width: 22px; height: 22px; border: 0 solid #0d6efd; }
+  .pay-qr-frame .tl { top: 0; left: 0; border-top-width: 4px; border-left-width: 4px; border-top-left-radius: 4px; }
+  .pay-qr-frame .tr { top: 0; right: 0; border-top-width: 4px; border-right-width: 4px; border-top-right-radius: 4px; }
+  .pay-qr-frame .bl { bottom: 0; left: 0; border-bottom-width: 4px; border-left-width: 4px; border-bottom-left-radius: 4px; }
+  .pay-qr-frame .br { bottom: 0; right: 0; border-bottom-width: 4px; border-right-width: 4px; border-bottom-right-radius: 4px; }
+  .pay-qr-code svg { display: block; width: 180px; height: 180px; }
+  .pay-qr-divider { border-top: 2px dashed #e5e7eb; margin: 12px 6px; }
+  .pay-qr-name { font-size: 17px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pay-qr-id {
+    display: inline-block; margin-top: 6px; padding: 4px 14px; border-radius: 999px;
+    background: #e8f0fe; color: #0d6efd; font-weight: 700; font-size: 13px;
+  }
+  .pay-qr-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 14px; }
+  /* Mode gelap: kartu luar ikut gelap, kotak QR tetap putih agar mudah di-scan */
+  .dark-mode .pay-qr-card { background: #1f2937; }
+  .dark-mode .pay-qr-body { background: #fff; }
+  .dark-mode .pay-qr-name { color: #111827; }
+</style>
+
+      {{-- Col 2: Informasi Pelanggan (gabungan Customer Information + Account Details) --}}
+      @php
+        $statusColor = [
+          'Active' => 'success', 'Block' => 'danger', 'Inactive' => 'secondary',
+          'Potensial' => 'warning', 'Company_Properti' => 'info',
+        ][$customer->status_name] ?? 'primary';
+      @endphp
       <div class="col-md-4 mb-3">
         <div class="card border-left-primary shadow-sm h-100">
-          <div class="card-header bg-gradient-primary text-white">
-            <h6 class="font-weight-bold mb-0">
-              <i class="fas fa-user-circle"></i> Customer Information
+          <div class="card-header bg-gradient-primary text-white d-flex align-items-center">
+            <h6 class="font-weight-bold mb-0 mr-auto">
+              <i class="fas fa-user-circle"></i> Informasi Pelanggan
             </h6>
+            <span class="badge badge-{{ $statusColor }} px-2 py-1">{{ $customer->status_name }}</span>
           </div>
           <div class="card-body">
+            <a href="/customer/{{ $customer->id }}" class="d-block font-weight-bold text-decoration-none mb-1" style="font-size:16px">
+              <i class="fas fa-external-link-alt"></i> {{ $customer->name }}
+            </a>
+            <div class="text-muted small mb-3">{{ $customer->customer_id }}</div>
+
             <table class="table table-sm table-borderless mb-0">
               <tbody>
                 <tr>
-                  <td class="text-muted" style="width:35%">CID / Name</td>
+                  <td class="text-muted" style="width:38%"><i class="fas fa-phone fa-fw"></i> Phone</td>
                   <td>
-                    <a href="/customer/{{ $customer->id}}" class="font-weight-bold text-decoration-none">
-                      <i class="fas fa-external-link-alt"></i> {{$customer->customer_id}} - {{$customer->name}}
+                    @if($customer->phone)
+                    <a href="https://wa.me/{{ $customer->phone }}" target="_blank" class="badge badge-success px-2 py-1">
+                      <i class="fab fa-whatsapp"></i> {{ $customer->phone }}
                     </a>
+                    @else - @endif
                   </td>
                 </tr>
                 <tr>
-                  <td class="text-muted">Phone</td>
-                  <td>
-                    <a href="https://wa.me/{{$customer->phone}}" target="_blank" class="badge badge-success px-3 py-2">
-                      <i class="fab fa-whatsapp"></i> {{$customer->phone}}
-                    </a>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="text-muted">Address</td>
+                  <td class="text-muted"><i class="fas fa-map-marker-alt fa-fw"></i> Address</td>
                   <td>
                     <a href="https://www.google.com/maps/place/{{ $customer->coordinate }}" target="_blank" class="text-info">
-                      <i class="fas fa-map-marked-alt"></i> {{$customer->address}}
+                      {{ $customer->address ?: '-' }}
                     </a>
                   </td>
+                </tr>
+                <tr>
+                  <td class="text-muted"><i class="fas fa-box fa-fw"></i> Plan</td>
+                  <td class="font-weight-bold">
+                    {{ $customer->plan_name }}
+                    <span class="text-muted font-weight-normal small">Rp {{ number_format((float) $customer->plan_price, 0, ',', '.') }}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-muted"><i class="far fa-calendar-alt fa-fw"></i> Billing Start</td>
+                  <td>{{ $customer->billing_start ? \Carbon\Carbon::parse($customer->billing_start)->format('d M Y') : '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="text-muted"><i class="fas fa-user-lock fa-fw"></i> Tgl Isolir</td>
+                  <td>{{ $customer->isolir_date ? 'Setiap tanggal ' . $customer->isolir_date : '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="text-muted"><i class="fas fa-file-alt fa-fw"></i> NPWP</td>
+                  <td class="font-weight-bold">{{ $customer->npwp ? strtoupper($customer->npwp) : '-' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -109,35 +177,97 @@
         </div>
       </div>
 
-      {{-- Col 3: Account Details --}}
+      {{-- Col 3: Ringkasan Invoice (chart) --}}
+      @php
+        $invStats = [
+          ['label' => 'Lunas',       'status' => 1, 'color' => '#28a745'],
+          ['label' => 'Belum Bayar', 'status' => 0, 'color' => '#ffc107'],
+          ['label' => 'Batal',       'status' => 2, 'color' => '#dc3545'],
+        ];
+        foreach ($invStats as &$st) {
+          $rows = $suminvoice->where('payment_status', $st['status']);
+          $st['count'] = $rows->count();
+          $st['total'] = (float) $rows->sum('total_amount');
+        }
+        unset($st);
+        $invTotalCount = array_sum(array_column($invStats, 'count'));
+        $unpaidTotal = $invStats[1]['total'];
+      @endphp
       <div class="col-md-4 mb-3">
         <div class="card border-left-info shadow-sm h-100">
           <div class="card-header bg-gradient-info text-white">
             <h6 class="font-weight-bold mb-0">
-              <i class="fas fa-info-circle"></i> Account Details
+              <i class="fas fa-chart-pie"></i> Ringkasan Invoice
             </h6>
           </div>
-          <div class="card-body">
-            <table class="table table-sm table-borderless mb-0">
-              <tbody>
-                <tr>
-                  <td class="text-muted" style="width:35%">Status</td>
-                  <td>
-                    <span class="badge badge-primary px-3 py-2">
-                      {{$customer->status_name}}
-                    </span>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="text-muted">Plan</td>
-                  <td class="font-weight-bold">{{$customer->plan_name}}</td>
-                </tr>
-                <tr>
-                  <td class="text-muted">NPWP</td>
-                  <td class="font-weight-bold">{{strtoupper($customer->npwp)}}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="card-body d-flex flex-column">
+            @if($invTotalCount === 0)
+              <div class="text-center text-muted my-auto">
+                <i class="far fa-folder-open fa-2x mb-2"></i><br>Belum ada invoice.
+              </div>
+            @else
+              <div class="d-flex align-items-center">
+                <div style="position:relative;width:150px;height:150px;flex-shrink:0">
+                  <canvas id="invoiceStatusChart" width="150" height="150"></canvas>
+                  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
+                    <div style="font-size:26px;font-weight:800;line-height:1">{{ $invTotalCount }}</div>
+                    <div class="text-muted small">invoice</div>
+                  </div>
+                </div>
+                <div class="ml-3 flex-grow-1">
+                  @foreach($invStats as $st)
+                    <div class="d-flex align-items-start mb-2">
+                      <span style="width:12px;height:12px;border-radius:3px;background:{{ $st['color'] }};margin-top:4px;flex-shrink:0"></span>
+                      <div class="ml-2" style="line-height:1.25">
+                        <div class="font-weight-bold">{{ $st['label'] }} <span class="text-muted font-weight-normal">({{ $st['count'] }})</span></div>
+                        <div class="small text-muted">Rp {{ number_format($st['total'], 0, ',', '.') }}</div>
+                      </div>
+                    </div>
+                  @endforeach
+                </div>
+              </div>
+
+              <div class="mt-auto pt-3">
+                <div class="rounded px-3 py-2" style="{{ $unpaidTotal > 0 ? 'background:#fff3cd;color:#856404' : 'background:#d4edda;color:#155724' }}">
+                  @if($unpaidTotal > 0)
+                    <i class="fas fa-exclamation-circle"></i> Tagihan belum dibayar:
+                    <strong>Rp {{ number_format($unpaidTotal, 0, ',', '.') }}</strong>
+                  @else
+                    <i class="fas fa-check-circle"></i> Tidak ada tagihan tertunggak
+                  @endif
+                </div>
+              </div>
+
+              <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                  var el = document.getElementById('invoiceStatusChart');
+                  if (!el || typeof Chart === 'undefined') return;
+                  new Chart(el.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                      labels: @json(array_column($invStats, 'label')),
+                      datasets: [{
+                        data: @json(array_column($invStats, 'count')),
+                        backgroundColor: @json(array_column($invStats, 'color')),
+                        borderWidth: 2
+                      }]
+                    },
+                    options: {
+                      responsive: false,
+                      cutoutPercentage: 68,
+                      legend: { display: false },
+                      tooltips: {
+                        callbacks: {
+                          label: function (item, data) {
+                            return ' ' + data.labels[item.index] + ': ' + data.datasets[0].data[item.index] + ' invoice';
+                          }
+                        }
+                      }
+                    }
+                  });
+                });
+              </script>
+            @endif
           </div>
         </div>
       </div>
@@ -232,7 +362,6 @@
 document.addEventListener('DOMContentLoaded', function () {
   var btn = document.getElementById('btnDownloadPaymentQr');
   var btnWa = document.getElementById('btnSendPaymentWa');
-  var qrImg = document.getElementById('paymentQrImage');
 
   function showSwal(icon, title, text) {
     if (typeof Swal !== 'undefined' && Swal.fire) {
@@ -247,47 +376,47 @@ document.addEventListener('DOMContentLoaded', function () {
     return Promise.resolve();
   }
 
-  if (btn && qrImg) {
+  if (btn) {
+    // Kartu QR dibuat di server (PaymentQrCardService) — sama persis dengan gambar yang dikirim via WA.
     btn.addEventListener('click', function () {
-      var customerId = btn.getAttribute('data-customer-id') || '-';
-      var customerName = btn.getAttribute('data-customer-name') || '-';
+      var original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyiapkan...';
+      window.location.href = btn.getAttribute('data-card-url');
+      setTimeout(function () {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }, 3000);
+    });
+  }
 
-      var canvas = document.createElement('canvas');
-      var ctx = canvas.getContext('2d');
-
-      canvas.width = 700;
-      canvas.height = 860;
-
-      // Background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Header
-      ctx.fillStyle = '#111111';
-      ctx.font = 'bold 42px Arial';
-      ctx.fillText('Link pembayaran', 56, 82);
-
-      // QR
-      var qrSize = 520;
-      var qrX = Math.floor((canvas.width - qrSize) / 2);
-      var qrY = 120;
-      ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
-
-      // Detail
-      ctx.fillStyle = '#111111';
-      ctx.font = 'bold 32px Arial';
-      ctx.fillText('Customer ID: ' + customerId, 56, 700);
-      ctx.fillText('Nama: ' + customerName, 56, 752);
-
-      ctx.fillStyle = '#6c757d';
-      ctx.font = '24px Arial';
-      ctx.fillText('Silahkan scan QRcode ini untuk melihat daftar tagihan anda.', 56, 808);
-
-      var safeName = (customerId || 'customer').replace(/[^a-zA-Z0-9_-]/g, '_');
-      var downloadLink = document.createElement('a');
-      downloadLink.href = canvas.toDataURL('image/png');
-      downloadLink.download = 'link-pembayaran-' + safeName + '.png';
-      downloadLink.click();
+  var btnPrint = document.getElementById('btnPrintPaymentQr');
+  if (btnPrint) {
+    // Buka kartu QR di jendela baru lalu tampilkan dialog print (kartu disesuaikan ke 1 halaman).
+    btnPrint.addEventListener('click', function () {
+      var win = window.open('', '_blank');
+      if (!win) {
+        showSwal('warning', 'Pop-up diblokir', 'Izinkan pop-up untuk halaman ini agar bisa mencetak QR.');
+        return;
+      }
+      var src = window.location.origin + btnPrint.getAttribute('data-card-url');
+      win.document.write(
+        '<!doctype html><html><head><title>Print QR Link Pembayaran</title>' +
+        '<style>@page{size:A4 portrait;margin:12mm}html,body{margin:0;height:100%}' +
+        'body{display:flex;align-items:center;justify-content:center;font-family:sans-serif;color:#666}' +
+        'img{max-width:100%;max-height:100%;width:130mm;height:auto}</style></head>' +
+        '<body><p id="msg">Menyiapkan QR...</p><img id="card" alt="" style="display:none"></body></html>'
+      );
+      win.document.close();
+      var img = win.document.getElementById('card');
+      img.onload = function () {
+        win.document.getElementById('msg').remove();
+        img.style.display = 'block';
+        win.focus();
+        win.print();
+      };
+      img.onerror = function () { win.document.getElementById('msg').textContent = 'Gagal memuat QR.'; };
+      img.src = src;
     });
   }
 
