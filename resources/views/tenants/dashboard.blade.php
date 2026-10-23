@@ -166,6 +166,82 @@
                         </div>
                     </div>
 
+                    <!-- Per-tenant tax breakdown -->
+                    @php $rp = fn($v) => 'Rp ' . number_format($v, 0, ',', '.'); @endphp
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-receipt text-danger"></i> Rincian Perpajakan per Tenant &middot; {{ $selectedMonth->translatedFormat('F Y') }}</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-striped table-hover table-sm mb-0">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th width="40">#</th>
+                                            <th>Tenant</th>
+                                            <th class="text-right">Pendapatan</th>
+                                            <th class="text-right">DPP</th>
+                                            <th class="text-right">PPN {{ number_format($totals['tax']['ppn_rate'], 0, ',', '.') }}%</th>
+                                            <th class="text-right">BHP Tel {{ number_format($totals['tax']['bhp_rate'], 1, ',', '.') }}%</th>
+                                            <th class="text-right">USO {{ number_format($totals['tax']['uso_rate'], 2, ',', '.') }}%</th>
+                                            <th class="text-right">Total Kewajiban</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse ($rows as $i => $row)
+                                        <tr>
+                                            <td>{{ $i + 1 }}</td>
+                                            <td>
+                                                <strong>{{ $row['tenant']->app_name }}</strong>
+                                                @unless ($row['tenant']->is_active)
+                                                    <span class="badge badge-secondary">Inactive</span>
+                                                @endunless
+                                            </td>
+                                            @if ($row['error'])
+                                                <td colspan="6" class="text-danger text-center">
+                                                    <i class="fas fa-exclamation-triangle"></i> {{ $row['error'] }}
+                                                </td>
+                                            @elseif ($row['merchant_scope_empty'])
+                                                <td colspan="6" class="text-warning text-center">
+                                                    <i class="fas fa-exclamation-triangle"></i> Belum ada merchant yang di-set untuk tenant ini.
+                                                </td>
+                                            @else
+                                                <td class="text-right">{{ $rp($row['revenue_this_month']) }}</td>
+                                                <td class="text-right">{{ $rp($row['tax']['dpp']) }}</td>
+                                                <td class="text-right">{{ $rp($row['tax']['ppn']) }}</td>
+                                                <td class="text-right">{{ $rp($row['tax']['bhp']) }}</td>
+                                                <td class="text-right">{{ $rp($row['tax']['uso']) }}</td>
+                                                <td class="text-right font-weight-bold text-danger">{{ $rp($row['tax']['total_kewajiban']) }}</td>
+                                            @endif
+                                        </tr>
+                                        @empty
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted py-3">Belum ada tenant.</td>
+                                        </tr>
+                                        @endforelse
+                                    </tbody>
+                                    @if (count($rows))
+                                    <tfoot>
+                                        <tr class="font-weight-bold bg-light">
+                                            <td colspan="2" class="text-right">Total semua tenant</td>
+                                            <td class="text-right">{{ $rp($totals['revenue_this_month']) }}</td>
+                                            <td class="text-right">{{ $rp($totals['tax']['dpp']) }}</td>
+                                            <td class="text-right">{{ $rp($totals['tax']['ppn']) }}</td>
+                                            <td class="text-right">{{ $rp($totals['tax']['bhp']) }}</td>
+                                            <td class="text-right">{{ $rp($totals['tax']['uso']) }}</td>
+                                            <td class="text-right text-danger">{{ $rp($totals['tax']['total_kewajiban']) }}</td>
+                                        </tr>
+                                    </tfoot>
+                                    @endif
+                                </table>
+                            </div>
+                        </div>
+                        <div class="card-footer small text-muted">
+                            DPP = Pendapatan &divide; 1,11 &middot; PPN = Pendapatan &minus; DPP &middot; BHP Telekomunikasi &amp; USO dihitung dari DPP.
+                            Pendapatan = pembayaran invoice yang diterima pada bulan terpilih.
+                        </div>
+                    </div>
+
                     <!-- Per-tenant breakdown -->
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped table-hover table-sm">
