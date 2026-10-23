@@ -1,0 +1,9 @@
+{
+  "name": "olt-telnet-bridge",
+  "private": true,
+  "description": "WebSocket <-> telnet bridge for the OLT web terminal (see server.js)",
+  "main": "server.js",
+  "dependencies": {
+    "ws": "8.18.0"
+  }
+}

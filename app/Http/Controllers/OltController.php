@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use DataTables;
@@ -249,6 +250,35 @@ class OltController extends Controller
 
         // Tampilkan halaman dengan informasi dasar OLT, AJAX akan mengambil detail lainnya
         return view('olt.show', ['olt' => $olt]);
+    }
+
+    // Terminal telnet ke OLT lewat browser (xterm.js <-> telnet-bridge/server.js).
+    public function telnet($id)
+    {
+        $olt = \App\Olt::findOrFail($id);
+
+        return view('olt.telnet', ['olt' => $olt]);
+    }
+
+    public function telnetToken(Request $request, $id)
+    {
+        $olt = \App\Olt::findOrFail($id);
+        $host = $request->getHost();
+        $token = (new \App\Services\OltTelnetBridge)->issueToken($olt, Auth::user(), $host);
+
+        Log::info('[OLT TELNET] token issued', [
+            'olt_id' => $olt->id,
+            'olt' => $olt->name,
+            'target' => $olt->ip . ':' . ($olt->port ?: 23),
+            'user_id' => Auth::id(),
+            'user' => Auth::user()->name ?? null,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'token' => $token,
+            'ws_url' => 'wss://' . $host . \App\Services\OltTelnetBridge::WS_PATH . '?token=' . $token,
+        ]);
     }
 
 //     public function getOltInfo($id)

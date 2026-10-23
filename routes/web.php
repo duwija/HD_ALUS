@@ -938,6 +938,8 @@ Route::patch('/olt/{id}','OltController@update');
 Route::delete('/olt/{id}','OltController@destroy');
 Route::get('/olt/getoltinfo/{id}','OltController@getOltInfo');
 Route::get('/olt/getoltpon/{id}','OltController@getOltPon');
+Route::get('/olt/{id}/telnet','OltController@telnet');
+Route::post('/olt/{id}/telnet/token','OltController@telnetToken');
 Route::get('/olt/{id}','OltController@show');
 
 
