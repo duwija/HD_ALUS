@@ -34,11 +34,27 @@
   .cmd-nav .dropdown-item { border-radius:6px; font-size:12px; color:var(--text-primary); padding:6px 10px; }
   .cmd-nav .dropdown-item:hover { background:var(--brand-light); color:var(--brand); }
 
-  /* command output */
-  #commandOutput.card {
-    background:var(--bg-surface); border:1px solid var(--border); border-radius:10px;
-    color:var(--text-primary); font-size:12px;
-  }
+  /* command search, status & output */
+  .cmd-search { width:260px; max-width:100%; border-radius:8px; background:var(--input-bg); border-color:var(--input-border); color:var(--text-primary); }
+  .cmd-note { font-size:10px; color:var(--text-muted); margin-left:4px; }
+  .cmd-search-results { display:flex; flex-wrap:wrap; gap:6px; margin:-6px 0 12px; }
+  .cmd-search-results .cmd-item { display:inline-block; width:auto; border:1px solid var(--border); border-radius:20px; padding:3px 10px; font-size:12px; color:var(--text-primary); background:var(--bg-surface); }
+  .cmd-search-results .cmd-item:hover { background:var(--brand-light); color:var(--brand); text-decoration:none; }
+  .cmd-item.active { background:var(--brand-light) !important; color:var(--brand) !important; font-weight:600; }
+  .cmd-status { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 12px; margin-bottom:10px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface-2); font-size:12px; }
+  .cmd-status code { font-size:11px; color:var(--brand); background:transparent; }
+  .cmd-output { font-size:12px; color:var(--text-primary); }
+  .cmd-empty { color:var(--text-muted); padding:18px; text-align:center; border:1px dashed var(--border); border-radius:10px; }
+  .cmd-error { color:#b91c1c; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.25); border-radius:10px; padding:12px 14px; }
+  #outputTable { font-size:12px; width:100% !important; }
+  #outputTable thead th { background:var(--bg-surface-2); color:var(--text-secondary); font-size:11px; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; border-color:var(--border); }
+  #outputTable td { border-color:var(--border); vertical-align:top; max-width:340px; word-break:break-word; }
+  #outputTable tr.row-disabled td { color:var(--text-muted); text-decoration:line-through; }
+  #outputTable tr.row-dynamic td { font-style:italic; }
+  .flag-true { color:#10b981; font-weight:700; }
+  .flag-false { color:var(--text-muted); }
+  .mk-secret { cursor:pointer; color:var(--text-muted); letter-spacing:2px; }
+  .row-flags .badge { font-size:10px; font-weight:600; margin-right:2px; }
 
   /* tables */
   #pppoeTable thead th,
@@ -143,70 +159,46 @@
     </div>
   </div>
 
-  {{-- MIKROTIK COMMANDS --}}
-  <div class="dr-card">
+  {{-- MIKROTIK COMMANDS (hanya perintah baca, lihat App\Services\MikrotikCommandCatalog) --}}
+  <div class="dr-card" id="mkCommands">
     <div class="dr-card-header">
-      <h6><i class="fas fa-terminal mr-2" style="color:var(--brand)"></i>MikroTik Commands</h6>
+      <h6><i class="fas fa-terminal mr-2" style="color:var(--brand)"></i>MikroTik Commands <small class="text-muted font-weight-normal">&middot; read-only</small></h6>
+      <input type="search" id="cmdSearch" class="form-control form-control-sm cmd-search" placeholder="Cari perintah… (mis. arp, lease, queue)" autocomplete="off">
     </div>
     <div class="dr-card-body" style="padding-top:12px">
       <div class="cmd-nav">
+        @foreach (\App\Services\MikrotikCommandCatalog::GROUPS as $group => $items)
         <div class="dropdown">
-          <button class="dropdown-toggle" data-toggle="dropdown"><strong>IP</strong></button>
+          <button class="dropdown-toggle" data-toggle="dropdown"><strong>{{ $group }}</strong></button>
           <div class="dropdown-menu">
-            <a class="dropdown-item" href="#" data-command="/ip/address/print"          data-id="{{ $distrouter->id }}">Addresses</a>
-            <a class="dropdown-item" href="#" data-command="/ip/dns/print"               data-id="{{ $distrouter->id }}">DNS</a>
-            <a class="dropdown-item" href="#" data-command="/ip/route/print"             data-id="{{ $distrouter->id }}">Route</a>
-            <a class="dropdown-item" href="#" data-command="/ip/firewall/nat/print"      data-id="{{ $distrouter->id }}">Firewall-NAT</a>
-            <a class="dropdown-item" href="#" data-command="/ip/firewall/filter/print"   data-id="{{ $distrouter->id }}">Firewall-Filter</a>
-            <a class="dropdown-item" href="#" data-command="/ip/firewall/mangle/print"   data-id="{{ $distrouter->id }}">Firewall-Mangle</a>
-            <a class="dropdown-item" href="#" data-command="/ip/firewall/address-list/print" data-id="{{ $distrouter->id }}">Firewall-Address-List</a>
-            <a class="dropdown-item" href="#" data-command="/ip/firewall/raw/print"      data-id="{{ $distrouter->id }}">Firewall-Raw</a>
-            <a class="dropdown-item" href="#" data-command="/ip/service/print"           data-id="{{ $distrouter->id }}">Services</a>
+            @foreach ($items as $key => $item)
+              <a class="dropdown-item cmd-item" href="#" data-key="{{ $key }}" data-label="{{ $group }} › {{ $item[0] }}" title="{{ $item[1] }}">
+                {{ $item[0] }}
+                @isset($item[3]) <span class="cmd-note">{{ $item[3] }}</span> @endisset
+              </a>
+            @endforeach
           </div>
         </div>
-        <div class="dropdown">
-          <button class="dropdown-toggle" data-toggle="dropdown"><strong>Interface</strong></button>
-          <div class="dropdown-menu">
-            <a class="dropdown-item" href="#" data-command="/interface/print"            data-id="{{ $distrouter->id }}">Interface</a>
-            <a class="dropdown-item" href="#" data-command="/interface/ethernet/print"   data-id="{{ $distrouter->id }}">Ethernet</a>
-            <a class="dropdown-item" href="#" data-command="/interface/vlan/print"       data-id="{{ $distrouter->id }}">Vlan</a>
-            <a class="dropdown-item" href="#" data-command="/interface/bridge/print"     data-id="{{ $distrouter->id }}">Bridge</a>
-            <a class="dropdown-item" href="#" data-command="/interface/bridge/port/print" data-id="{{ $distrouter->id }}">Bridge-Port</a>
-          </div>
+        @endforeach
+      </div>
+      <div id="cmdSearchResults" class="cmd-search-results" style="display:none"></div>
+
+      <div class="cmd-status" id="cmdStatus" style="display:none">
+        <div>
+          <strong id="cmdLabel"></strong>
+          <code id="cmdPath" class="ml-1"></code>
+          <span id="cmdMeta" class="text-muted ml-2"></span>
         </div>
-        <div class="dropdown">
-          <button class="dropdown-toggle" data-toggle="dropdown"><strong>Routing</strong></button>
-          <div class="dropdown-menu">
-            <a class="dropdown-item" href="#" data-command="/routing/bgp/peer/print"     data-id="{{ $distrouter->id }}">BGP-Peer (ROS 6)</a>
-            <a class="dropdown-item" href="#" data-command="/routing/bgp/session/print"  data-id="{{ $distrouter->id }}">BGP-Peer (ROS 7)</a>
-            <a class="dropdown-item" href="#" data-command="/routing/filter/print"       data-id="{{ $distrouter->id }}">Filter (ROS 6)</a>
-            <a class="dropdown-item" href="#" data-command="/routing/filter/rule/print"  data-id="{{ $distrouter->id }}">Filter (ROS 7)</a>
-          </div>
-        </div>
-        <div class="dropdown">
-          <button class="dropdown-toggle" data-toggle="dropdown"><strong>PPP</strong></button>
-          <div class="dropdown-menu">
-            <a class="dropdown-item" href="#" data-command="/ppp/secret/print"           data-id="{{ $distrouter->id }}">Secret</a>
-            <a class="dropdown-item" href="#" data-command="/ppp/profile/print"          data-id="{{ $distrouter->id }}">Profile</a>
-            <a class="dropdown-item" href="#" data-command="/ppp/active/print"           data-id="{{ $distrouter->id }}">Active</a>
-          </div>
-        </div>
-        <div class="dropdown">
-          <button class="dropdown-toggle" data-toggle="dropdown"><strong>Queue</strong></button>
-          <div class="dropdown-menu">
-            <a class="dropdown-item" href="#" data-command="/queue/simple/print"         data-id="{{ $distrouter->id }}">Simple Queue</a>
-            <a class="dropdown-item" href="#" data-command="/queue/tree/print"           data-id="{{ $distrouter->id }}">Queue Tree</a>
-            <a class="dropdown-item" href="#" data-command="/queue/type/print"           data-id="{{ $distrouter->id }}">Queue Type</a>
-          </div>
-        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="cmdRefresh" title="Jalankan ulang"><i class="fas fa-sync-alt"></i> Refresh</button>
       </div>
 
-      {{-- Command Output --}}
       <div id="spinnermk" class="dr-spinner" style="display:none">
         <i class="fas fa-spinner fa-spin fa-2x" style="color:var(--brand)"></i>
-        <div style="font-size:12px;margin-top:6px">Mengambil data...</div>
+        <div style="font-size:12px;margin-top:6px">Mengambil data dari router…</div>
       </div>
-      <div class="table-responsive card p-2 mb-0" id="commandOutput"></div>
+      <div id="commandOutput" class="cmd-output">
+        <div class="cmd-empty"><i class="fas fa-mouse-pointer mr-1"></i> Pilih perintah dari menu di atas atau cari perintah. Semua perintah hanya membaca data (print).</div>
+      </div>
     </div>
   </div>
 

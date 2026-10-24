@@ -804,43 +804,52 @@ class DistrouterController extends Controller
 
 // }
 
+// Menu "MikroTik Commands": hanya perintah baca dari MikrotikCommandCatalog
+// (sebelumnya path apa pun dari browser langsung dijalankan di router).
 public function executeCommand(Request $request)
 {
-    $command = $request->input('command');
+    $key = $request->input('key') ?: \App\Services\MikrotikCommandCatalog::keyForPath($request->input('command'));
+    $item = \App\Services\MikrotikCommandCatalog::find($key);
     $id = $request->input('id');
 
-    // Pastikan perintah dan ID tidak kosong
-    if (!$command || !$id) {
-        return response()->json(['error' => 'Command or ID not specified'], 400);
+    if (!$item || !$id) {
+        return response()->json(['error' => 'Perintah tidak dikenal atau router tidak dipilih.'], 422);
     }
 
-    try {
-        // Cari Distrouter berdasarkan ID
-        $distrouter = \App\Distrouter::findOrFail($id);
+    $distrouter = \App\Distrouter::findOrFail($id);
+    $started = microtime(true);
 
-        // Membuat koneksi ke MikroTik menggunakan RouterosAPI
+    try {
         $client = new Client([
             'host' => $distrouter->ip,
             'user' => $distrouter->user,
             'pass' => $distrouter->password,
             'port' => $distrouter->port,
-            'timeout' => 5,  // Waktu timeout
+            'timeout' => 10,
         ]);
-        //$command='/ip/address/print';
-        //return response()->json(['error' => $command], 400);
-        // Menjalankan perintah dengan Query
-        $query = new Query($command);
-        $output = $client->query($query)->read();  // Membaca hasil perintah
-
-        
-        // Mengembalikan hasil perintah sebagai JSON
-        return response()->json([
-            'output' => $output // Kirim output langsung dalam bentuk array
-        ]);
+        $output = $client->query(new Query($item['path']))->read();
     } catch (\Exception $e) {
-        // Tangani kesalahan dan tampilkan pesan kesalahan
-        return response()->json(['error' => 'Error executing command: ' . $e->getMessage()], 500);
+        return response()->json(['error' => 'Router ' . $distrouter->name . ': ' . $e->getMessage()], 502);
     }
+
+    // RouterOS mengembalikan !trap (mis. menu tidak ada di versi ROS ini) sebagai satu baris "after".
+    if (isset($output['after']['message'])) {
+        return response()->json(['error' => $item['path'] . ': ' . $output['after']['message'] . ($item['note'] ? ' (perintah untuk ' . $item['note'] . ')' : '')], 422);
+    }
+
+    \Log::info('[DISTROUTER CMD] ' . $item['path'], [
+        'distrouter_id' => $distrouter->id,
+        'user' => \Auth::user()->name ?? null,
+        'rows' => is_array($output) ? count($output) : 0,
+    ]);
+
+    return response()->json([
+        'command' => $item['path'],
+        'label' => $item['group'] . ' › ' . $item['label'],
+        'columns' => $item['columns'],
+        'output' => array_values(is_array($output) ? $output : []),
+        'took_ms' => (int) round((microtime(true) - $started) * 1000),
+    ]);
 }
 
 

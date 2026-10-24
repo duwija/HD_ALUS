@@ -356,73 +356,152 @@
 
 });
 </script>
+<script src="https://cdn.datatables.net/buttons/1.5.6/js/buttons.colVis.min.js"></script>
 <script>
-    $(document).on('click', '.dropdown-item', function() {
-        var command = $(this).data('command'); 
-        var id = $(this).data('id'); 
-         $('#spinnermk').show(); // Tampilkan loading
-         executeCommand(command, id);
-     });
+// ── MikroTik Commands (perintah baca dari App\Services\MikrotikCommandCatalog) ──
+(function () {
+    var routerId = {{ (int) $distrouter->id }};
+    var current = null;   // key perintah yang sedang ditampilkan
+    var dt = null;        // instance DataTable hasil
+    var FLAG_COLS = ['disabled', 'dynamic', 'running', 'active', 'invalid', 'complete', 'established', 'slave', 'inactive'];
+    var SECRET_RE = /pass|secret|pre-shared|private-key|authentication-key/i;
 
-    function executeCommand(command, id) {
+    // Escape HTML termasuk kutip (nilai juga dipakai di atribut data-secret).
+    var esc = function (s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+
+    function run(key, label) {
+        current = key;
+        $('.cmd-item').removeClass('active').filter('[data-key="' + key + '"]').addClass('active');
+        $('#cmdLabel').text(label || key);
+        $('#cmdPath').text('');
+        $('#cmdMeta').text('');
+        $('#cmdStatus').show();
+        $('#spinnermk').show();
+        $('#cmdRefresh').prop('disabled', true);
+        if (dt) { dt.destroy(); dt = null; }
+        $('#commandOutput').empty();
+
         $.ajax({
             url: '/distrouter/executeCommand',
             method: 'POST',
-            data: {
-                _token: '{{ csrf_token() }}',
-                command: command,
-                id: id
-            },
-            success: function(response) {
-                 $('#spinnermk').hide(); // Tampilkan loading
-                 if (response.output && response.output.length > 0) {
-                    let table = generateTable(response.output);
-                    $('#commandOutput').html(table);
-
-                    // Inisialisasi DataTables setelah tabel dibuat
-                    $('#outputTable').DataTable({
-                        dom: 'Bfrtip',
-                        buttons: [
-                            'pageLength', 'copy', 'excel', 'pdf', 'csv', 'print'
-                            ],
-                        lengthMenu: [[50, 100, 200, 500, 1000], [50, 100, 200, 500, 1000]]
-                    });
-                } else {
-                    $('#commandOutput').html('<h5>Command Output:</h5><pre>No data received</pre>');
-                }
-            },
-            error: function() {
-                 $('#spinnermk').hide(); // Tampilkan loading
-                 $('#commandOutput').html('<h5>Error:</h5><pre>An error occurred while executing the command.</pre>');
-             }
-         });
+            data: { _token: '{{ csrf_token() }}', key: key, id: routerId }
+        }).done(function (res) {
+            if (key !== current) return; // sudah pindah ke perintah lain
+            $('#cmdLabel').text(res.label);
+            $('#cmdPath').text(res.command);
+            $('#cmdMeta').text(res.output.length + ' baris · ' + res.took_ms + ' ms · ' + new Date().toLocaleTimeString('id-ID'));
+            render(res.output, res.columns || []);
+        }).fail(function (xhr) {
+            if (key !== current) return;
+            var msg = (xhr.responseJSON && xhr.responseJSON.error) || ('HTTP ' + xhr.status + ' ' + (xhr.statusText || ''));
+            $('#commandOutput').html('<div class="cmd-error"><i class="fas fa-exclamation-triangle mr-1"></i> ' + esc(msg) + '</div>');
+        }).always(function () {
+            if (key !== current) return;
+            $('#spinnermk').hide();
+            $('#cmdRefresh').prop('disabled', false);
+        });
     }
 
-    function generateTable(data) {
-        let table = `
+    function render(rows, preferred) {
+        if (!rows.length) {
+            $('#commandOutput').html('<div class="cmd-empty">Tidak ada data.</div>');
+            return;
+        }
 
-        <h5>Command Output:</h5>
-        <table id="outputTable" class="table table-bordered table-striped">
-        <thead class="bg-info">
-        <tr>`;
+        // Kolom = gabungan semua baris (RouterOS tidak selalu mengirim kolom yang sama per baris);
+        // kolom utama di depan, '.id' & kolom lain disembunyikan (bisa dimunculkan lewat "Kolom").
+        var all = [];
+        rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (all.indexOf(k) < 0) all.push(k); }); });
+        var main = preferred.filter(function (c) { return all.indexOf(c) >= 0; });
+        var flags = main.filter(function (c) { return FLAG_COLS.indexOf(c) >= 0; });
+        main = main.filter(function (c) { return FLAG_COLS.indexOf(c) < 0; });
+        if (!main.length) main = all.filter(function (c) { return c !== '.id' && FLAG_COLS.indexOf(c) < 0; });
+        var rest = all.filter(function (c) { return main.indexOf(c) < 0 && flags.indexOf(c) < 0; });
+        var cols = main.concat(rest);
+        var hasFlags = all.some(function (c) { return FLAG_COLS.indexOf(c) >= 0; });
 
-        // Ambil header dari kunci objek pertama
-        let headers = Object.keys(data[0]);
-        headers.forEach(header => {
-            table += `<th>${header}</th>`;
+        var html = '<table id="outputTable" class="table table-bordered table-hover table-sm"><thead><tr><th>#</th>';
+        if (hasFlags) html += '<th>Status</th>';
+        cols.forEach(function (c) { html += '<th>' + esc(c) + '</th>'; });
+        html += '</tr></thead><tbody>';
+
+        rows.forEach(function (r, i) {
+            var cls = (r.disabled === 'true' ? ' row-disabled' : '') + (r.dynamic === 'true' ? ' row-dynamic' : '');
+            html += '<tr class="' + cls + '"><td>' + (i + 1) + '</td>';
+            if (hasFlags) html += '<td class="row-flags">' + flagBadges(r) + '</td>';
+            cols.forEach(function (c) { html += '<td>' + cell(c, r[c]) + '</td>'; });
+            html += '</tr>';
         });
-        table += '</tr></thead><tbody>';
+        html += '</tbody></table>';
+        $('#commandOutput').html('<div class="table-responsive">' + html + '</div>');
 
-        // Tambahkan baris data
-        data.forEach(row => {
-            table += '<tr>';
-            headers.forEach(header => {
-                table += `<td>${row[header] || '-'}</td>`;
-            });
-            table += '</tr>';
+        var offset = hasFlags ? 2 : 1;
+        var hidden = rest.map(function (c) { return cols.indexOf(c) + offset; });
+        dt = $('#outputTable').DataTable({
+            dom: 'Bfrtip',
+            pageLength: 50,
+            order: [],
+            columnDefs: [{ targets: hidden, visible: false }],
+            buttons: [
+                { extend: 'colvis', text: '<i class="fas fa-columns"></i> Kolom' },
+                'pageLength',
+                { extend: 'copy', exportOptions: { columns: ':visible' } },
+                { extend: 'excel', exportOptions: { columns: ':visible' }, title: $('#cmdLabel').text() },
+                { extend: 'csv', exportOptions: { columns: ':visible' }, title: $('#cmdLabel').text() }
+            ],
+            lengthMenu: [[50, 100, 500, -1], [50, 100, 500, 'Semua']],
+            language: { search: 'Cari:', info: '_START_–_END_ dari _TOTAL_', infoEmpty: '0 baris', infoFiltered: '(dari _MAX_)', zeroRecords: 'Tidak ada yang cocok', paginate: { previous: '‹', next: '›' } }
         });
-
-        table += '</tbody></table>';
-        return table;
     }
+
+    function flagBadges(r) {
+        var b = '';
+        if (r.disabled === 'true') b += '<span class="badge badge-secondary">disabled</span>';
+        if (r.invalid === 'true') b += '<span class="badge badge-danger">invalid</span>';
+        if (r.running === 'true' || r.active === 'true' || r.established === 'true') b += '<span class="badge badge-success">' + (r.running === 'true' ? 'running' : (r.established === 'true' ? 'established' : 'active')) + '</span>';
+        else if (r.running === 'false') b += '<span class="badge badge-light">down</span>';
+        if (r.dynamic === 'true') b += '<span class="badge badge-info">dynamic</span>';
+        return b || '<span class="flag-false">–</span>';
+    }
+
+    function cell(col, val) {
+        if (val === undefined || val === null || val === '') return '<span class="flag-false">–</span>';
+        if (SECRET_RE.test(col)) {
+            return '<span class="mk-secret" title="Klik untuk menampilkan" data-secret="' + esc(val) + '">••••••</span>';
+        }
+        if (val === 'true') return '<span class="flag-true">✓</span>';
+        if (val === 'false') return '<span class="flag-false">✗</span>';
+        return esc(val);
+    }
+
+    // Klik menu / hasil pencarian
+    $('#mkCommands').on('click', '.cmd-item', function (e) {
+        e.preventDefault();
+        run($(this).data('key'), $(this).data('label'));
+    });
+    $('#cmdRefresh').on('click', function () { if (current) run(current, $('#cmdLabel').text()); });
+
+    // Password disamarkan, klik untuk menampilkan/menyembunyikan
+    $('#commandOutput').on('click', '.mk-secret', function () {
+        var $s = $(this), shown = $s.data('shown');
+        $s.text(shown ? '••••••' : $s.data('secret')).data('shown', !shown).css('letter-spacing', shown ? '2px' : 'normal');
+    });
+
+    // Cari perintah di semua grup
+    $('#cmdSearch').on('input', function () {
+        var q = $.trim($(this).val()).toLowerCase();
+        var $box = $('#cmdSearchResults').empty();
+        if (!q) { $box.hide(); return; }
+        $('.cmd-nav .cmd-item').each(function () {
+            var hay = ($(this).data('label') + ' ' + $(this).attr('title')).toLowerCase();
+            if (hay.indexOf(q) >= 0) $box.append($(this).clone().removeClass('dropdown-item'));
+        });
+        if (!$box.children().length) $box.append('<span class="text-muted small">Tidak ada perintah yang cocok.</span>');
+        $box.css('display', 'flex');
+    }).on('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); $('#cmdSearchResults .cmd-item').first().trigger('click'); }
+    });
+})();
 </script>
