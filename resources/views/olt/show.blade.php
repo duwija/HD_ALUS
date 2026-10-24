@@ -56,6 +56,8 @@
                 <a href="/oltonutype/olt/{{$olt->id}}" class="btn btn-success btn-sm "> Onu Type  </a>
                 <a href="/oltonuprofile/olt/{{$olt->id}}" class="btn btn-success btn-sm "> Onu Profile  </a>
 
+                <a href="/olt/{{$olt->id}}/telnet" target="_blank" class="btn btn-dark btn-sm "><i class="fas fa-terminal"></i> Telnet  </a>
+
                 <a href="/olt/{{$olt->id}}/edit" class="btn btn-primary btn-sm "> Edit  </a>
 
 
