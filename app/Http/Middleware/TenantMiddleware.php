@@ -397,6 +397,18 @@ class TenantMiddleware
         // Set logging path
         Config::set('logging.channels.daily.path', $tenantLogPath . '/laravel.log');
         Config::set('logging.channels.single.path', $tenantLogPath . '/laravel.log');
+
+        // Channel harian per tenant (payment, invoice, ...): config/logging.php menghitung path
+        // dari env('DB_DATABASE') saat boot (= DB default, mis. "lubaxx"), sehingga semua tenant
+        // tertulis ke satu folder. Arahkan ke logs/tenant_{db_database} — sama dengan command
+        // konsol (DailyReport, IsolirAuto, InvoiceAuto) dan penampil log di UserController.
+        $db = $tenant['db_database'] ?? null;
+        if ($db) {
+            foreach (['payment', 'invoice', 'notif', 'isolir', 'mikrotik', 'auth'] as $channel) {
+                Config::set("logging.channels.{$channel}.path", storage_path("logs/tenant_{$db}/{$channel}.log"));
+                \Illuminate\Support\Facades\Log::forgetChannel($channel);
+            }
+        }
         
         // Set storage disk paths untuk tenant
         Config::set('filesystems.disks.local.root', $tenantAppPath);
