@@ -54,18 +54,44 @@ class TenantManagementController extends Controller
         $adminUser = auth('admin')->user();
         $isSupervisor = $adminUser && $adminUser->isSupervisor();
 
-        // Bulan yang ditampilkan — default bulan berjalan, bisa dipilih mundur lewat ?month=YYYY-MM.
-        try {
-            $selectedMonth = \Carbon\Carbon::createFromFormat('Y-m', $request->query('month'))->startOfMonth();
-        } catch (\Exception $e) {
-            $selectedMonth = \Carbon\Carbon::now()->startOfMonth();
+        // Periode: ?from=YYYY-MM-DD&to=YYYY-MM-DD (tanggal bebas, maks 36 bulan), atau
+        // ?month=YYYY-MM (satu bulan penuh). Default: bulan berjalan penuh.
+        $periodFrom = \App\Services\IspTax::parseDate($request->query('from'));
+        $periodTo = \App\Services\IspTax::parseDate($request->query('to'));
+        if ($periodFrom && $periodTo) {
+            if ($periodFrom->gt($periodTo)) {
+                [$periodFrom, $periodTo] = [$periodTo, $periodFrom];
+            }
+            if ($periodFrom->copy()->addMonths(36)->lte($periodTo)) {
+                $periodFrom = $periodTo->copy()->subMonths(36)->addDay();
+            }
+        } else {
+            try {
+                $periodFrom = \Carbon\Carbon::createFromFormat('Y-m', $request->query('month'))->startOfMonth();
+            } catch (\Exception $e) {
+                $periodFrom = \Carbon\Carbon::now()->startOfMonth();
+            }
+            $periodTo = $periodFrom->copy()->endOfMonth();
         }
+        $periodFrom->startOfDay();
+        $periodTo->endOfDay();
+
+        // Periode tepat satu bulan kalender -> dipilih di dropdown bulan.
+        $isFullMonth = $periodFrom->day === 1 && $periodTo->isSameDay($periodFrom->copy()->endOfMonth());
+        $selectedMonth = $periodFrom->copy()->startOfMonth();
+        $periodLabel = $isFullMonth
+            ? $periodFrom->translatedFormat('F Y')
+            : $periodFrom->translatedFormat('d M Y') . ' s/d ' . $periodTo->translatedFormat('d M Y');
 
         $tenantsQuery = Tenant::orderBy('app_name');
         if ($isSupervisor) {
             $tenantsQuery->whereIn('id', $adminUser->assignedTenantIds());
         }
-        $tenants = $tenantsQuery->get();
+        $tenantOptions = $tenantsQuery->get();
+
+        // Filter ?tenant=<id>: satu tenant saja (harus termasuk yang boleh dilihat), kosong = semua.
+        $selectedTenant = $tenantOptions->firstWhere('id', (int) $request->query('tenant'));
+        $tenants = $selectedTenant ? collect([$selectedTenant]) : $tenantOptions;
 
         $rows = [];
         $totals = [
@@ -79,8 +105,6 @@ class TenantManagementController extends Controller
             'revenue_this_month' => 0,
         ];
 
-        $startOfMonth = $selectedMonth->copy()->startOfMonth();
-        $endOfMonth = $selectedMonth->copy()->endOfMonth();
 
         // Pilihan bulan untuk dropdown: 12 bulan terakhir dari bulan berjalan.
         $monthOptions = collect(range(0, 11))->map(function ($i) {
@@ -153,7 +177,7 @@ class TenantManagementController extends Controller
                     ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
                     ->count();
                 $revenueThisMonth = \DB::connection('tenant_temp')->table('suminvoices')
-                    ->whereBetween('payment_date', [$startOfMonth, $endOfMonth])
+                    ->whereBetween('payment_date', [$periodFrom, $periodTo])
                     ->where('payment_status', 1)
                     ->when($allowedCustomerIds !== null, fn($q) => $q->whereIn('id_customer', $allowedCustomerIds))
                     ->sum('recieve_payment');
@@ -179,7 +203,14 @@ class TenantManagementController extends Controller
             $rows[] = $row;
         }
 
-        $totals['tax'] = $this->computeTax($totals['revenue_this_month']);
+        // Total pajak = jumlah pajak per tenant (tiap tenant dihitung & dibulatkan
+        // sendiri), supaya tile ringkasan sama persis dengan total tabel rincian.
+        $totals['tax'] = $this->computeTax(0);
+        foreach ($rows as $row) {
+            foreach (['dpp', 'ppn', 'bhp', 'uso', 'total_kewajiban'] as $k) {
+                $totals['tax'][$k] += $row['tax'][$k];
+            }
+        }
 
         return view('tenants.dashboard', [
             'rows' => $rows,
@@ -187,33 +218,19 @@ class TenantManagementController extends Controller
             'isSupervisor' => $isSupervisor,
             'selectedMonth' => $selectedMonth,
             'monthOptions' => $monthOptions,
+            'periodFrom' => $periodFrom,
+            'periodTo' => $periodTo,
+            'isFullMonth' => $isFullMonth,
+            'periodLabel' => $periodLabel,
+            'tenantOptions' => $tenantOptions,
+            'selectedTenant' => $selectedTenant,
         ]);
     }
 
-    /**
-     * Pajak: nilai pembayaran yang diterima ($amount) sudah termasuk PPN.
-     * BHP Telekomunikasi & USO dihitung dari DPP (bukan dari total pembayaran).
-     */
+    // Rumus pajak dipakai bersama dengan menu ISP di tiap tenant.
     private function computeTax(float $amount): array
     {
-        $ppnRate = 0.11;
-        $bhpRate = 0.005;
-        $usoRate = 0.0125;
-        $dpp = round($amount / (1 + $ppnRate));
-        $ppn = round($amount) - $dpp;
-        $bhp = round($dpp * $bhpRate);
-        $uso = round($dpp * $usoRate);
-
-        return [
-            'dpp' => $dpp,
-            'ppn' => $ppn,
-            'bhp' => $bhp,
-            'uso' => $uso,
-            'total_kewajiban' => $ppn + $bhp + $uso,
-            'ppn_rate' => $ppnRate * 100,
-            'bhp_rate' => $bhpRate * 100,
-            'uso_rate' => $usoRate * 100,
-        ];
+        return \App\Services\IspTax::compute($amount);
     }
 
     /**

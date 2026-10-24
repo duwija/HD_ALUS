@@ -55,6 +55,7 @@ use App\Http\Controllers\Admin\TenantManagementController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\GitHubSyncController;
 use App\Http\Controllers\Admin\LicensePlanController;
+use App\Http\Controllers\Admin\PksController;
 use App\Http\Controllers\Admin\AdminMigrateController;
 use App\Http\Controllers\Admin\PppSecretController as AdminPppSecretController;
 use App\Http\Controllers\CustomerAuthController;
@@ -180,6 +181,21 @@ Route::middleware(['admin', 'auth:admin', 'supervisor.scope'])->prefix('admin')-
     Route::post('/tenants/{id}/license', [TenantManagementController::class, 'updateLicense'])->name('admin.tenants.license.update');
 
     // License Plans Management
+    // PKS (Perjanjian Kerja Sama) per tenant — super admin saja.
+    Route::get('/pks', [PksController::class, 'index'])->name('admin.pks.index');
+    Route::get('/pks/create', [PksController::class, 'create'])->name('admin.pks.create');
+    Route::post('/pks', [PksController::class, 'store'])->name('admin.pks.store');
+    Route::get('/pks/file/{type}/{fileId}', [PksController::class, 'download'])->where('type', 'pks|adendum')->name('admin.pks.download');
+    Route::get('/pks/{pks}', [PksController::class, 'show'])->name('admin.pks.show');
+    Route::get('/pks/{pks}/edit', [PksController::class, 'edit'])->name('admin.pks.edit');
+    Route::put('/pks/{pks}', [PksController::class, 'update'])->name('admin.pks.update');
+    Route::delete('/pks/{pks}', [PksController::class, 'destroy'])->name('admin.pks.destroy');
+    Route::post('/pks/{pks}/addenda', [PksController::class, 'storeAddendum'])->name('admin.pks.addenda.store');
+    Route::delete('/pks/{pks}/addenda/{addendumId}', [PksController::class, 'destroyAddendum'])->name('admin.pks.addenda.destroy');
+    Route::post('/pks/{pks}/points', [PksController::class, 'storePoint'])->name('admin.pks.points.store');
+    Route::put('/pks/{pks}/points/{pointId}', [PksController::class, 'updatePoint'])->name('admin.pks.points.update');
+    Route::delete('/pks/{pks}/points/{pointId}', [PksController::class, 'destroyPoint'])->name('admin.pks.points.destroy');
+
     Route::get('/license-plans', [LicensePlanController::class, 'index'])->name('admin.license-plans.index');
     Route::get('/license-plans/create', [LicensePlanController::class, 'create'])->name('admin.license-plans.create');
     Route::post('/license-plans', [LicensePlanController::class, 'store'])->name('admin.license-plans.store');
@@ -828,6 +844,10 @@ Route::get('/jurnal/arus-kas/excel','JurnalController@exportArusKasExcel');
 Route::get('/customer/{id}/jurnal', 'JurnalController@customerJurnal');
 Route::get('/contact/{id}/jurnal', 'JurnalController@contactJurnal');
 Route::get('/laporan/rasio-keuangan', 'RasioKeuanganController@index');
+Route::get('/isp/pajak', 'IspTaxController@index');
+Route::get('/isp/pajak/transaksi', 'IspTaxController@kasTransactions');
+Route::get('/isp/pks', 'IspPksController@index');
+Route::get('/isp/pks/file/{type}/{fileId}', 'IspPksController@download')->where('type', 'pks|adendum');
 
 
 

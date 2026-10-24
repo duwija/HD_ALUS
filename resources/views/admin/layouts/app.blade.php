@@ -122,6 +122,13 @@
                         </li>
                         @unless(auth('admin')->user() && auth('admin')->user()->isSupervisor())
                         <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.pks.*') ? 'active' : '' }}"
+                               href="{{ route('admin.pks.index') }}">
+                                <i class="fas fa-file-signature"></i>
+                                PKS
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.license-plans.*') ? 'active' : '' }}"
                                href="{{ route('admin.license-plans.index') }}">
                                 <i class="fas fa-id-card"></i>

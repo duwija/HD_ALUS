@@ -22,6 +22,9 @@
                         <a href="{{ route('admin.tenants.routers', $tenant->id) }}" class="btn btn-outline-info btn-sm" title="Router">
                             <i class="fas fa-project-diagram"></i> <span class="d-none d-lg-inline">Router</span>
                         </a>
+                        <a href="{{ route('admin.pks.index', ['tenant' => $tenant->id]) }}" class="btn btn-outline-dark btn-sm" title="PKS">
+                            <i class="fas fa-file-signature"></i> <span class="d-none d-lg-inline">PKS</span>
+                        </a>
                         <a href="{{ route('admin.tenants.backups', $tenant->id) }}" class="btn btn-primary btn-sm" title="Backups">
                             <i class="fas fa-folder-open"></i> <span class="d-none d-lg-inline">Backups</span>
                         </a>

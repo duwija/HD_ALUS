@@ -35,15 +35,39 @@
                             Dashboard &mdash; Resume Seluruh Tenant
                         @endif
                     </h3>
-                    <div class="d-flex align-items-center">
+                    <div class="d-flex flex-wrap align-items-center">
+                        {{-- Tiap form membawa filter lainnya, supaya tenant & periode bisa dikombinasikan. --}}
                         <form method="GET" action="{{ route('admin.dashboard') }}" class="mr-2 mb-0">
-                            <select name="month" class="form-control form-control-sm" onchange="this.form.submit()">
+                            <input type="hidden" name="from" value="{{ $periodFrom->format('Y-m-d') }}">
+                            <input type="hidden" name="to" value="{{ $periodTo->format('Y-m-d') }}">
+                            <select name="tenant" class="form-control form-control-sm" onchange="this.form.submit()" title="Filter tenant">
+                                <option value="">Semua tenant</option>
+                                @foreach ($tenantOptions as $t)
+                                    <option value="{{ $t->id }}" {{ $selectedTenant && $selectedTenant->id === $t->id ? 'selected' : '' }}>
+                                        {{ $t->app_name }}{{ $t->is_active ? '' : ' (inactive)' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </form>
+                        <form method="GET" action="{{ route('admin.dashboard') }}" class="mr-2 mb-0">
+                            @if ($selectedTenant) <input type="hidden" name="tenant" value="{{ $selectedTenant->id }}"> @endif
+                            <select name="month" class="form-control form-control-sm" onchange="this.form.submit()" title="Pilih satu bulan penuh">
+                                @unless ($isFullMonth)
+                                    <option value="" selected>Periode kustom</option>
+                                @endunless
                                 @foreach ($monthOptions as $m)
-                                    <option value="{{ $m->format('Y-m') }}" {{ $m->format('Y-m') === $selectedMonth->format('Y-m') ? 'selected' : '' }}>
+                                    <option value="{{ $m->format('Y-m') }}" {{ $isFullMonth && $m->format('Y-m') === $selectedMonth->format('Y-m') ? 'selected' : '' }}>
                                         {{ $m->translatedFormat('F Y') }}
                                     </option>
                                 @endforeach
                             </select>
+                        </form>
+                        <form method="GET" action="{{ route('admin.dashboard') }}" class="form-inline mr-2 mb-0" title="Periode tanggal bebas">
+                            @if ($selectedTenant) <input type="hidden" name="tenant" value="{{ $selectedTenant->id }}"> @endif
+                            <input type="date" name="from" class="form-control form-control-sm" value="{{ $periodFrom->format('Y-m-d') }}" required>
+                            <span class="mx-1 text-muted">s/d</span>
+                            <input type="date" name="to" class="form-control form-control-sm" value="{{ $periodTo->format('Y-m-d') }}" required>
+                            <button type="submit" class="btn btn-primary btn-sm ml-1"><i class="fas fa-filter"></i></button>
                         </form>
                         <a href="{{ route('admin.tenants.index') }}" class="btn btn-secondary btn-sm">
                             <i class="fas fa-building"></i> Tenant Management
@@ -103,23 +127,23 @@
                             <div class="card text-white bg-dark h-100">
                                 <div class="card-body text-center">
                                     <div class="h6 mb-0">Rp {{ number_format($totals['revenue_this_month'], 0, ',', '.') }}</div>
-                                    <small>Pendapatan {{ $selectedMonth->translatedFormat('F Y') }}</small>
+                                    <small>Pendapatan {{ $periodLabel }}</small>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="alert alert-secondary small mb-4">
-                        <i class="fas fa-users"></i> Customer Aktif (semua tenant): <strong>{{ number_format($totals['customers_active']) }}</strong>
+                        <i class="fas fa-users"></i> Customer Aktif ({{ $selectedTenant ? $selectedTenant->app_name : 'semua tenant' }}): <strong>{{ number_format($totals['customers_active']) }}</strong>
                         &nbsp;|&nbsp;
-                        <i class="fas fa-user-clock"></i> Customer Potential (semua tenant): <strong>{{ number_format($totals['customers_potential']) }}</strong>
+                        <i class="fas fa-user-clock"></i> Customer Potential ({{ $selectedTenant ? $selectedTenant->app_name : 'semua tenant' }}): <strong>{{ number_format($totals['customers_potential']) }}</strong>
                     </div>
 
                     <!-- Tax summary -->
                     <div class="card mb-4">
                         <div class="card-body tax-panel">
                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h5 class="mb-0"><i class="fas fa-file-invoice-dollar text-danger"></i> Ringkasan Pajak {{ $selectedMonth->translatedFormat('F Y') }} (Semua Tenant)</h5>
+                                <h5 class="mb-0"><i class="fas fa-file-invoice-dollar text-danger"></i> Ringkasan Pajak {{ $periodLabel }} ({{ $selectedTenant ? $selectedTenant->app_name : 'Semua Tenant' }})</h5>
                                 <small class="text-muted">Pendapatan sudah termasuk PPN &middot; BHP &amp; USO dihitung dari DPP</small>
                             </div>
                             <div class="row">
@@ -159,10 +183,86 @@
                             <div class="tax-total">
                                 <div>
                                     <div class="tax-total-label"><i class="fas fa-landmark"></i> Total Kewajiban Pajak</div>
-                                    <div class="tax-total-sub">PPN + BHP Telekomunikasi + USO &middot; semua tenant</div>
+                                    <div class="tax-total-sub">PPN + BHP Telekomunikasi + USO &middot; {{ $selectedTenant ? $selectedTenant->app_name : 'semua tenant' }}</div>
                                 </div>
                                 <div class="tax-total-value">Rp {{ number_format($totals['tax']['total_kewajiban'], 0, ',', '.') }}</div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Per-tenant tax breakdown -->
+                    @php $rp = fn($v) => 'Rp ' . number_format($v, 0, ',', '.'); @endphp
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-receipt text-danger"></i> Rincian Perpajakan per Tenant &middot; {{ $periodLabel }}</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-striped table-hover table-sm mb-0">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th width="40">#</th>
+                                            <th>Tenant</th>
+                                            <th class="text-right">Pendapatan</th>
+                                            <th class="text-right">DPP</th>
+                                            <th class="text-right">PPN {{ number_format($totals['tax']['ppn_rate'], 0, ',', '.') }}%</th>
+                                            <th class="text-right">BHP Tel {{ number_format($totals['tax']['bhp_rate'], 1, ',', '.') }}%</th>
+                                            <th class="text-right">USO {{ number_format($totals['tax']['uso_rate'], 2, ',', '.') }}%</th>
+                                            <th class="text-right">Total Kewajiban</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse ($rows as $i => $row)
+                                        <tr>
+                                            <td>{{ $i + 1 }}</td>
+                                            <td>
+                                                <strong>{{ $row['tenant']->app_name }}</strong>
+                                                @unless ($row['tenant']->is_active)
+                                                    <span class="badge badge-secondary">Inactive</span>
+                                                @endunless
+                                            </td>
+                                            @if ($row['error'])
+                                                <td colspan="6" class="text-danger text-center">
+                                                    <i class="fas fa-exclamation-triangle"></i> {{ $row['error'] }}
+                                                </td>
+                                            @elseif ($row['merchant_scope_empty'])
+                                                <td colspan="6" class="text-warning text-center">
+                                                    <i class="fas fa-exclamation-triangle"></i> Belum ada merchant yang di-set untuk tenant ini.
+                                                </td>
+                                            @else
+                                                <td class="text-right">{{ $rp($row['revenue_this_month']) }}</td>
+                                                <td class="text-right">{{ $rp($row['tax']['dpp']) }}</td>
+                                                <td class="text-right">{{ $rp($row['tax']['ppn']) }}</td>
+                                                <td class="text-right">{{ $rp($row['tax']['bhp']) }}</td>
+                                                <td class="text-right">{{ $rp($row['tax']['uso']) }}</td>
+                                                <td class="text-right font-weight-bold text-danger">{{ $rp($row['tax']['total_kewajiban']) }}</td>
+                                            @endif
+                                        </tr>
+                                        @empty
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted py-3">Belum ada tenant.</td>
+                                        </tr>
+                                        @endforelse
+                                    </tbody>
+                                    @if (count($rows))
+                                    <tfoot>
+                                        <tr class="font-weight-bold bg-light">
+                                            <td colspan="2" class="text-right">{{ $selectedTenant ? 'Total' : 'Total semua tenant' }}</td>
+                                            <td class="text-right">{{ $rp($totals['revenue_this_month']) }}</td>
+                                            <td class="text-right">{{ $rp($totals['tax']['dpp']) }}</td>
+                                            <td class="text-right">{{ $rp($totals['tax']['ppn']) }}</td>
+                                            <td class="text-right">{{ $rp($totals['tax']['bhp']) }}</td>
+                                            <td class="text-right">{{ $rp($totals['tax']['uso']) }}</td>
+                                            <td class="text-right text-danger">{{ $rp($totals['tax']['total_kewajiban']) }}</td>
+                                        </tr>
+                                    </tfoot>
+                                    @endif
+                                </table>
+                            </div>
+                        </div>
+                        <div class="card-footer small text-muted">
+                            DPP = Pendapatan &divide; 1,11 &middot; PPN = Pendapatan &minus; DPP &middot; BHP Telekomunikasi &amp; USO dihitung dari DPP.
+                            Pendapatan = pembayaran invoice yang diterima pada bulan terpilih.
                         </div>
                     </div>
 
@@ -178,8 +278,8 @@
                                     <th class="text-right">Total Customer</th>
                                     <th class="text-right">Customer Aktif</th>
                                     <th class="text-right">Invoice Belum Lunas</th>
-                                    <th class="text-right">Pendapatan {{ $selectedMonth->translatedFormat('M Y') }}</th>
-                                    <th class="text-right">Pajak {{ $selectedMonth->translatedFormat('M Y') }}</th>
+                                    <th class="text-right">Pendapatan {{ $periodLabel }}</th>
+                                    <th class="text-right">Pajak {{ $periodLabel }}</th>
                                     <th class="text-center" width="140">Aksi</th>
                                 </tr>
                             </thead>

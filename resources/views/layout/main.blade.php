@@ -1040,6 +1040,7 @@
           @include('layout/payment')
           @include('layout/marketing')
           @include('layout/accounting')
+          @include('layout/isp')
           @include('layout/transaction')
           <hr>
           @include('layout/hrd')
@@ -1080,6 +1081,7 @@
           @include('layout/payment')
           @include('layout/marketing')
           @include('layout/accounting')
+          @include('layout/isp')
           @include('layout/transaction')
           @break
 
