@@ -154,6 +154,24 @@ class XenditCallbackController extends Controller
 
 public function update_tripay(Request $request)
 {
+    // Verifikasi callback resmi Tripay: X-Callback-Signature = HMAC-SHA256(body JSON mentah, private key),
+    // dengan private key yang sama dipakai saat membuat transaksi. Tanpa ini siapa pun bisa POST
+    // status PAID untuk invoice mana saja.
+    $privateKey = (string) tenant_config('tripay_privatekey', env('TRIPAY_PRIVATEKEY'));
+    $signature  = (string) $request->header('X-Callback-Signature', '');
+    $expected   = $privateKey !== '' ? hash_hmac('sha256', $request->getContent(), $privateKey) : '';
+    if ($expected === '' || $signature === '' || !hash_equals($expected, $signature)) {
+        \Log::channel('payment')->warning('[TRIPAY] Callback DITOLAK: signature tidak valid dari IP ' . $request->ip(), [
+            'merchant_ref' => $request->merchant_ref,
+            'status'       => $request->status,
+            'has_key'      => $privateKey !== '',
+        ]);
+        return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
+    }
+    if ($request->header('X-Callback-Event') !== 'payment_status') {
+        return response()->json(['success' => false, 'message' => 'Unrecognized callback event'], 400);
+    }
+
     $date = now()->toDateTimeString();
     $number = $request->merchant_ref;
     $updatedBy ='TRIPAY' ;
@@ -525,13 +543,42 @@ return response()->json(['success' => true]);
 
 
 
+    /** Akun Winpay (winpay/winpay2) tempat callback terakhir terverifikasi. */
+    private $verifiedWinpayProvider = null;
+
+    /**
+     * Callback Winpay Checkout Page tidak bertanda tangan, jadi dikonfirmasi ulang ke API Winpay
+     * (App\Services\WinpayCallbackVerifier). Mengembalikan response penolakan, atau null bila valid.
+     */
+    private function rejectUnverifiedWinpay(Request $request, ?string $ref, array $providers, $amount)
+    {
+        $result = (new \App\Services\WinpayCallbackVerifier)->verify((string) $ref, $providers, $amount);
+        if ($result['ok']) {
+            $this->verifiedWinpayProvider = $result['provider'];
+            \Log::channel('payment')->info("[WINPAY] Callback terverifikasi ref={$ref} ({$result['provider']}) dari IP {$request->ip()}");
+            return null;
+        }
+
+        if ($result['retry']) {
+            // Winpay tidak bisa dihubungi: jangan balas ACCEPTED supaya Winpay mengirim ulang callback.
+            \Log::channel('payment')->error("[WINPAY] Callback ref={$ref} BELUM DIPROSES, verifikasi tertunda: {$result['reason']} — cek manual bila tidak ada callback ulang");
+            return response('RETRY', 503);
+        }
+
+        \Log::channel('payment')->warning("[WINPAY] Callback DITOLAK ref={$ref} dari IP {$request->ip()}: {$result['reason']}", [
+            'payload' => $request->all(),
+        ]);
+        return response()->json(['success' => false, 'message' => 'Callback tidak terverifikasi'], 403);
+    }
+
     public function update_winpay(Request $request)
     {
         $payload = $request->all();
-        $amount_received=$payload['amount'];
-        $nett_amount=$payload['nett_amount'];
-        $channel=$payload['channel'];
-        $nett=$nett_amount-$payload['fee'];
+        // Default aman: body tak lengkap (callback palsu) harus sampai ke verifikasi & ditolak 403, bukan error 500.
+        $amount_received = $payload['amount'] ?? 0;
+        $nett_amount = $payload['nett_amount'] ?? 0;
+        $channel = $payload['channel'] ?? '';
+        $nett = $nett_amount - ($payload['fee'] ?? 0);
         $date = now()->toDateTimeString();
         $number = $payload['invoice']['ref'] ?? null;
         $updatedBy ='WINPAY' ;
@@ -550,11 +597,17 @@ return response()->json(['success' => true]);
         //     return response()->json(['success' => false, 'message' => 'Payment not completed'], 400);
         // }
 
-        $cekstatus = \App\Suminvoice::where('number', $number)->first();
+        $cekstatus = $number ? \App\Suminvoice::where('number', $number)->first() : null;
         if (!$cekstatus) {
             // Cek apakah ini bundle payment
-            $bundle = \DB::table('payment_bundles')->where('bundle_ref', $number)->first();
+            $bundle = $number ? \DB::table('payment_bundles')->where('bundle_ref', $number)->first() : null;
             if ($bundle) {
+                if ((int) $bundle->status !== 1) {
+                    $providers = $bundle->gateway === 'winpay2' ? ['winpay2', 'winpay'] : ['winpay', 'winpay2'];
+                    if ($rejected = $this->rejectUnverifiedWinpay($request, $number, $providers, $payload['amount'] ?? null)) {
+                        return $rejected;
+                    }
+                }
                 $noteStr = ($payload['channel'] ?? '') . ' | ' . ($payload['amount'] ?? '');
                 return $this->processBundleCallback($bundle, (float)($payload['amount'] ?? 0), 'WINPAY', $noteStr);
             }
@@ -566,6 +619,13 @@ return response()->json(['success' => true]);
            \Log::channel('payment')->info("[ONLINE PAYMENT ]  INV no: ".$number." | Status Invoice sudah dibayar, proses tidak dijalankan ulang. ");
            return("ACCEPTED");
        }
+
+        // VA tunggal: akun tempat VA dibuat tercatat di payment_gateway (sebelum diproses).
+        $providers = $cekstatus->payment_gateway === 'winpay2' ? ['winpay2', 'winpay'] : ['winpay', 'winpay2'];
+        if ($rejected = $this->rejectUnverifiedWinpay($request, $number, $providers, $payload['amount'] ?? null)) {
+            return $rejected;
+        }
+        $winpayProvider = $this->verifiedWinpayProvider ?? 'winpay';
 
        if ($cekstatus->payment_status == 0) {
 
@@ -592,7 +652,7 @@ return response()->json(['success' => true]);
                 'updated_by'      => 'WINPAY',
                 'payment_status'  => 1,
                 'payment_date'    => now()->toDateTimeString(),
-                'payment_gateway' => 'winpay',
+                'payment_gateway' => $winpayProvider,
             ]);
 
 

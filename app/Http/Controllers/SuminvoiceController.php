@@ -656,10 +656,11 @@ public function winpay()
             $paymentId = (string) ($suminvoice->payment_id ?? '');
             $gateway = (string) ($suminvoice->payment_gateway ?? '');
 
-            // Jika sebelumnya pakai Winpay, coba hapus transaksi remote agar tidak nyangkut.
-            if ($gateway === 'winpay' || str_starts_with($paymentId, 'winpay:')) {
+            // Jika sebelumnya pakai Winpay, coba hapus transaksi remote agar tidak nyangkut
+            // (di akun yang sama dengan saat VA dibuat: winpay / winpay2).
+            if (in_array($gateway, ['winpay', 'winpay2'], true) || str_starts_with($paymentId, 'winpay:')) {
                 try {
-                    $this->deleteWinpayVA($suminvoice->number);
+                    $this->deleteWinpayVA($suminvoice->number, $gateway === 'winpay2' ? 'winpay2' : 'winpay');
                 } catch (\Throwable $winpayEx) {
                     \Log::channel('payment')->warning('Payment reset: gagal delete VA Winpay', [
                         'invoice_number' => $suminvoice->number,
@@ -732,6 +733,56 @@ public function winpay()
             \Log::error('Bundle Cancel Error: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Gagal membatalkan bundle: ' . $e->getMessage());
         }
+    }
+
+    // Batas panjang merchant ref bundle: ref yang sama dipakai sebagai merchantOrderId Duitku (maks. 50).
+    const BUNDLE_REF_MAX = 50;
+
+    /**
+     * Merchant ref bundle: MULTI-{customer_id}-{number1}-{number2}... (nomor invoice diurutkan).
+     * Ref yang pernah dipakai diberi nomor percobaan -2, -3, ... (gateway menolak ref ganda,
+     * dan invoice yang sama sering dibundel ulang). Jika lebih dari BUNDLE_REF_MAX karakter,
+     * kembali ke format MULTI-{customer_id}-{8 hex acak}; daftar invoice tetap ada di payment_bundle_items.
+     */
+    private function makeBundleRef($customer, $invoices): string
+    {
+        $base = 'MULTI-' . $customer->customer_id . '-' . $invoices->pluck('number')->sort()->implode('-');
+
+        $used = \DB::table('payment_bundles')
+            ->where(fn($q) => $q->where('bundle_ref', $base)->orWhere('bundle_ref', 'like', $base . '-%'))
+            ->pluck('bundle_ref');
+
+        $ref = $base;
+        for ($n = 2; $used->contains($ref); $n++) {
+            $ref = $base . '-' . $n;
+        }
+
+        return strlen($ref) <= self::BUNDLE_REF_MAX
+            ? $ref
+            : 'MULTI-' . $customer->customer_id . '-' . substr(md5(uniqid('', true)), 0, 8);
+    }
+
+    private function storeBundle(string $bundleRef, $gateway, $customer, $totalAmount, $invoices, $tripayMethod): void
+    {
+        \DB::transaction(function () use ($bundleRef, $gateway, $customer, $totalAmount, $invoices, $tripayMethod) {
+            \DB::table('payment_bundles')->insert([
+                'bundle_ref'      => $bundleRef,
+                'gateway'         => $gateway,
+                'id_customer'     => $customer->id,
+                'total_amount'    => $totalAmount,
+                'paid_amount'     => 0,
+                'status'          => 0,
+                'tripay_method'   => $tripayMethod,
+                'created_at'      => now(),
+                'updated_at'      => now(),
+            ]);
+            foreach ($invoices as $inv) {
+                \DB::table('payment_bundle_items')->insert([
+                    'bundle_ref'    => $bundleRef,
+                    'suminvoice_id' => $inv->id,
+                ]);
+            }
+        });
     }
 
     // ============================================================
@@ -822,29 +873,19 @@ public function winpay()
             $fee         = (int) $gw->calculateFee($totalAmount);
             $chargeAmount = $totalAmount + $fee;
 
-            // Bundle ref: MULTI-{customer_id}-{random}
-            $bundleRef = 'MULTI-' . $customer->customer_id . '-' . substr(md5(uniqid('', true)), 0, 8);
-
-            // Simpan bundle ke DB (atomic)
-            \DB::transaction(function () use ($bundleRef, $gateway, $customer, $totalAmount, $invoices, $tripayMethod) {
-                \DB::table('payment_bundles')->insert([
-                    'bundle_ref'      => $bundleRef,
-                    'gateway'         => $gateway,
-                    'id_customer'     => $customer->id,
-                    'total_amount'    => $totalAmount,
-                    'paid_amount'     => 0,
-                    'status'          => 0,
-                    'tripay_method'   => $tripayMethod,
-                    'created_at'      => now(),
-                    'updated_at'      => now(),
-                ]);
-                foreach ($invoices as $inv) {
-                    \DB::table('payment_bundle_items')->insert([
-                        'bundle_ref'    => $bundleRef,
-                        'suminvoice_id' => $inv->id,
-                    ]);
+            // Simpan bundle ke DB (atomic). bundle_ref unik: kalau request lain sempat memakai
+            // ref yang sama (race), buat ulang ref dengan nomor percobaan berikutnya.
+            for ($try = 1; ; $try++) {
+                $bundleRef = $this->makeBundleRef($customer, $invoices);
+                try {
+                    $this->storeBundle($bundleRef, $gateway, $customer, $totalAmount, $invoices, $tripayMethod);
+                    break;
+                } catch (\Illuminate\Database\QueryException $e) {
+                    if ($try >= 3 || ($e->errorInfo[1] ?? null) !== 1062) { // 1062 = duplicate entry
+                        throw $e;
+                    }
                 }
-            });
+            }
 
             $returnUrl = !empty($returnPath)
                 ? url('/invoice/cst/' . $returnPath)
@@ -1227,10 +1268,15 @@ public function createWinpayVA(Request $request)
     }
 }
 
-public function deleteWinpayVA($merchantRef)
+// Hapus VA Winpay berdasarkan merchant ref, di akun yang dipakai saat VA dibuat
+// (winpay / winpay2). Tanpa $provider, akun diambil dari payment_gateway invoice bernomor $merchantRef.
+public function deleteWinpayVA($merchantRef, ?string $provider = null)
 {
     try {
-        $winpayConfig = $this->getWinpayConfig('winpay');
+        if (!in_array($provider, ['winpay', 'winpay2'], true)) {
+            $provider = \App\Suminvoice::where('number', $merchantRef)->value('payment_gateway') === 'winpay2' ? 'winpay2' : 'winpay';
+        }
+        $winpayConfig = $this->getWinpayConfig($provider);
         $key = $winpayConfig['api_key'];
         $secretKey = $winpayConfig['secret_key'];
 
@@ -1268,7 +1314,7 @@ public function deleteWinpayVA($merchantRef)
 
         curl_close($ch);
 
-        Log::info('Winpay Delete Response: ' . $response);
+        Log::info('Winpay Delete Response (' . $provider . ', ref ' . $merchantRef . '): ' . $response);
         $responseData = json_decode($response, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
