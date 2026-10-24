@@ -507,10 +507,12 @@ class AttendanceAdminController extends Controller
     public function employeeNameTag(Request $request, User $user)
     {
         $rescode = (string) (tenant_rescode() ?: 'EMP');
-        $logo = public_path('tenants/' . $rescode . '/img/logoinv.png');
-        if (!is_file($logo)) {
-            $logo = public_path('dashboard/dist/img/logoinv.png');
-        }
+        // Logo: logo halaman login tenant (tenant_img('trikamedia.png') di auth/login), lalu fallback-nya.
+        $logo = collect([
+            public_path('tenants/' . $rescode . '/img/trikamedia.png'),
+            public_path('img/trikamedia.png'),
+            public_path('dashboard/dist/img/logoinv.png'),
+        ])->first(fn ($path) => is_file($path));
 
         // ID karyawan: NIK/employee_id kalau diisi, selain itu kode tenant + ID user
         $code = trim((string) $user->employee_id) !== ''
@@ -519,10 +521,13 @@ class AttendanceAdminController extends Controller
 
         $png = (new \App\Services\EmployeeNameTagService)->render(
             $user,
-            (string) tenant_config('company_name', config('app.name')),
-            is_file($logo) ? $logo : null,
+            // Nama tenant, sama dengan kop surat tugas (company_name berisi brand platform).
+            (string) (tenant_name() ?: config('app.name')),
+            $logo,
             $code,
-            (string) tenant_config('domain_name', $request->getHost())
+            (string) tenant_config('domain_name', $request->getHost()),
+            // Nama perusahaan (badan usaha) di bawah nama tenant: config/env COMPANY.
+            (string) tenant_config('COMPANY', env('COMPANY'))
         );
 
         $file = 'name-tag-' . (preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $user->name) ?: $user->id) . '.png';
