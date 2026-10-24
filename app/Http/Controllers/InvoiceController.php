@@ -718,9 +718,8 @@ public function show($id)
 
     $encryptedurl = Crypt::encryptString($id);
     $paymentUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . '/invoice/cst/' . $encryptedurl;
-    $qrcodePayment = base64_encode(
-        QrCode::format('png')->size(220)->margin(1)->generate($paymentUrl)
-    );
+    // SVG agar QR tetap tajam di layar (kartu PNG untuk dibagikan dibuat terpisah di paymentQrCard()).
+    $qrcodePayment = (string) QrCode::format('svg')->size(200)->margin(0)->errorCorrection('M')->generate($paymentUrl);
 
     $customer = \App\Customer::where('customers.id', $id)
 
@@ -739,6 +738,55 @@ public function show($id)
         'paymentUrl' => $paymentUrl,
         'qrcodePayment' => $qrcodePayment,
     ]);
+}
+
+/**
+ * Download / print kartu QR "Link Pembayaran <tenant>" (gambar yang sama dengan yang dikirim via WA).
+ */
+public function paymentQrCard(Request $request, $id)
+{
+    $customer = \App\Customer::withTrashed()->findOrFail($id);
+    $paymentUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . '/invoice/cst/' . Crypt::encryptString($customer->id);
+
+    $safeId = preg_replace('/[^A-Za-z0-9_-]/', '_', (string) $customer->customer_id) ?: 'customer';
+
+    return response($this->renderPaymentQrCard($customer, $paymentUrl), 200, [
+        'Content-Type'        => 'image/png',
+        // ?inline=1 dipakai tombol Print (gambar ditampilkan, bukan diunduh)
+        'Content-Disposition' => ($request->boolean('inline') ? 'inline' : 'attachment') . '; filename="link-pembayaran-' . $safeId . '.png"',
+        'Cache-Control'       => 'no-store',
+    ]);
+}
+
+private function paymentTenantName(): string
+{
+    return (string) (tenant('app_name') ?: config('app.name', ''));
+}
+
+/**
+ * QR di kartu memakai link pendek agar tidak terlalu rapat dan mudah di-scan
+ * (tujuannya tetap halaman tagihan yang sama); kalau gagal dibuat, pakai link asli.
+ */
+private function renderPaymentQrCard($customer, string $paymentUrl): string
+{
+    $qrUrl = $paymentUrl;
+    try {
+        $qrUrl = \App\ShortUrl::shorten($paymentUrl);
+    } catch (\Throwable $e) {
+        \Log::warning('[PaymentQrCard] short URL gagal, pakai URL asli: ' . $e->getMessage());
+    }
+
+    $domain = (string) tenant_config('domain_name', env('DOMAIN_NAME', ''));
+    $signature = (string) (tenant('signature') ?: '');
+    $footer = trim($domain . ($signature !== '' ? ' · ' . $signature : ''), ' ·');
+
+    return (new \App\Services\PaymentQrCardService)->render(
+        $qrUrl,
+        $this->paymentTenantName(),
+        (string) $customer->customer_id,
+        (string) $customer->name,
+        $footer
+    );
 }
 
 public function sendPaymentLinkWa(Request $request, $id)
@@ -764,13 +812,13 @@ public function sendPaymentLinkWa(Request $request, $id)
         $paymentUrl = 'https://' . tenant_config('domain_name', env('DOMAIN_NAME')) . '/invoice/cst/' . $encrypted;
         $waPaymentUrl = \App\Services\WaService::maybeShortenUrlForGateway($paymentUrl);
 
-        $caption = "Link pembayaran\n"
+        $caption = "*Link Pembayaran " . $this->paymentTenantName() . "*\n"
             . "Customer ID: {$customer->customer_id}\n"
             . "Nama: {$customer->name}\n"
             . "Silahkan scan QRcode ini untuk melihat daftar tagihan anda\n"
             . $waPaymentUrl;
 
-        $qrBinary = QrCode::format('png')->size(800)->margin(1)->generate($waPaymentUrl);
+        $qrBinary = $this->renderPaymentQrCard($customer, $paymentUrl);
         $tmpDir = storage_path('app/tmp');
         if (!File::exists($tmpDir)) {
             File::makeDirectory($tmpDir, 0755, true);

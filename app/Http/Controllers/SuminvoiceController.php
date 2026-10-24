@@ -727,6 +727,11 @@ public function winpay()
 
             \Log::channel('payment')->info('Bundle cancelled (status=2, kept for callback reconciliation): ' . $bundleRef);
 
+            // Hapus juga checkout bundle di Winpay agar link/VA lama tidak bisa dibayar lagi.
+            if (in_array($bundle->gateway, ['winpay', 'winpay2'], true)) {
+                \App\Services\WinpayVaCleaner::scheduleForBundle($bundleRef, $bundle->gateway);
+            }
+
             return redirect()->back()->with('success', 'Transaksi bundle berhasil dibatalkan. Silakan pilih metode pembayaran baru.');
 
         } catch (\Exception $e) {
@@ -3024,7 +3029,7 @@ else
 
         $last_active_invoice = \App\Suminvoice::where('payment_status', '=', '0' )
         ->where ('id_customer', '=', $invoice_code->id_customer )
-        ->orderBy('date', 'asc')->first();
+        ->orderBy('date', 'asc')->orderBy('id', 'asc')->first();
         if ($id==$last_active_invoice->tempcode)
         {
             $current_inv_status =0;
@@ -3095,7 +3100,7 @@ else
 
         $last_active_invoice = \App\Suminvoice::where('payment_status', '=', '0' )
         ->where ('id_customer', '=', $invoice_code->id_customer )
-        ->orderBy('date', 'asc')->first();
+        ->orderBy('date', 'asc')->orderBy('id', 'asc')->first();
         if ($id==$last_active_invoice->tempcode)
         {
             $current_inv_status =0;
@@ -3175,7 +3180,7 @@ else
 
             $last_active_invoice = \App\Suminvoice::where('payment_status', '=', '0' )
             ->where ('id_customer', '=', $invoice_code->id_customer )
-            ->orderBy('date', 'asc')->first();
+            ->orderBy('date', 'asc')->orderBy('id', 'asc')->first();
             if ($id==$last_active_invoice->tempcode)
             {
                 $current_inv_status =0;
@@ -3330,7 +3335,7 @@ else
         if ($active_invoice > 1) {
             $last_active_invoice = \App\Suminvoice::where('payment_status', '=', '0')
                 ->where('id_customer', '=', $invoice_code->id_customer)
-                ->orderBy('date', 'asc')->first();
+                ->orderBy('date', 'asc')->orderBy('id', 'asc')->first();
             $current_inv_status = ($id == $last_active_invoice->tempcode) ? 0 : 1;
         }
 
@@ -3361,6 +3366,9 @@ else
             'qrcode' => $qrcode,
             'logoBase64' => $logoBase64,
         ])->setPaper('a4', 'portrait');
+        // Hanya glyph terpakai yang disisipkan (file puluhan KB, bukan ~900 KB).
+        // Ubah opsi yang ada — setOptions() akan membuang pengaturan config/dompdf.php (chroot, dll).
+        $pdf->getDomPDF()->getOptions()->setIsFontSubsettingEnabled(true);
 
         return $pdf->download('Invoice_' . $suminvoice_number->number . '.pdf');
     }
@@ -3454,6 +3462,13 @@ public function edit($id)
     if ($invoice->payment_status == 1) {
             DB::rollBack(); // Jangan lupa rollback kalau invoice sudah paid
             return redirect('/suminvoice/' . $invoice->tempcode)->with('warning', 'Invoice sudah dibayar sebelumnya.');
+        }
+
+        // Pembayaran wajib berurutan dari invoice yang terbit lebih awal (cek di server, bukan hanya di tampilan)
+        if ((int) $invoice->payment_status === 0 && ($older = $invoice->olderUnpaid())) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Masih ada tagihan lebih awal yang belum dibayar: #' . $older->number
+                . ' (' . $older->date . '). Bayar invoice tersebut terlebih dahulu.');
         }
 
 

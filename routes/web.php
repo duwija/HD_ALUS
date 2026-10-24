@@ -454,6 +454,7 @@ Route::post('/ticket/table_vendorgroupticket_list','VendorController@table_vendo
 Route::get('/ticket/{id}/create','TicketController@create');
 Route::get('/ticket/{id}/edit','TicketController@edit');
 
+Route::get('/ticket/{id}/surat-tugas','TicketController@suratTugas')->name('ticket.surat-tugas');
 Route::get('/ticket/{id}','TicketController@show');
 
 Route::get('/ticket/view/{id}','TicketController@view');
@@ -527,6 +528,7 @@ Route::post('/customer/table_invoice','CustomerController@table_invoice');
 Route::get('/invoice','InvoiceController@index');
 Route::get('/invoice/{id}','InvoiceController@show');
 Route::post('/invoice/{id}/send-wa-gateway','InvoiceController@sendPaymentLinkWa');
+Route::get('/invoice/{id}/payment-qr-card','InvoiceController@paymentQrCard');
 Route::get('/invoice/{id}/edit','InvoiceController@edit');
 Route::get('/invoice/{id}/create','InvoiceController@create');
 Route::post('/invoice','InvoiceController@store');
@@ -618,6 +620,7 @@ Route::get ('/attendance/daily',                          'AttendanceAdminContro
 // Karyawan (supervisor, employee_id)
 Route::get ('/attendance/employees',                      'AttendanceAdminController@employees')->name('attendance.employees');
 Route::patch('/attendance/employees/{user}',              'AttendanceAdminController@employeeUpdate');
+Route::get ('/attendance/employees/{user}/name-tag',      'AttendanceAdminController@employeeNameTag')->name('attendance.employees.name-tag');
 
 // Pengajuan Izin/Cuti/Sakit & Lembur
 Route::get ('/leave',                'LeaveOvertimeAdminController@leaveIndex')->name('leave.index');

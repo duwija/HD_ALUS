@@ -1,313 +1,153 @@
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Invoice</title>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <style>
-        @media print {
-            @page {
-                margin: 5; /* Menghilangkan margin halaman cetak */
-            }
-            
-            body {
-                margin: 1;
-                padding: 1;
-            }
+@php
+  // Perhitungan sama dengan payment/print: biaya admin sekali per invoice, PPh dijumlahkan dari semua item.
+  $taxRate = $suminvoice_number->tax ? $suminvoice_number->tax / 100 : 0;
+  $pphRate = $suminvoice_number->pph ? $suminvoice_number->pph / 100 : 0;
+  $adminFee = (float) ($admin_fee ?? 0);
 
-            header, footer, .no-print {
-                display: none !important;
-            }
-        }
-        body{
-            font-family:'Arial';
-            color:#000;
-            
-            
-            margin:1;
+  $rows = [];
+  $itemsTotal = 0;
+  $pphTotal = 0;
+  foreach ($invoice as $item) {
+      $base = $item->qty * $item->amount;
+      $tax = $base * $taxRate;
+      $pphTotal += $base * $pphRate;
+      $itemsTotal += $base + $tax;
 
-        }
-        .container{
-         color:#000;
-         width:180px;
-         font-size: 5px;
-         background-color:#fff;
-     }
-     table{
-       /* border:1px solid #8f8d8d;*/
-       border-collapse:collapse;
-       /* margin:0 auto;*/
-       width:95%;
-   }
-   td, tr, th{
-      font-size: 11px;
+      $description = $item->description;
+      if ($item->monthly_fee == 1) {
+          $month = (int) substr($item->periode, -6, 2);
+          $year = substr($item->periode, -4, 4);
+          $description .= ' - ' . date('F', mktime(0, 0, 0, max(1, $month), 10)) . ' ' . $year;
+      }
+
+      $rows[] = [
+          'description' => $description,
+          'qty' => $item->qty,
+          'price' => $item->amount + ($item->amount * $taxRate),
+          'total' => $base + $tax,
+      ];
   }
-</style>
-{{-- <style>
-    body{
-        font-family:"Arial Black";
-        color:#8f8d8d;
-        text-align:left;
-        font-size:10px;
-        margin:2;
+  $grandTotal = $itemsTotal - $pphTotal + $adminFee;
+
+  $status = (int) $suminvoice_number->payment_status;
+  $statusLabel = [1 => ['LUNAS', 'Sudah Terbayar'], 2 => ['DIBATALKAN', 'Invoice Dibatalkan']][$status] ?? ['BELUM TERBAYAR', 'Belum Terbayar'];
+
+  $address = tenant_config('company_address1', env('COMPANY_ADDRESS1'));
+  $n = fn ($v) => number_format((float) $v, 0, ',', '.');
+@endphp
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Struk #{{ $suminvoice_number->number }}</title>
+  <style>
+    /* Struk printer thermal 58 mm (area cetak ±48 mm) */
+    @page { size: 58mm auto; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eee; color: #000; font: 11px/1.35 "Courier New", Courier, monospace; }
+    .receipt { width: 58mm; margin: 10px auto; padding: 3mm 4mm 5mm; background: #fff; }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .bold { font-weight: 700; }
+    .company { font-size: 14px; font-weight: 700; text-transform: uppercase; }
+    .small { font-size: 9.5px; }
+    .sep { border-top: 1px dashed #000; margin: 5px 0; }
+    .sep.double { border-top: 3px double #000; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 1px 0; vertical-align: top; }
+    .kv td:first-child { white-space: nowrap; padding-right: 4px; }
+    .item-name { padding-top: 3px; }
+    .status { margin: 4px 0; padding: 3px 0; border: 1px solid #000; font-weight: 700; font-size: 13px; letter-spacing: 1px; }
+    .total td { font-size: 13px; font-weight: 700; padding-top: 3px; }
+    .qr svg { width: 26mm; height: 26mm; }
+    .no-print { text-align: center; margin: 10px; }
+    .no-print button { font: 13px sans-serif; padding: 6px 14px; cursor: pointer; }
+    @media print {
+      body { background: #fff; }
+      .receipt { margin: 0; }
+      .no-print { display: none; }
     }
-    .container{
-        margin:0 auto;
-        margin-top:15px;
-        padding:40px;
-        width:700px;
-        height:auto;
-        background-color:#fff;
-    }
-    caption{
-        font-size:28px;
-        margin-bottom:10px;
-    }
-    table{
-       /* border:1px solid #8f8d8d;*/
-       border-collapse:collapse;
-       /* margin:0 auto;*/
-       width:100%;
-   }
-   td, tr, th{
-    padding:5px;
-/*            border:1px solid #8f8d8d;*/
-/*width:185px;*/
-}
-th{
-    background-color: #f0f0f0;
-}
-h4, p{
-    margin:0px;
-}
-</style> --}}
-<script>
-  window.onload(window.print());
-</script>
+  </style>
 </head>
-<body style="font-size: 5px">
+<body>
 
-    <div class="container" >
+  <div class="no-print"><button onclick="window.print()">Print Struk</button></div>
 
-      <table style="border: none">
-        <tr style="border: none">
+  <div class="receipt">
+    <div class="center">
+      <div class="company">{{ $companyName }}</div>
+      @if($address)<div class="small">{{ $address }}</div>@endif
+    </div>
 
+    <div class="sep double"></div>
+    <div class="center bold">INVOICE</div>
+    <div class="center status">{{ $statusLabel[0] }}</div>
 
-          <td align="center">
-
-
-            <strong style="font-size: 11px">{{$companyName}}<br>
-
-            </strong>
-        </td>
-    </tr>
-
-
-</table> 
-
-
-
-<div>
-   <table style="border: none; font-weight:200px  ">
-
-      <tr style="border: none">
-         <td colspan="2" align="center">
-            <p> <strong>INVOICE</strong>  </p>
-        </td>
-    </tr>
-    <tr>
-      <td>
-
-
-
-
-          Date : {{ $suminvoice_number->date }}<br>
-          No. Invoice : #{{ $suminvoice_number->number }}
-          <br>
-          <a>Bill To: </a>
-          {{ $customer->customer_id }}<br> 
-          {{ $customer->name}} <br>
-          {{-- {{ $customer->phone }} <br> --}}
-          {{ $customer->address }}<br>
-          {{-- {{ $customer->npwp }} --}}
-
-
-      </td>
-  </tr>
-  <tr>
-    <td align="center"> <?php 
-    if ( $suminvoice_number->payment_status == 1)
-    {
-        echo ' <strong><a  style="font-size: 12; color: #000">PAID </a> </stong><br><a  style="font-size: 10; color: #000">Sudah Terbayar </a><br></td>';
-    }
-    else
-    {
-       echo ' <strong><a style="font-size: 12; color: #000">UNPAID </a></strong><br><a style="font-size: 10; color: #000">Belum Terbayar </a><br>';
-   }
-
-   ?>               
-
-   <td>
-   </tr>  
-
-</table>   
-<table >
-
-
-    <tbody>
-        <tr >
-            <th style="border: 1px solid #8f8d8d">No</th>
-            <th style="border: 1px solid #8f8d8d">Description</th>
-            {{--  <th style="border: 1px solid #8f8d8d">price</th> --}}
-            <th style="border: 1px solid #8f8d8d">Qty</th>
-            <th style="border: 1px solid #8f8d8d">Total</th>
-        </tr>
-        @php 
-        $subtotal=0; 
-        if ($suminvoice_number->tax == null){
-            $taxfee =0;
-        }
-        else
-        {
-            $taxfee = $suminvoice_number->tax/100;
-        }
-
-
-
-        @endphp
-
-
-        @foreach( $invoice as $invoice)
-        @php 
-        $totalwutax = ($invoice->qty * $invoice->amount);
-        $totaltax = $totalwutax * $taxfee;
-        $pph = $totalwutax * $suminvoice_number->pph/100;
-        $taxitem = $invoice->amount * $taxfee;
-        $subtotal = $subtotal + ($totalwutax + $totaltax) - $pph + $admin_fee;
-        $strmonth = substr( $invoice->periode, -6, 2);
-        $stryear = substr( $invoice->periode, -4, 4);
-
-
-        $month_num = $strmonth;
-
-
-        $month_name = date("F", mktime(0, 0, 0, $month_num, 10)); 
-        if ( $invoice->monthly_fee == 1 )
-        {
-          $description = $invoice->description.' - '.$month_name.' '.$stryear;
-      }
-      else
-      {
-          $description = $invoice->description;
-      }
-
-
-
-
-
-      @endphp
-      <tr style="border: 1px solid #8f8d8d" >
-          <th style="border: 1px solid #8f8d8d" scope="row">{{ $loop->iteration }}</th>
-
-          <td style="border: 1px solid #8f8d8d">{{ $description }}</td>
-
-          <!-- <td style="border: 1px solid #8f8d8d">{{ number_format($invoice->amount + $taxitem, 0, ',', '.') }}</td> -->
-
-          <input type="hidden" name="invoice_item[]" value={{ $invoice->id }}>
-
-          <td align="center" style="border: 1px solid #8f8d8d">{{ $invoice->qty }}</td>
-          @php
-          $isubtotal =$invoice->qty * $invoice->amount;
-          $tax = $isubtotal * $taxfee;
-
-          $itotal = $isubtotal + $tax;
-          @endphp
-          <td style="border: 1px solid #8f8d8d" align="right">{{ number_format($itotal, 0, ',', '.')  }}</td>
-
-
-      </tr>
-
-      @endforeach
-
-      @if ( $pph != 0)
-
-      <tr>
-       <td colspan="4" style="border: 1px solid #8f8d8d" >Pph 23</td>
-       <td style="border: 1px solid #8f8d8d" align="right"><strong id="total">Rp. -{{ number_format($pph, 0, ',', '.') }} </strong></td>
-
-   </tr>
-
-   @elseif (!is_null($admin_fee))
-   <tr>
-    <td colspan="3"style="border: 1px solid #8f8d8d">Biaya Admin</td>
-    <td  style="border: 1px solid #8f8d8d"  align="right">
-        {{ number_format($admin_fee, 0, ',', '.') }}
-
-    </td>
-</tr>
-
-
-@endif
-
-
-<tr>
-
-  <td colspan="3" style="border: 1px solid #8f8d8d" >Total Tagihan</td>
-  <td style="border: 1px solid #8f8d8d" align="right"><strong id="total">Rp. {{ number_format($subtotal, 0, ',', '.') }} </strong></td>
-</tr>
-
-</tbody>
-<tfoot>
-
-</tfoot>
-</table>
-</div>
-<table style="border: 1px">
-    <tr style="border: none">
-      <td align="left" colspan="0">
-
-      </td>
-      <br>
-      <td align="center">
-
-
-       @php
-       if ($suminvoice_number->payment_date == null )
-       {
-          $date = $suminvoice_number->date;
-      }
-      else
-      {
-          $date = $suminvoice_number->payment_date;
-      }
-      
-
-      @endphp
-
-      @if(!empty($invNote))
-      <p style="font-size: 10px; margin: 5px 0;">
-        {!! nl2br(e($invNote)) !!}
-      </p>
+    <table class="kv">
+      <tr><td>No</td><td class="right">#{{ $suminvoice_number->number }}</td></tr>
+      <tr><td>Tanggal</td><td class="right">{{ $suminvoice_number->date }}</td></tr>
+      @if($status === 1)
+        <tr><td>Dibayar</td><td class="right">{{ \Carbon\Carbon::parse($suminvoice_number->payment_date)->format('Y-m-d H:i') }}</td></tr>
+      @elseif($status === 0 && $suminvoice_number->due_date)
+        <tr><td>Jatuh tempo</td><td class="right">{{ $suminvoice_number->due_date }}</td></tr>
       @endif
+    </table>
 
-      <p> {!! nl2br(e($signature)) !!}, {{ $date }}<br><br>
+    <div class="sep"></div>
+    <div class="bold">{{ $customer->name }}</div>
+    <div>{{ $customer->customer_id }}</div>
+    @if($customer->address)<div class="small">{{ $customer->address }}</div>@endif
 
-        {!! QrCode::size(80)->generate(url($appUrl.'/suminvoice/'.$suminvoice_number->tempcode.'/viewinvoice')); !!}<br><br>
+    <div class="sep"></div>
+    @foreach($rows as $row)
+      <div class="item-name">{{ $row['description'] }}</div>
+      <table>
+        <tr>
+          <td>{{ $row['qty'] }} x {{ $n($row['price']) }}</td>
+          <td class="right">{{ $n($row['total']) }}</td>
+        </tr>
+      </table>
+    @endforeach
 
-    </p>
-</td>
-</tr>
+    <div class="sep"></div>
+    <table>
+      <tr><td>Subtotal</td><td class="right">{{ $n($itemsTotal) }}</td></tr>
+      @if($pphTotal > 0)
+        <tr><td>PPh 23</td><td class="right">-{{ $n($pphTotal) }}</td></tr>
+      @endif
+      @if($adminFee > 0)
+        <tr><td>Biaya Admin</td><td class="right">{{ $n($adminFee) }}</td></tr>
+      @endif
+      <tr class="total"><td>TOTAL</td><td class="right">Rp {{ $n($grandTotal) }}</td></tr>
+    </table>
+    <div class="small">Harga sudah termasuk PPN</div>
 
+    @if($status === 1)
+      <div class="sep"></div>
+      <table class="kv">
+        <tr><td>Diterima di</td><td class="right">{{ optional($suminvoice_number->kasbank)->name ?? '-' }}</td></tr>
+        <tr><td>Kasir</td><td class="right">{{ optional($suminvoice_number->user)->name ?? $suminvoice_number->updated_by }}</td></tr>
+      </table>
+    @endif
 
-</table> 
-</div>
+    @if(!empty($invNote))
+      <div class="sep"></div>
+      <div class="small">{!! nl2br(e($invNote)) !!}</div>
+    @endif
 
+    <div class="sep double"></div>
+    <div class="center">
+      <div class="qr">{!! QrCode::size(100)->margin(0)->generate(url($appUrl . '/suminvoice/' . $suminvoice_number->tempcode . '/viewinvoice')) !!}</div>
+      <div class="small">Scan untuk cek invoice</div>
+      <div style="margin-top:4px">{!! nl2br(e($signature)) !!}</div>
+      <div class="bold">TERIMA KASIH</div>
+      <div class="small">Dicetak {{ now()->format('d-m-Y H:i') }}</div>
+    </div>
+  </div>
 
-
-
-
-
-
+  <script>
+    window.addEventListener('load', function () { window.print(); });
+  </script>
 </body>
 </html>

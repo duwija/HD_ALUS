@@ -599,6 +599,85 @@ a button {
 </style>
 </style>
 
+<style>
+  /* ── Desain dokumen invoice (sama dengan print kasir); prefix inv- agar tidak bentrok dengan Bootstrap 3 ── */
+  .inv-toolbar { max-width: 210mm; margin: 14px auto 0; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding: 0 8px; }
+  .inv-btn { display: inline-block; border: 0; border-radius: 6px; padding: 8px 14px; font-size: 13px; cursor: pointer; color: #fff !important; background: #0d47a1; text-decoration: none !important; line-height: 1.3; }
+  .inv-btn-green { background: #28a745; } .inv-btn-grey { background: #4b5563; }
+  .inv-btn-teal { background: #ecfeff; color: #0f766e !important; border: 1px solid #99f6e4; }
+  .inv-btn-orange { background: #fff7ed; color: #9a3412 !important; border: 1px solid #fdba74; }
+  .inv-btn-light { background: #eaf2ff; color: #2f5fa8 !important; border: 1px solid #cfe0ff; }
+  .inv-page { max-width: 210mm; margin: 12px auto 24px; background: #fff; padding: 14mm; box-shadow: 0 2px 12px rgba(0,0,0,.08); color: #1f2937; font: 13px/1.45 "Segoe UI", Roboto, Arial, sans-serif; }
+  .inv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 12px; border-bottom: 3px solid #0d47a1; }
+  .inv-brand img { max-height: 56px; max-width: 160px; display: block; margin-bottom: 6px; }
+  .inv-name { font-size: 18px; font-weight: 700; color: #0d47a1; }
+  .inv-addr { font-size: 11px; color: #6b7280; max-width: 320px; }
+  .inv-doc { display: flex; gap: 12px; align-items: flex-start; text-align: right; }
+  .inv-title { font-size: 26px; font-weight: 800; letter-spacing: 2px; color: #0d47a1; line-height: 1; }
+  .inv-subtitle { font-size: 11px; letter-spacing: 3px; color: #6b7280; }
+  .inv-qr svg { width: 74px; height: 74px; display: block; }
+  .inv-parties { display: flex; gap: 14px; margin: 16px 0; }
+  .inv-card { flex: 1; background: #f3f6fb; border-radius: 8px; padding: 10px 12px; }
+  .inv-label { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; }
+  .inv-big { font-size: 15px; font-weight: 700; }
+  /* CSS lama halaman ini (Bootstrap 3 + aturan td/th global) jangan ikut mengubah ukuran teks invoice */
+  .inv-page table { margin: 0; font-size: 13px; }
+  .inv-page td, .inv-page th { font-size: inherit; line-height: 1.45; }
+  .inv-page p { margin: 0; }
+  .inv-card table td { padding: 1px 8px 1px 0; vertical-align: top; border: 0; font-size: 13px; }
+  .inv-card table td:first-child { color: #6b7280; white-space: nowrap; }
+  .inv-muted { font-size: 11px; color: #6b7280; }
+  table.inv-items { width: 100%; border-collapse: collapse; }
+  table.inv-items th { background: #0d47a1; color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; padding: 8px 10px; text-align: left; border: 0; }
+  table.inv-items td { padding: 8px 10px; border: 0; border-bottom: 1px solid #e5e7eb; }
+  table.inv-items tbody tr:nth-child(even) td { background: #fafbfc; }
+  .inv-num { text-align: right !important; white-space: nowrap; } .inv-center { text-align: center !important; }
+  .inv-summary { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; }
+  .inv-summary table { min-width: 300px; border-collapse: collapse; }
+  .inv-summary td { padding: 5px 10px; border: 0; }
+  .inv-total td { border-top: 2px solid #1f2937 !important; font-size: 16px; font-weight: 800; padding-top: 8px; }
+  .inv-stamp { align-self: center; margin-left: 24px; transform: rotate(-10deg); border: 3px solid currentColor; border-radius: 8px; padding: 4px 16px; text-align: center; opacity: .85; }
+  .inv-stamp b { display: block; font-size: 20px; letter-spacing: 2px; white-space: nowrap; }
+  .inv-stamp small { font-size: 10px; letter-spacing: 2px; }
+  .inv-stamp-1 { color: #2e7d32; } .inv-stamp-2 { color: #6b7280; } .inv-stamp-0 { color: #c62828; }
+  .inv-warning { margin-top: 16px; border-left: 4px solid #c62828; background: #fdecea; color: #8e1b1b; padding: 10px 12px; border-radius: 4px; }
+  .inv-sign { margin-top: 22px; display: flex; justify-content: flex-end; }
+  .inv-sign > div { text-align: center; min-width: 200px; }
+  .inv-who { margin-top: 46px; font-weight: 700; border-top: 1px solid #1f2937; padding-top: 4px; }
+  .inv-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .inv-note { margin-top: 18px; padding: 10px 12px; background: #f9fafb; border-left: 4px solid #0d47a1; font-size: 12px; }
+  .inv-foot { margin-top: 16px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #6b7280; text-align: center; }
+  @media (max-width: 640px) {
+    .inv-page { padding: 16px; }
+    .inv-head, .inv-parties, .inv-summary { flex-direction: column; }
+    .inv-doc { text-align: left; }
+    .inv-summary table { min-width: 0; width: 100%; }
+    .inv-stamp { margin: 0 0 10px 6px; }
+  }
+  @page { size: A4 portrait; margin: 10mm; }
+  @media print {
+    body { background: #fff !important; }
+    .inv-page { margin: 0; padding: 0; box-shadow: none; max-width: none; }
+    .inv-page * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+    /* Bootstrap 3 memaksa "* { color:#000 !important; background:transparent !important }" saat print.
+       Selector di bawah lebih spesifik sehingga warna & latar desain invoice tetap tercetak. */
+    .inv-page .inv-name, .inv-page .inv-title { color: #0d47a1 !important; }
+    .inv-page .inv-addr, .inv-page .inv-subtitle, .inv-page .inv-label, .inv-page .inv-muted,
+    .inv-page .inv-card table td:first-child, .inv-page .inv-foot { color: #6b7280 !important; }
+    .inv-page .inv-card { background: #f3f6fb !important; }
+    .inv-page table.inv-items th { background: #0d47a1 !important; color: #fff !important; }
+    .inv-page table.inv-items tbody tr:nth-child(even) td { background: #fafbfc !important; }
+    .inv-page .inv-head { border-bottom: 3px solid #0d47a1 !important; }
+    .inv-page .inv-total td { border-top: 2px solid #1f2937 !important; }
+    .inv-page .inv-stamp-1 { color: #2e7d32 !important; }
+    .inv-page .inv-stamp-2 { color: #6b7280 !important; }
+    .inv-page .inv-stamp-0 { color: #c62828 !important; }
+    .inv-page .inv-stamp *, .inv-page .inv-warning * { color: inherit !important; }
+    .inv-page .inv-warning { background: #fdecea !important; color: #8e1b1b !important; border-left: 4px solid #c62828 !important; }
+    .inv-page .inv-note { background: #f9fafb !important; border-left: 4px solid #0d47a1 !important; }
+  }
+</style>
 </head>
 <body>
 
@@ -613,396 +692,196 @@ a button {
 </div>
 @endif
 
-    <div class="container" id="invoice_pr">
-     <div class="no-print">
-        <button style="float:right;" class="btn no-print" onclick="window.print()">Print</button>
-        <button class="btn no-print" style="float:right; background-color:#28a745;"><a style="text-decoration:none; color:#FFF;" href="{{ url('/suminvoice/' . $suminvoice_number->tempcode . '/pdf') }}"><i class="fas fa-file-pdf"></i>&nbsp; Download PDF</a></button>
-        @php
-        if(!empty($suminvoice_number->file))
-        {
-          $url=url('upload/tax').'/'.$suminvoice_number->file;
+@php
+  // ── Perhitungan (sama dengan versi sebelumnya; PPh dijumlahkan dari semua item) ──
+  $taxRate = $suminvoice_number->tax ? $suminvoice_number->tax / 100 : 0;
+  $pphRate = $suminvoice_number->pph ? $suminvoice_number->pph / 100 : 0;
+  $invRows = [];
+  $itemsTotal = 0;
+  $pphTotal = 0;
+  foreach ($invoice as $item) {
+      $base = $item->qty * $item->amount;
+      $tax = $base * $taxRate;
+      $pphTotal += $base * $pphRate;
+      $itemsTotal += $base + $tax;
 
-          echo' <button class="btn no-print"><a  style="float:right; text-decoration: none; color: #FFFF" href='.$url.'> Faktur pajak </a></button>';
-
+      $description = $item->description;
+      if ((int) $item->monthly_fee === 1 && !empty($item->periode) && strlen($item->periode) >= 6) {
+          $m = substr($item->periode, -6, 2);
+          if (is_numeric($m) && (int) $m >= 1 && (int) $m <= 12) {
+              $description .= ' - ' . date('F', mktime(0, 0, 0, (int) $m, 10)) . ' ' . substr($item->periode, -4, 4);
+          }
       }
-      @endphp
+      $invRows[] = ['description' => $description, 'price' => $item->amount + $item->amount * $taxRate, 'qty' => $item->qty, 'total' => $base + $tax];
+  }
+  $invTotal = $itemsTotal - $pphTotal;
+  $subtotal = $invTotal; // masih dipakai modal pembayaran (Tripay dll.) di bagian bawah halaman
+  $merchantFee = ($suminvoice_number->payment_status == 1 && $suminvoice_number->merchant_fee > 0) ? (float) $suminvoice_number->merchant_fee : 0;
 
+  $invStatus = (int) $suminvoice_number->payment_status;
+  $invStamp = [1 => ['LUNAS', 'PAID', '#2e7d32'], 2 => ['DIBATALKAN', 'CANCELLED', '#6b7280']][$invStatus] ?? ['BELUM TERBAYAR', 'UNPAID', '#c62828'];
+
+  // Label metode bayar dari setting payment gateway (bisa dikustomisasi admin) → kasbank → nama gateway
+  $paidVia = null; $paidNote = null;
+  if ($invStatus === 1) {
+      $pgSlug   = $suminvoice_number->payment_gateway ?? null;
+      $pgRecord = $pgSlug ? \App\PaymentGateway::findForCurrentTenant($pgSlug) : null;
+      $paidNote = ($pgRecord->settings['invoice_note'] ?? '') ?: null;
+      $paidVia  = (($pgRecord->settings['invoice_label'] ?? '') ?: null)
+          ?? ($suminvoice_number->kasbank->name ?? null)
+          ?? ($pgSlug ? strtoupper($pgSlug) : 'Online');
+  }
+
+  $invRp = fn ($v) => 'Rp ' . number_format((float) $v, 0, ',', '.');
+  $dataTagihanUrl = url('/invoice/cst/' . $encryptedurl);
+@endphp
+
+<div class="inv-toolbar no-print">
+  @if(!empty($suminvoice_number->file))
+    <a class="inv-btn inv-btn-grey" href="{{ url('upload/tax/' . $suminvoice_number->file) }}">Faktur Pajak</a>
+  @endif
+  <a class="inv-btn inv-btn-green" href="{{ url('/suminvoice/' . $suminvoice_number->tempcode . '/pdf') }}"><i class="fas fa-file-pdf"></i>&nbsp; Download PDF</a>
+  <button type="button" class="inv-btn" onclick="window.print()"><i class="fas fa-print"></i>&nbsp; Print</button>
+</div>
+
+<div class="inv-page" id="invoice_pr">
+  <div class="inv-head">
+    <div class="inv-brand">
+      <img src="{{ tenant_img('logoinv.png', '/dashboard/dist/img/logoinv.png') }}" alt="{{ $companyName }}">
+      <div class="inv-name">{{ $companyName }}</div>
+      @if($companyAddress1)<div class="inv-addr">{{ $companyAddress1 }}</div>@endif
+    </div>
+    <div class="inv-doc">
+      <div>
+        <div class="inv-title">INVOICE</div>
+        <div class="inv-subtitle">TAGIHAN</div>
+      </div>
+      <div class="inv-qr">{!! QrCode::size(74)->margin(0)->generate(url('suminvoice/' . $suminvoice_number->tempcode . '/viewinvoice')) !!}</div>
+    </div>
   </div>
-  
-  <table id="invoice-header" style="border: none">
-    <tr style="border: none">
-      <td align="left" colspan="3">
-        <img width="150px" src="{{ tenant_img('logoinv.png', '/dashboard/dist/img/logoinv.png') }}">
-    </td>
-    <td align="left">
 
-
-
-        <p><strong><u>TAGIHAN</u></strong>
-        </p>
-        <p>
-          <strong><i>INVOICE</i></strong>
-      </p>
-  </td>
-
-
-  <td align="right" width="70px">
-    {!! QrCode::size(60)->generate(url('suminvoice/'.$suminvoice_number->tempcode.'/viewinvoice')); !!}
-</td>
-
-
-
-</tr>
-<tr>
-    <td align="left" >
-       <strong> {{$companyName}}</strong>
-       
-    </td>
-</tr>
-
-</table> 
-
-
-
-<div>
-    <div class="container t">
-        <div class="row">
-            <div class="box ">
-                <h4 >Kepada:</h4>
-                <p><strong>{{ $customer->customer_id }}<br> {{ $customer->name }}</strong><br>
-                    {{ $customer->address }}<br>
-                    {{ $customer->phone }}<br>
-                    {{ $customer->npwp }}
-                </p>
-            </div>
-            <div class="box">
-
-                <div class="table-row">
-                    <div class="table-cell right-align">Invoice No :<strong> #{{$suminvoice_number->number }}</strong></div>
-
-                </div>
-                <div class="table-row">
-                    <div class="table-cell right-align">Inv date: {{ $suminvoice_number->date }}</div>
-
-                </div>
-                <div class="table-row">
-                   <?php
-                   if ($suminvoice_number->payment_status == 1) {
-                    // Ambil label & keterangan dari setting payment gateway (bisa dikustomisasi admin)
-                    $pgSlug    = $suminvoice_number->payment_gateway ?? null;
-                    $pgRecord  = $pgSlug ? \App\PaymentGateway::findForCurrentTenant($pgSlug) : null;
-                    $pgLabel   = ($pgRecord->settings['invoice_label'] ?? '') ?: null;
-                    $pgNote    = ($pgRecord->settings['invoice_note']  ?? '') ?: null;
-
-                    // Prioritas: invoice_label dari setting → kasbank name → nama gateway uppercase
-                    $kasbankName = $pgLabel
-                        ?? ($suminvoice_number->kasbank->name ?? null)
-                        ?? ($pgSlug ? strtoupper($pgSlug) : 'Online');
-
-                    $displayLine = $kasbankName;
-                    if ($pgNote) {
-                        $displayLine .= '<br><span style="font-size:10px;color:#555;">' . htmlspecialchars($pgNote) . '</span>';
-                    }
-
-                    echo '<div class="table-cell right-align"> Payment date: '. $suminvoice_number->payment_date.'</br>'.$displayLine.' </div>';
-                } else {
-                    echo '<div class="table-cell right-align">Due date:  '.$suminvoice_number->due_date.' </div>';
-                }
-                ?>
-
-            </div>
-            <div class="table-row">
-                <?php
-                if ($suminvoice_number->payment_status == 1) {
-                    echo '<div class="table-cell right-align"> <a style="font-size: 20px; color: green;">PAID</a></div>';
-
-                    echo ' <div class="table-cell right-align"><a style="font-size: 11px; color: green;">(SUDAH TERBAYAR)</a></div>';
-                }elseif ($suminvoice_number->payment_status == 2) {
-                    echo '<div class="table-cell right-align"> <a style="font-size: 20px; color: grey;">CANCEL</a></div>';
-
-                    echo ' <div class="table-cell right-align"><a style="font-size: 11px; color: grey;">(DIBATALKAN)</a></div>';
-                }
-
-                else {
-                    echo '<div class="table-cell right-align"><a style="font-size: 20px; color: red;">UNPAID</a></div>';
-
-                    echo ' <div class="table-cell right-align"><a style="font-size: 11px; color: red;">(BELUM TERBAYAR)</a></div>';
-                }
-                ?>
-            </div>
-
-        </div>
+  <div class="inv-parties">
+    <div class="inv-card">
+      <div class="inv-label">Ditagihkan kepada</div>
+      <div class="inv-big">{{ $customer->name }}</div>
+      <table>
+        <tr><td>ID Pelanggan</td><td><b>{{ $customer->customer_id }}</b></td></tr>
+        @if($customer->address)<tr><td>Alamat</td><td>{{ $customer->address }}</td></tr>@endif
+        @if($customer->phone)<tr><td>Telepon</td><td>{{ $customer->phone }}</td></tr>@endif
+        @if(trim((string) $customer->npwp) !== '' && $customer->npwp !== '0')<tr><td>NPWP</td><td>{{ strtoupper($customer->npwp) }}</td></tr>@endif
+      </table>
     </div>
-    <p style="padding: 0px">
-    </p>
-</div>
-<div class="tbl-wrapper">
-<table class="tbl">
+    <div class="inv-card">
+      <div class="inv-label">Pembayaran</div>
+      <table>
+        <tr><td>No. Invoice</td><td><b>#{{ $suminvoice_number->number }}</b></td></tr>
+        <tr><td>Tanggal</td><td>{{ $suminvoice_number->date }}</td></tr>
+        @if($invStatus === 1)
+          <tr><td>Tanggal bayar</td><td>{{ $suminvoice_number->payment_date }}</td></tr>
+          <tr><td>Dibayar via</td><td>{{ $paidVia }}@if($paidNote)<br><span class="inv-muted">{{ $paidNote }}</span>@endif</td></tr>
+        @elseif($invStatus === 2)
+          <tr><td>Status</td><td><b>Dibatalkan</b></td></tr>
+        @else
+          <tr><td>Jatuh tempo</td><td><b>{{ $suminvoice_number->due_date ?: '-' }}</b></td></tr>
+        @endif
+      </table>
+    </div>
+  </div>
 
-
-    <tbody>
-        <tr bgcolor="#CBCAC7"  >
-            <th style="border: 1px solid #333">#</th>
-            <th style="border: 1px solid #333">Description</th>
-            <th style="border: 1px solid #333">Price</th>
-            <th style="border: 1px solid #333">Qty</th>
-            <th style="border: 1px solid #333">Sub Total</th>
-        </tr>
-        @php 
-        $subtotal=0; 
-        if ($suminvoice_number->tax == null){
-            $taxfee =0;
-        }
-        else
-        {
-            $taxfee = $suminvoice_number->tax/100;
-        }
-
-
-
-        @endphp
-
-
-        @foreach( $invoice as $invoice)
-        @php 
-        $totalwutax = ($invoice->qty * $invoice->amount);
-        $totaltax = $totalwutax * $taxfee;
-        $pph = $totalwutax * $suminvoice_number->pph/100;
-        $taxitem = $invoice->amount * $taxfee;
-        $subtotal = $subtotal + ($totalwutax + $totaltax) - $pph;
-
-        $periodLabel = '-';
-        if (!empty($invoice->periode) && strlen($invoice->periode) >= 6) {
-            $strmonth = substr($invoice->periode, -6, 2);
-            $stryear = substr($invoice->periode, -4, 4);
-
-            if (is_numeric($strmonth) && (int) $strmonth >= 1 && (int) $strmonth <= 12) {
-                $periodLabel = date("F", mktime(0, 0, 0, (int) $strmonth, 10)).' '.$stryear;
-            }
-        }
-
-        $monthlyLabel = ((int) $invoice->monthly_fee === 1) ? 'Monthly' : 'General';
-        $description = $invoice->description;
-        if ((int) $invoice->monthly_fee === 1 && $periodLabel !== '-') {
-            $description .= ' - '.$periodLabel;
-        }
-
-
-
-
-
-      @endphp
-      <tr style="border: 1px solid #333" >
-          <th style="border: 1px solid #333" scope="row">{{ $loop->iteration }}</th>
-          {{--   <td>{{ $invoice->created_at }}</td> --}}
-          <td style="border: 1px solid #333">{{ $description }}</td>
-          <td style="border: 1px solid #333">{{ number_format($invoice->amount + $taxitem, 0, ',', '.') }}</td>
-          <input type="hidden" name="invoice_item[]" value={{ $invoice->id }}>
-
-          <td align="center" style="border: 1px solid #333">{{ $invoice->qty }}</td>
-          @php
-          $isubtotal =$invoice->qty * $invoice->amount;
-          $tax = $isubtotal * $taxfee;
-
-          $itotal = $isubtotal + $tax;
-          @endphp
-          <td style="border: 1px solid #333" align="right">{{ number_format($itotal, 0, ',', '.')  }}</td>
-
-
-
-      </tr>
-
-      @endforeach
+  <table class="inv-items">
+    <thead>
       <tr>
-          {{-- <td colspan="2" style="border: 0px solid #333" ></td> <td colspan="2" style="border: 1px solid #333"> <strong> Subtotal</strong></td> --}}
+        <th style="width:36px">#</th>
+        <th>Deskripsi</th>
+        <th class="inv-num" style="width:110px">Harga</th>
+        <th class="inv-center" style="width:50px">Qty</th>
+        <th class="inv-num" style="width:120px">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      @foreach($invRows as $i => $row)
+        <tr>
+          <td>{{ $i + 1 }}</td>
+          <td>{{ $row['description'] }}</td>
+          <td class="inv-num">{{ number_format($row['price'], 0, ',', '.') }}</td>
+          <td class="inv-center">{{ $row['qty'] }}</td>
+          <td class="inv-num">{{ number_format($row['total'], 0, ',', '.') }}</td>
+        </tr>
+      @endforeach
+    </tbody>
+  </table>
 
-          {{-- <td style="border: 1px solid #333">
-              <strong>Rp. {{ number_format($subtotal, 0, ',', '.') }} </strong> </td></tr> --}}
-              {{--  @php 
-
-
-              if ($suminvoice_number->tax == null){
-                $taxfee =0;
-            }
-            else
-            {
-                $taxfee = $suminvoice_number->tax;
-            }
-
-            $tax = $subtotal * $taxfee/100;
-            $pph = $subtotal * $suminvoice_number->pph/100;
-
-            $total = $subtotal + $tax - $pph;
-
-            @endphp --}}
-            @if ( $pph != 0)
-
-            <tr>
-                <td colspan="6" style="border: 1px solid #333" >Pph 23</td>
-                <td style="border: 1px solid #333" align="right"><strong id="total">Rp. -{{ number_format($pph, 0, ',', '.') }} </strong></td>
-                <tr>
-                    @else
-                    @endif
-                    <td colspan="4" style="border: 1px solid #333" >Total Tagihan </p></td>
-                    <td style="border: 1px solid #333" align="right"><strong id="total">Rp. {{ number_format($subtotal, 0, ',', '.') }} </strong></td>
-                    {{--  <td colspan="2" style="border: 1px solid #333"> <strong> Tax Ppn ({{$taxfee}}%)</strong> --}}
-                        {{-- <input type="text" name="subtotal" id="subtotal" value={{$subtotal}} >--}}
-                        {{-- <input type="hidden" name="tax" id="tax" value={{$taxfee}} ></td>  --}}
-                        {{--   <input type="text" name="tempcode" id="tempcode" value={{ $tempcode }}> --}}
-                        {{--   <td colspan="2" style="border: 1px solid #333">
-                            <strong> Rp.
-
-                                {{ number_format($tax, 0, ',', '.') }}
-
-                            </strong> </td> --}}</tr>
-                            @if ($suminvoice_number->payment_status == 1 && $suminvoice_number->merchant_fee > 0)
-                            <tr>
-                                <td colspan="4" style="border: 1px solid #333">Biaya Admin </td>
-                                <td style="border: 1px solid #333" align="right"><strong id="total">Rp. {{ number_format($suminvoice_number->merchant_fee, 0, ',', '.') }} </strong></td>
-                            </tr>
-                            <tr>
-                                <td colspan="4" style="border: 1px solid #333">Total Dibayar</td>
-                                <td style="border: 1px solid #333" align="right"><strong id="total">Rp. {{ number_format($subtotal + $suminvoice_number->merchant_fee, 0, ',', '.') }} </strong></td>
-                            </tr>
-                            @endif
-                            <tr>
-                                <td>
-                                </td>
-                            </tr>
-                            <tr>
-
-
-            <!--  <td colspan="4" style="border: 1px solid #333"> <strong> Akumulasi Tagihan yang Harus Dibayar / Amount Due {{$current_inv_status}}</strong></td>
-            <td colspan="2" style="border: 1px solid #333" align="right">
-                <strong id="total">Rp. {{ number_format($suminvoice_amountdue, 0, ',', '.') }} </strong> </td> -->
-            </tr>
-        </tbody>
-        <tfoot>
-            {{-- <tr>
-                <th colspan="3">Total</th>
-                <td>Rp {{ number_format($invoice->total_price) }}</td>
-            </tr> --}}
-
-
-        </tfoot>
+  <div class="inv-summary">
+    <div class="inv-stamp inv-stamp-{{ $invStatus }}"><b>{{ $invStamp[0] }}</b><small>{{ $invStamp[1] }}</small></div>
+    <table>
+      <tr><td>Subtotal</td><td class="inv-num">{{ $invRp($itemsTotal) }}</td></tr>
+      @if($pphTotal > 0)
+        <tr><td>PPh 23</td><td class="inv-num">- {{ $invRp($pphTotal) }}</td></tr>
+      @endif
+      <tr class="inv-total"><td>Total Tagihan</td><td class="inv-num">{{ $invRp($invTotal) }}</td></tr>
+      @if($merchantFee > 0)
+        <tr><td>Biaya Admin</td><td class="inv-num">{{ $invRp($merchantFee) }}</td></tr>
+        <tr class="inv-total"><td>Total Dibayar</td><td class="inv-num">{{ $invRp($invTotal + $merchantFee) }}</td></tr>
+      @endif
     </table>
-</div><!-- /.tbl-wrapper -->
+  </div>
 
-    <span class="pt-4">{!! nl2br(e($invNote)) !!}</span>
-    
-
-</div>
-
-
-<div class="pt-4">
-    <br>
-</div>
-
-
-@if ( $suminvoice_number->payment_status == 1)
-
-<div>
-    <p>{{$signature}} , {{$suminvoice_number->payment_date}} </p>
-    <p>Terima Kasih,</p>
-
-    <br>
-    <p>{{ $suminvoice_number->user->name ?? $suminvoice_number->updated_by }}</p>
-
-    <div class="no-print" style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
-        <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
-            <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
-        </a>
+  @if($invStatus === 0 && $current_inv_status == 1)
+    <div class="inv-warning">
+      Anda masih memiliki tagihan yang belum terbayar (UNPAID) pada periode sebelumnya, silahkan melakukan pelunasan pembayaran
+      tagihan tersebut terlebih dahulu. Untuk info lebih lanjut silahkan menghubungi team Payment kami.
+      <div class="no-print" style="margin-top:8px"><a class="inv-btn" href="{{ $dataTagihanUrl }}">Lihat Data Tagihan</a></div>
     </div>
+  @endif
 
-
-</div>
-
-@elseif ( $suminvoice_number->payment_status == 2)
-
-<div>
-    <p>T{{$signature}} </p>
-    <p>Terima Kasih,</p>
-
-    <div class="no-print" style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
-        <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
-            <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
-        </a>
+  @if($invStatus === 1 || $invStatus === 2)
+    <div class="inv-sign">
+      <div>
+        {{ $signature }}@if($invStatus === 1), {{ $suminvoice_number->payment_date }}@endif
+        <div>Terima kasih,</div>
+        @if($invStatus === 1)
+          <div class="inv-who">{{ $suminvoice_number->user->name ?? $suminvoice_number->updated_by }}</div>
+        @endif
+      </div>
     </div>
+  @endif
 
-
-
-</div>
-
-
-
-@else
-
-@if ( $current_inv_status == 1)
-<div align="center">
-    <p><a style='font-size: 14px; color: #c40205; text-decoration: none;'>
-    Anda masih memiliki tagihan yang belum terbayar (UNPAID) pada periode sebelumnya, silahkan melakukan pelunasan pembayaran Tagihan tersebut terlebih dahulu. Untuk info lebih lanjut silahkan menghubungi team Payment kami </a>
-    </p>
-    <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="no-print"><button class="btn">Lihat Data Tagihan</button></a>
-</div>
-
-@else
-
-@if (!empty($suminvoice_number->payment_id))
-<div class="no-print" style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:10px 0 14px;flex-wrap:wrap;">
+  @if($invStatus === 0 && $current_inv_status != 1 && !empty($suminvoice_number->payment_id))
     @php
-        $activePaymentUrl = null;
-        if (strpos((string) $suminvoice_number->payment_id, '|') !== false) {
-            $parts = explode('|', (string) $suminvoice_number->payment_id, 2);
-            $activePaymentUrl = $parts[1] ?? null;
-        }
+      $activePaymentUrl = null;
+      if (strpos((string) $suminvoice_number->payment_id, '|') !== false) {
+          $parts = explode('|', (string) $suminvoice_number->payment_id, 2);
+          $activePaymentUrl = $parts[1] ?? null;
+      }
     @endphp
-
-    @if(!empty($activePaymentUrl))
-    <a href="{{ $activePaymentUrl }}" target="_blank" rel="noopener noreferrer"
-       class="btn1"
-       style="display:inline-block;background:#ecfeff;color:#0f766e;border:1px solid #99f6e4;padding:8px 12px;border-radius:8px;text-decoration:none;font-size:12px;">
-        <i class="fas fa-external-link-alt"></i>&nbsp; Lanjutkan Pembayaran Aktif
-    </a>
-    @endif
-
-    <form method="POST" action="{{ url('/payment/reset') }}" style="margin:0;"
-          onsubmit="return confirm('Reset pembayaran ini dan ganti metode bayar?');">
+    <div class="inv-actions no-print">
+      @if(!empty($activePaymentUrl))
+        <a href="{{ $activePaymentUrl }}" target="_blank" rel="noopener noreferrer" class="inv-btn inv-btn-teal">
+          <i class="fas fa-external-link-alt"></i>&nbsp; Lanjutkan Pembayaran Aktif
+        </a>
+      @endif
+      <form method="POST" action="{{ url('/payment/reset') }}" style="margin:0;" onsubmit="return confirm('Reset pembayaran ini dan ganti metode bayar?');">
         @csrf
         <input type="hidden" name="id" value="{{ $suminvoice_number->id }}">
-        <button type="submit" class="btn1"
-                style="background:#fff7ed;color:#9a3412;border:1px solid #fdba74;padding:8px 12px;border-radius:8px;font-size:12px;">
-            <i class="fas fa-random"></i>&nbsp; Ganti Metode Pembayaran
-        </button>
-    </form>
+        <button type="submit" class="inv-btn inv-btn-orange"><i class="fas fa-random"></i>&nbsp; Ganti Metode Pembayaran</button>
+      </form>
+    </div>
+  @endif
+
+  @if(!($invStatus === 0 && $current_inv_status == 1))
+    <div class="inv-actions no-print">
+      <a href="{{ $dataTagihanUrl }}" class="inv-btn inv-btn-light"><i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan</a>
+    </div>
+  @endif
+
+  @if(!empty($invNote))
+    <div class="inv-note">{!! nl2br(e($invNote)) !!}</div>
+  @endif
+
+  @if($companyAddress2)
+    <div class="inv-foot">{{ $companyAddress2 }}</div>
+  @endif
 </div>
-@endif
-
-<div class="no-print" style="display:flex; justify-content:flex-end; align-items:flex-end; margin: 20px 0 0;">
-    <a href="{{ url('/invoice/cst/' . $encryptedurl) }}" class="btn1" style="display:inline-block; background-color:#eaf2ff; color:#2f5fa8; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:500; border:1px solid #cfe0ff; box-shadow:none;">
-        <i class="fas fa-file-invoice-dollar"></i>&nbsp; Data Tagihan
-    </a>
-</div>
-
- @endif
-
- @endif
-
-
-
-
- <hr>
-
- <p align="right">
-
-     {{ $companyAddress1 }}
-     <br>
-     {{ $companyAddress2 }}
-
-
-
-
-
- </p>
 
 
 <div class="containers no-print">

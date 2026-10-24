@@ -14,6 +14,47 @@ class Suminvoice extends Model
     //
     //use softDeletes;
     protected $fillable =['id','id_customer','number','date','tax','pph','verify','tempcode','payment_status','updated_by','created_at','deleted_at','file','total_amount','recieve_payment','payment_point','payment_id','payment_gateway','note','payment_date','due_date','merchant_fee'];
+
+    /**
+     * Invoice belum bayar milik pelanggan yang sama dan terbit lebih awal dari invoice ini
+     * (urut tanggal, lalu id untuk tanggal yang sama). Null = invoice ini boleh dibayar sekarang.
+     */
+    public function olderUnpaid(): ?self
+    {
+        return static::where('id_customer', $this->id_customer)
+            ->where('payment_status', 0)
+            ->where('id', '!=', $this->id)
+            ->where(function ($q) {
+                $q->where('date', '<', $this->date)
+                  ->orWhere(function ($q) {
+                      $q->where('date', $this->date)->where('id', '<', $this->id);
+                  });
+            })
+            ->orderBy('date', 'asc')
+            ->orderBy('id', 'asc')
+            ->first();
+    }
+
+    protected static function booted()
+    {
+        // Invoice baru lunas/batal (lewat jalur apa pun yang memakai Eloquent: kasir, cancel, callback gateway)
+        // → hapus checkout/VA Winpay yang masih aktif agar tidak bisa dibayar dua kali.
+        static::updated(function (Suminvoice $inv) {
+            if (!$inv->wasChanged('payment_status')
+                || (int) $inv->getOriginal('payment_status') !== 0
+                || !in_array((int) $inv->payment_status, [1, 2], true)) {
+                return;
+            }
+
+            $paymentId = (string) $inv->getOriginal('payment_id');
+            $gateway   = (string) $inv->getOriginal('payment_gateway');
+            $singleProvider = str_starts_with($paymentId, 'winpay:')
+                ? ($gateway === 'winpay2' ? 'winpay2' : 'winpay')
+                : null;
+
+            \App\Services\WinpayVaCleaner::scheduleForInvoice((int) $inv->id, $singleProvider);
+        });
+    }
     public static  function countinv($id)
     {
 

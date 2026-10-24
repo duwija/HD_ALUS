@@ -180,6 +180,9 @@ body.dark-mode #modal-pause-ticket .modal-footer {
       <i class="fas fa-comment-alt mr-1"></i> Update
     </button>
     @endif
+    <a href="/ticket/{{ $ticket->id }}/surat-tugas" class="btn btn-sm btn-dark" title="Unduh surat tugas (PDF) untuk tim yang bertugas">
+      <i class="fas fa-file-signature mr-1"></i> Surat Tugas
+    </a>
     <a href="/ticket" class="btn btn-sm btn-secondary">
       <i class="fas fa-arrow-left mr-1"></i> Kembali
     </a>
