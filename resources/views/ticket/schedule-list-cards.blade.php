@@ -1,6 +1,12 @@
 @if($tickets->isEmpty())
   <div class="text-center text-muted py-4">Tidak ada tiket untuk filter yang dipilih.</div>
 @else
+@php
+  // Foto petugas (fallback avatar default) & data anggota tim (kolom member = nama dipisah koma), sekali query.
+  $teamPhoto = fn ($u) => asset('storage/users/' . (($u && $u->photo) ? basename($u->photo) : 'user.png'));
+  $teamNames = $tickets->flatMap(fn ($t) => explode(',', (string) $t->member))->map(fn ($n) => trim($n))->filter()->unique();
+  $teamUsers = $teamNames->isEmpty() ? collect() : \App\User::whereIn('name', $teamNames)->get()->keyBy(fn ($u) => strtolower($u->name));
+@endphp
 <div class="schedule-grid">
   @foreach($tickets as $t)
   @php
@@ -54,9 +60,35 @@
       <span><i class="fas fa-phone-alt mr-1"></i>{{ $t->phone ?: '-' }}</span>
     </div>
 
+    @php
+      $pic = $t->user;
+      $members = collect(explode(',', (string) $t->member))
+        ->map(fn ($n) => trim($n))->filter()->unique()
+        ->reject(fn ($n) => $pic && strcasecmp($n, $pic->name) === 0)
+        ->map(fn ($n) => ['name' => optional($teamUsers->get(strtolower($n)))->full_name ?: $n, 'photo' => $teamPhoto($teamUsers->get(strtolower($n)))])
+        ->values();
+    @endphp
     <div class="ticket-row">
       <span><i class="fas fa-layer-group mr-1"></i>{{ optional($t->categorie)->name ?? '-' }}</span>
-      <span><i class="fas fa-user-cog mr-1"></i>{{ optional($t->user)->name ?? '-' }}</span>
+      <div class="ticket-team">
+        <div class="team-pic" title="Penanggung jawab">
+          <img src="{{ $teamPhoto($pic) }}" alt="" loading="lazy" onerror="this.onerror=null;this.src='{{ asset('storage/users/user.png') }}'">
+          <div>
+            <div class="team-label">PIC</div>
+            <div class="team-name">{{ $pic ? ($pic->full_name ?: $pic->name) : 'Belum diassign' }}</div>
+          </div>
+        </div>
+        @if($members->isNotEmpty())
+        <div class="team-members">
+          @foreach($members->take(4) as $m)
+            <img src="{{ $m['photo'] }}" alt="" title="{{ $m['name'] }}" loading="lazy" onerror="this.onerror=null;this.src='{{ asset('storage/users/user.png') }}'">
+          @endforeach
+          @if($members->count() > 4)
+            <span class="team-more" title="{{ $members->slice(4)->pluck('name')->implode(', ') }}">+{{ $members->count() - 4 }}</span>
+          @endif
+        </div>
+        @endif
+      </div>
     </div>
 
     <div class="mttr-row">

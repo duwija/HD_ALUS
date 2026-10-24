@@ -380,6 +380,30 @@ window.csrfToken = '{{ csrf_token() }}';
   .leaflet-marker-icon.leaflet-pm-draggable {
     filter: drop-shadow(0 0 8px #4CAF50) !important;
   }
+
+  /* Marker tiket: foto petugas yang diassign, bingkai warna status + bendera kecil */
+  .ticket-icon { background: transparent; border: 0; }
+  .tk-pin {
+    position: relative; width: 40px; height: 40px; border-radius: 50%;
+    border: 3px solid var(--tk-color, #6c757d); background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  }
+  .tk-pin img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+  .tk-pin .tk-flag {
+    position: absolute; right: -6px; bottom: -4px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--tk-color, #6c757d); color: #fff; font-size: 9px;
+    display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
+  }
+  .tk-pin::after { /* ekor penunjuk lokasi */
+    content: ''; position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%);
+    border: 6px solid transparent; border-top: 7px solid var(--tk-color, #6c757d);
+  }
+  .tk-popup { min-width: 220px; }
+  .tk-popup .tk-head { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
+  .tk-popup .tk-head img { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; border: 3px solid var(--tk-color, #6c757d); }
+  .tk-popup .tk-members { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .tk-popup .tk-members span { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; background: #f1f3f5; border-radius: 12px; padding: 1px 8px 1px 1px; }
+  .tk-popup .tk-members img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
 </style>
 
 <div class="card">
@@ -3572,24 +3596,43 @@ window.csrfToken = '{{ csrf_token() }}';
   fetch('/ticket/datamap')
   .then(res => res.json())
   .then(tickets => {
+    // Escape teks dari database sebelum disisipkan ke HTML marker/popup.
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fallbackPhoto = @json(asset('storage/users/user.png'));
+    const imgTag = (src, alt) => `<img src="${esc(src)}" alt="${esc(alt)}" onerror="this.onerror=null;this.src='${fallbackPhoto}'">`;
+
     tickets.forEach(ticket => {
       const color = getStatusColor(ticket.status);
+      // Marker = foto petugas yang diassign; bingkai & bendera kecil berwarna status tiket.
       const icon = L.divIcon({
         className: 'ticket-icon',
-        html: `<i class="fas fa-flag" style="color: ${color}; font-size: 24px;"></i>`,
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
+        html: `<div class="tk-pin" style="--tk-color:${color}" title="${esc(ticket.assign_to)}">
+                 ${imgTag(ticket.assign_photo, ticket.assign_to)}
+                 <span class="tk-flag"><i class="fas fa-flag"></i></span>
+               </div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 50],
+        popupAnchor: [0, -48]
       });
+
+      const members = (ticket.members || []).map(m => `<span>${imgTag(m.photo, m.name)}${esc(m.name)}</span>`).join('');
 
       const marker = L.marker([ticket.lat, ticket.lng], { icon: icon })
       .bindPopup(`
-        <strong>
-        <a href="/ticket/${ticket.id}" target="_blank">Tiket #${ticket.id} | ${ticket.description}</a>
-        </strong><br>
-        Assign to: ${ticket.assign_to}<br>
-        Customer: ${ticket.customer_name}<br>
-        Status: <a class="badge" style="color: ${color};">${ticket.status}</a><br>
-
+        <div class="tk-popup" style="--tk-color:${color}">
+          <div class="tk-head">
+            ${imgTag(ticket.assign_photo, ticket.assign_to)}
+            <div>
+              <div style="font-size:11px;color:#6c757d">Penanggung jawab</div>
+              <strong>${esc(ticket.assign_to)}</strong><br>
+              <span class="badge" style="background:${color};color:#fff">${esc(ticket.status)}</span>
+              ${ticket.time ? `<small class="text-muted ml-1">${esc(String(ticket.time).substring(0, 5))}</small>` : ''}
+            </div>
+          </div>
+          <strong><a href="/ticket/${ticket.id}" target="_blank">Tiket #${ticket.id} | ${esc(ticket.description)}</a></strong><br>
+          Customer: ${esc(ticket.customer_name)}
+          ${members ? `<div class="tk-members">${members}</div>` : ''}
+        </div>
         `);
 
       ticketMarkers.push(marker);

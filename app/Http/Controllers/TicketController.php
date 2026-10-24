@@ -2499,29 +2499,50 @@ public function updateassign(Request $request, $id)
     {
         $today = Carbon::today();
 
-        $tickets = \App\Ticket::with('customer')
+        $tickets = \App\Ticket::with(['customer', 'assignToUser'])
         ->whereDate('date', $today)
         ->get();
 
-        $result = $tickets->map(function ($ticket) {
-        // Ambil koordinat customer dalam format "latitude,longitude"
-            $coordinates = $ticket->customer->coordinate;
+        // Foto petugas untuk marker peta (fallback avatar default bila belum ada foto).
+        $photoUrl = fn ($user) => asset('storage/users/' . (($user && $user->photo) ? basename($user->photo) : 'user.png'));
 
-        // Pisahkan koordinat menjadi array
-            $coords = explode(',', $coordinates);
+        // Anggota tim: kolom member berisi nama dipisah koma (sama dengan surat tugas).
+        $memberNames = $tickets->flatMap(fn ($t) => explode(',', (string) $t->member))->map(fn ($n) => trim($n))->filter()->unique();
+        $memberUsers = \App\User::whereIn('name', $memberNames)->get()->keyBy(fn ($u) => strtolower($u->name));
 
-        // Kembalikan data yang diperlukan dalam array
+        $result = $tickets->map(function ($ticket) use ($photoUrl, $memberUsers) {
+            // Koordinat customer "latitude,longitude"; tiket tanpa koordinat valid tidak ditampilkan di peta.
+            $coords = array_map('trim', explode(',', (string) optional($ticket->customer)->coordinate));
+            if (count($coords) !== 2 || !is_numeric($coords[0]) || !is_numeric($coords[1])) {
+                return null;
+            }
+
+            $pic = $ticket->assignToUser;
+            $members = collect(explode(',', (string) $ticket->member))
+                ->map(fn ($n) => trim($n))
+                ->filter()
+                ->unique()
+                ->reject(fn ($n) => $pic && strcasecmp($n, $pic->name) === 0)
+                ->map(function ($name) use ($memberUsers, $photoUrl) {
+                    $u = $memberUsers->get(strtolower($name));
+                    return ['name' => $u ? ($u->full_name ?: $u->name) : $name, 'photo' => $photoUrl($u)];
+                })
+                ->values();
+
             return [
                 'id' => $ticket->id,
                 'status' => $ticket->status,
                 'description' => $ticket->tittle,
-            'lat' => isset($coords[0]) ? $coords[0] : null, // Pastikan ada data lat
-            'lng' => isset($coords[1]) ? $coords[1] : null, // Pastikan ada data lng
-            'customer_name' => $ticket->customer->name,
-            'assign_to' => $ticket->assignToUser->name,
-            'date' => $ticket->date,
-        ];
-    });
+                'lat' => (float) $coords[0],
+                'lng' => (float) $coords[1],
+                'customer_name' => optional($ticket->customer)->name,
+                'assign_to' => $pic ? ($pic->full_name ?: $pic->name) : 'Belum diassign',
+                'assign_photo' => $photoUrl($pic),
+                'members' => $members,
+                'date' => $ticket->date,
+                'time' => $ticket->time,
+            ];
+        })->filter()->values();
 
         return response()->json($result);
     }

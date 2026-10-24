@@ -117,6 +117,21 @@
     margin-bottom: 8px;
   }
 
+  /* Tim tiket: foto PIC + anggota */
+  /* di sisi kanan baris kategori */
+  .ticket-team { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; margin-left: auto; text-align: right; }
+  .team-pic { display: flex; flex-direction: row-reverse; align-items: center; gap: 8px; min-width: 0; }
+  .team-pic img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border, #dee2e6); flex-shrink: 0; }
+  .team-label { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-secondary); line-height: 1; }
+  .team-name { font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-members { display: flex; align-items: center; flex-shrink: 0; }
+  .team-members img, .team-more {
+    width: 26px; height: 26px; border-radius: 50%; object-fit: cover; margin-left: -8px;
+    border: 2px solid var(--bg-surface, #fff); background: var(--bg-surface-2, #f1f3f5);
+  }
+  .team-members img:first-child { margin-left: 0; }
+  .team-more { display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--text-secondary); }
+
   .mttr-row {
     margin-top: -2px;
     margin-bottom: 8px;
