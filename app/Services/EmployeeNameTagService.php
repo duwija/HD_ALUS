@@ -35,8 +35,9 @@ class EmployeeNameTagService
     /**
      * @return string PNG binary
      */
-    public function render(User $user, string $companyName, ?string $logoPath, string $employeeCode, string $footer = ''): string
+    public function render(User $user, string $companyName, ?string $logoPath, string $employeeCode, string $footer = '', ?string $companyLegal = null): string
     {
+        $companyLegal = trim((string) $companyLegal);
         $img = imagecreatetruecolor(self::W, self::H);
         imageantialias($img, true);
         imagealphablending($img, true);
@@ -59,21 +60,41 @@ class EmployeeNameTagService
         // (warna solid — warna transparan akan menumpuk di bagian yang saling menimpa pada roundedRect)
         $this->roundedRect($img, (int) (self::W / 2) - 90, 40, 180, 34, 17, imagecolorallocate($img, 196, 214, 240));
 
-        // Logo di atas pil putih + nama perusahaan
-        $nameY = 205;
+        // Logo di atas pil putih + nama tenant (+ nama perusahaan bila ada).
+        // Dengan nama perusahaan, header dirapatkan supaya 3 baris teks muat di atas foto (mulai y≈340).
+        $compact = $companyLegal !== '';
+        $pillY = $compact ? 82 : 100;
+        $nameY = $compact ? 175 : 205;
         if ($logoPath && is_file($logoPath) && ($logo = @imagecreatefromstring((string) file_get_contents($logoPath)))) {
-            $lh = 82;
+            // Logo sering punya ruang kosong di sekelilingnya: tempel ke latar putih
+            // (piksel transparan bisa punya RGB acak), lalu buang tepi yang hampir putih.
+            $flat = imagecreatetruecolor(imagesx($logo), imagesy($logo));
+            imagefill($flat, 0, 0, imagecolorallocate($flat, 255, 255, 255));
+            imagecopy($flat, $logo, 0, 0, 0, 0, imagesx($logo), imagesy($logo));
+            imagedestroy($logo);
+            $logo = $flat;
+            if (($cropped = @imagecropauto($logo, IMG_CROP_THRESHOLD, 0.3, 0xFFFFFF)) !== false) {
+                imagedestroy($logo);
+                $logo = $cropped;
+            }
+            $lh = $compact ? 70 : 82;
             $lw = (int) round(imagesx($logo) * $lh / max(1, imagesy($logo)));
             $lw = min($lw, 360);
             $pillW = $lw + 56;
             $px = (int) ((self::W - $pillW) / 2);
-            $this->roundedRect($img, $px, 100, $pillW, $lh + 30, 24, $white);
-            imagecopyresampled($img, $logo, $px + 28, 115, 0, 0, $lw, $lh, imagesx($logo), imagesy($logo));
+            $this->roundedRect($img, $px, $pillY, $pillW, $lh + 30, 24, $white);
+            imagecopyresampled($img, $logo, $px + 28, $pillY + 15, 0, 0, $lw, $lh, imagesx($logo), imagesy($logo));
             imagedestroy($logo);
-            $nameY = 270;
+            $nameY = $compact ? 238 : 270;
         }
+        $subtle = imagecolorallocatealpha($img, 255, 255, 255, 25);
         $this->textCenterFit($img, mb_strtoupper($companyName), $this->fontBold, 40, 24, $nameY, $white, self::W - 120);
-        $this->textCenter($img, 'KARTU IDENTITAS KARYAWAN', $this->fontRegular, 21, $nameY + 46, imagecolorallocatealpha($img, 255, 255, 255, 25), 4);
+        if ($compact) {
+            $this->textCenterFit($img, $companyLegal, $this->fontRegular, 23, 16, $nameY + 37, $white, self::W - 140);
+            $this->textCenter($img, 'KARTU IDENTITAS KARYAWAN', $this->fontRegular, 17, $nameY + 70, $subtle, 4);
+        } else {
+            $this->textCenter($img, 'KARTU IDENTITAS KARYAWAN', $this->fontRegular, 21, $nameY + 46, $subtle, 4);
+        }
 
         // ── Foto bulat berbingkai putih ──────────────────────────────────
         $d = 400;

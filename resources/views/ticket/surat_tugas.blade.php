@@ -1,5 +1,6 @@
 @php
-  $companyName = tenant_config('company_name', config('app.name'));
+  // Kop surat memakai nama tenant (company_name berisi brand platform, mis. "ALUSNET").
+  $companyName = tenant_name() ?: config('app.name');
   $address1 = tenant_config('company_address1', env('COMPANY_ADDRESS1'));
   $address2 = tenant_config('company_address2', env('COMPANY_ADDRESS2'));
   $schedule = trim(($ticket->date ? \Carbon\Carbon::parse($ticket->date)->translatedFormat('l, d F Y') : '') . ($ticket->time ? ' · ' . substr($ticket->time, 0, 5) . ' WITA' : ''));
