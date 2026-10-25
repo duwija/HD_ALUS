@@ -41,8 +41,14 @@ return [
             'encryption' => env('MAIL_ENCRYPTION', 'tls'),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            // Server mail tenant (mis. mail.olima.id di shared hosting) menahan banner ±10 detik
+            // dan bisa lambat saat pengecekan anti-spam; batas bawaan terlalu pendek.
+            'timeout' => env('MAIL_TIMEOUT', 120),
             'auth_mode' => null,
+            // Nama HELO/EHLO ke server mail. Hostname server ini "localhost.localdomain" (dan IP-nya
+            // tanpa reverse DNS), yang membuat server mail penerima curiga/memperlambat.
+            // Pakai domain yang A record-nya mengarah ke server ini.
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL'), PHP_URL_HOST) ?: null),
         ],
 
         'ses' => [
