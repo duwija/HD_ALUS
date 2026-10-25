@@ -154,20 +154,6 @@ if (!function_exists('tenant_upload_full_path')) {
     }
 }
 
-if (!function_exists('tenant_backup_path')) {
-    /**
-     * Get tenant backup path (relative to public)
-     *
-     * @param string $subpath
-     * @return string
-     */
-    function tenant_backup_path($subpath = '')
-    {
-        $basePath = config('tenant.paths.backup', '/backup');
-        return $subpath ? $basePath . '/' . ltrim($subpath, '/') : $basePath;
-    }
-}
-
 if (!function_exists('tenant_users_path')) {
     /**
      * Get tenant users path (relative to public)

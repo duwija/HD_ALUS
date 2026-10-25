@@ -364,7 +364,6 @@ class TenantMiddleware
         $tenantPublicPath = $publicBasePath . '/tenants/' . $tenantId;
         $tenantUploadPath = $tenantPublicPath . '/upload';
         $tenantCustomerFilesPath = $tenantUploadPath . '/customerfiles';
-        $tenantBackupPath = $tenantPublicPath . '/backup';
         $tenantUsersPath = $tenantPublicPath . '/users';
         $tenantWaUploadsPath = $tenantPublicPath . '/wa_uploads';
         
@@ -380,7 +379,6 @@ class TenantMiddleware
         $publicDirs = [
             $tenantUploadPath,
             $tenantCustomerFilesPath,
-            $tenantBackupPath,
             $tenantUsersPath,
             $tenantWaUploadsPath,
         ];
@@ -435,13 +433,11 @@ class TenantMiddleware
         
         // Set tenant public paths (untuk digunakan di helper/controller)
         Config::set('tenant.paths.upload', '/tenants/' . $tenantId . '/upload');
-        Config::set('tenant.paths.backup', '/tenants/' . $tenantId . '/backup');
         Config::set('tenant.paths.users', '/tenants/' . $tenantId . '/users');
         Config::set('tenant.paths.wa_uploads', '/tenants/' . $tenantId . '/wa_uploads');
         
         // Set tenant full paths
         Config::set('tenant.full_paths.upload', $tenantUploadPath);
-        Config::set('tenant.full_paths.backup', $tenantBackupPath);
         Config::set('tenant.full_paths.users', $tenantUsersPath);
         Config::set('tenant.full_paths.wa_uploads', $tenantWaUploadsPath);
     }
