@@ -76,12 +76,10 @@ class BackupTenantDatabase extends Command
         $dbPort = $tenant->db_port ?? '3306';
         
         // Create backup directory if not exists
-        $backupDir = public_path("tenants/{$rescode}/backup");
-        if (!is_dir($backupDir)) {
-            mkdir($backupDir, 0755, true);
-            @chown($backupDir, 'apache');
-            @chgrp($backupDir, 'apache');
-        }
+        // Storage tenant (bukan public/): dump database tidak boleh bisa diunduh lewat web.
+        $backupDir = \App\Services\TenantBackupStorage::dir($rescode);
+        @chown($backupDir, 'apache');
+        @chgrp($backupDir, 'apache');
         
         // Generate filename with timestamp
         $timestamp = date('Y-m-d_His');
@@ -113,7 +111,7 @@ class BackupTenantDatabase extends Command
         
         // Fix file permissions
         if (file_exists($filepath)) {
-            chmod($filepath, 0644);
+            chmod($filepath, 0640);
             @chown($filepath, 'apache');
             @chgrp($filepath, 'apache');
             

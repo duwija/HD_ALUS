@@ -9,6 +9,8 @@ class FileController extends Controller
    public function __construct()
    {
     $this->middleware('auth');
+    // Backup konfigurasi router (berisi password): admin saja.
+    $this->middleware('checkPrivilege:admin')->only(['backup']);
 }
 
     /**
@@ -30,73 +32,22 @@ class FileController extends Controller
     {
         //
     }
-    public function delete($filename)
-    {
-        try {
-            // Get tenant-specific backup path (check multiple config keys)
-            $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
-            $file = public_path("tenants/{$rescode}/backup/" . $filename);
-            
-            if (File::exists($file)) {
-                File::delete($file);
-                return redirect()->back()->with('success', 'File deleted successfully!');
-            } else {
-                return redirect()->back()->with('error', 'File not found!');
-            }
-        } catch (\Exception $e) {
-            \Log::error('Delete file error: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to delete file: ' . $e->getMessage());
-        }
-    }
-    
-    public function download($filename)
-    {
-        try {
-            // Get tenant-specific backup path (check multiple config keys)
-            $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
-            $file = public_path("tenants/{$rescode}/backup/" . $filename);
-            
-            if (File::exists($file)) {
-                return response()->download($file, $filename);
-            } else {
-                abort(404, 'File not found');
-            }
-        } catch (\Exception $e) {
-            \Log::error('Download file error: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to download file: ' . $e->getMessage());
-        }
-    }
     public function backup()
     {
-        try {
-            // Get tenant-specific backup path (check multiple config keys)
-            $rescode = config('app.rescode') ?? config('tenant.rescode', 'default');
-            $backupPath = public_path("tenants/{$rescode}/backup");
-            
-            // Check if directory exists, if not create it recursively
-            if (!File::exists($backupPath)) {
-                File::makeDirectory($backupPath, 0755, true, true);
-                
-                // Fix ownership to apache:apache (PHP-FPM user) if running as root
-                if (function_exists('posix_getuid') && posix_getuid() === 0) {
-                    @chown($backupPath, 'apache');
-                    @chgrp($backupPath, 'apache');
-                }
-            }
-            
-            // Just get files and show them - remove is_readable check that's causing issues
-            $files = File::files($backupPath);
-            
-            usort($files, function($a, $b) {
-                return filemtime($b) - filemtime($a);
-            });
-            
-            return view('file.index', compact('files'));
-        } catch (\Exception $e) {
-            \Log::error('Backup directory error: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to access backup directory: ' . $e->getMessage());
-        }
+        // Hanya backup konfigurasi MikroTik. Dump database tenant tidak ditampilkan/diunduh dari sini
+        // (dikelola superadmin, lihat App\Services\TenantBackupStorage).
+        // Backup konfigurasi MikroTik tenant ini (App\Services\MikrotikConfigBackup), file terenkripsi
+        // diunduh lewat /distrouter/{id}/config-backup/{backupId}.
+        $routerBackups = \App\MikrotikBackup::where('tenant_id', (int) tenant_id())
+            ->where('status', 'ok')->whereNotNull('file_path')
+            ->latest('id')->get();
+
+        return view('file.index', [
+            'routerBackups' => $routerBackups,
+            'retentionDays' => \App\Services\MikrotikConfigBackup::RETENTION_DAYS,
+        ]);
     }
+
 
     /**
      * Store a newly created resource in storage.

@@ -1068,6 +1068,34 @@ public function getRouterInfo($id)
 }
 
 
+// Backup konfigurasi lewat API sekarang juga (App\Services\MikrotikConfigBackup).
+public function configBackupNow($id)
+{
+    $distrouter = \App\Distrouter::findOrFail($id);
+    $b = (new \App\Services\MikrotikConfigBackup)->backup($distrouter, (int) tenant_id(), \Auth::user()->name ?? 'manual');
+    $label = \App\MikrotikBackup::STATUS[$b->status]['label'] ?? $b->status;
+
+    return redirect('/distrouter/' . $id . '#mk-backup')
+        ->with(in_array($b->status, ['ok', 'unchanged']) ? 'success' : 'error', "Backup konfigurasi: {$label}" . ($b->message ? " — {$b->message}" : ''));
+}
+
+// Unduh backup (.rsc, didekripsi) — hanya milik tenant & router ini.
+public function configBackupDownload($id, $backupId)
+{
+    $distrouter = \App\Distrouter::findOrFail($id);
+    $backup = \App\MikrotikBackup::where('tenant_id', (int) tenant_id())->where('distrouter_id', $distrouter->id)
+        ->where('status', 'ok')->findOrFail($backupId);
+
+    \Log::info('[MIKROTIK BACKUP] diunduh', ['router' => $distrouter->name, 'backup_id' => $backup->id, 'user' => \Auth::user()->name ?? null]);
+
+    $name = preg_replace('/[^A-Za-z0-9_.-]+/', '_', $distrouter->name) . '_' . $backup->created_at->format('Ymd_His') . '.rsc';
+    return response(\App\Services\MikrotikConfigBackup::content($backup), 200, [
+        'Content-Type' => 'text/plain; charset=utf-8',
+        'Content-Disposition' => 'attachment; filename="' . $name . '"',
+        'Cache-Control' => 'no-store',
+    ]);
+}
+
 public function show($id)
 {
    // Temukan Olt berdasarkan ID

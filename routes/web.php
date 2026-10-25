@@ -774,6 +774,8 @@ Route::get('/distrouter/getrouterinfo/{id}','DistrouterController@getrouterinfo'
 Route::get('/distrouter/getrouterinterfaces/{id}','DistrouterController@getrouterinterfaces');
 Route::get('/distrouter/interface_monitor/{id}','DistrouterController@interfacemonitor');
 Route::get('/distrouter/backupconfig/{id}','DistrouterController@backupsconfig');
+Route::post('/distrouter/{id}/config-backup','DistrouterController@configBackupNow');
+Route::get('/distrouter/{id}/config-backup/{backupId}','DistrouterController@configBackupDownload');
 Route::get('/distrouter/import-ppp-profiles/{id}','DistrouterController@importPppProfiles');
 
 
@@ -967,8 +969,6 @@ Route::get('/sale','SaleController@index');
 
 
 Route::get('/file/backup','FileController@backup');
-Route::get('/file/download/{filename}', 'FileController@download')->name('file.download');
-Route::delete('/file/{filename}', 'FileController@delete')->name('file.delete');
 Route::post('/file','FileController@store');
 Route::delete('/file/customer/{id}','FileController@destroy');
 

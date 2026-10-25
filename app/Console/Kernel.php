@@ -29,7 +29,12 @@ class Kernel extends ConsoleKernel
         $schedule->command('isolir:auto')->dailyAt('01:00');
         $schedule->command('isolir:reminder')->dailyAt('09:00');
         $schedule->command('invoice:auto')->dailyAt('06:00');
-        $schedule->command('report:daily')->dailyAt('07:00');
+        // Output dicatat: tanpa ini kegagalan (mis. SMTP timeout) hilang ke /dev/null.
+        $schedule->command('report:daily')->dailyAt('07:00')
+            ->appendOutputTo(storage_path('logs/schedule-report-daily.log'));
+        // Backup konfigurasi MikroTik semua tenant + retensi 7 hari (juga dump database tenant).
+        $schedule->command('mikrotik:backup')->dailyAt('02:30')->runInBackground()
+            ->appendOutputTo(storage_path('logs/schedule-mikrotik-backup.log'));
         $schedule->command('pppoe:collect-stats-all')->everyThreeMinutes();
         $schedule->command('pppoe:sync-sessions-all')->everyFiveMinutes();
         $schedule->command('pings:prune-all')->dailyAt('02:00');

@@ -82,9 +82,13 @@
       <a href="/distrouter/{{ $distrouter->id }}/edit" class="btn btn-sm btn-primary" style="border-radius:8px">
         <i class="fas fa-edit mr-1"></i>Edit Router
       </a>
-      <a href="/distrouter/backupconfig/{{ $distrouter->id }}" class="btn btn-sm btn-outline-primary" style="border-radius:8px">
-        <i class="fas fa-calendar-plus mr-1"></i>Backup Schedule
-      </a>
+      <form action="/distrouter/{{ $distrouter->id }}/config-backup" method="POST" class="d-inline"
+            onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').innerHTML='<i class=&quot;fas fa-spinner fa-spin mr-1&quot;></i>Membackup…';">
+        @csrf
+        <button type="submit" class="btn btn-sm btn-outline-primary" style="border-radius:8px" title="Ambil export konfigurasi lewat API dan simpan terenkripsi di server">
+          <i class="fas fa-save mr-1"></i>Backup Konfigurasi
+        </button>
+      </form>
       <a href="/distrouter/import-ppp-profiles/{{ $distrouter->id }}"
          class="btn btn-sm btn-outline-success" style="border-radius:8px"
          onclick="return confirm('Import PPPoE profiles dari Mikrotik ini ke tabel Plans?')">
@@ -199,6 +203,57 @@
       <div id="commandOutput" class="cmd-output">
         <div class="cmd-empty"><i class="fas fa-mouse-pointer mr-1"></i> Pilih perintah dari menu di atas atau cari perintah. Semua perintah hanya membaca data (print).</div>
       </div>
+    </div>
+  </div>
+
+  {{-- BACKUP KONFIGURASI (App\Services\MikrotikConfigBackup, otomatis tiap hari 02:30) --}}
+  @php
+    $mkBackups = \App\MikrotikBackup::where('tenant_id', (int) tenant_id())->where('distrouter_id', $distrouter->id)
+      ->latest('id')->limit(30)->get();
+    $mkLastOk = $mkBackups->firstWhere('status', 'ok');
+  @endphp
+  <div class="dr-card" id="mk-backup">
+    <div class="dr-card-header">
+      <h6><i class="fas fa-save mr-2" style="color:var(--brand)"></i>Backup Konfigurasi
+        <small class="text-muted font-weight-normal">&middot; otomatis tiap hari 02:30, disimpan 7 hari, terenkripsi</small>
+      </h6>
+      @if($mkLastOk)
+        <a href="/distrouter/{{ $distrouter->id }}/config-backup/{{ $mkLastOk->id }}" class="btn btn-sm btn-outline-success" style="border-radius:8px">
+          <i class="fas fa-download mr-1"></i>Unduh terbaru
+        </a>
+      @endif
+    </div>
+    <div class="dr-card-body">
+      @if($mkBackups->isEmpty())
+        <div class="cmd-empty">Belum ada backup. Klik <strong>Backup Konfigurasi</strong> di atas, atau tunggu jadwal otomatis.</div>
+      @else
+      <div class="table-responsive" style="max-height:320px;overflow-y:auto">
+        <table class="table table-sm table-bordered table-hover mb-0" style="font-size:12px">
+          <thead><tr><th>Waktu</th><th>Status</th><th>RouterOS</th><th class="text-right">Ukuran</th><th>Keterangan</th><th>Oleh</th><th class="text-center">File</th></tr></thead>
+          <tbody>
+            @foreach($mkBackups as $b)
+            @php $st = \App\MikrotikBackup::STATUS[$b->status] ?? ['label' => $b->status, 'badge' => 'secondary']; @endphp
+            <tr>
+              <td style="white-space:nowrap">{{ $b->created_at->format('d/m/Y H:i') }}</td>
+              <td><span class="badge badge-{{ $st['badge'] }}">{{ $st['label'] }}</span></td>
+              <td>{{ $b->ros_version ?: '-' }}</td>
+              <td class="text-right">{{ $b->size ? number_format($b->size / 1024, 1, ',', '.') . ' KB' : '-' }}</td>
+              <td>{{ $b->message ?: '-' }}</td>
+              <td>{{ $b->triggered_by === 'schedule' ? 'Jadwal' : $b->triggered_by }}</td>
+              <td class="text-center">
+                @if($b->status === 'ok' && $b->file_path)
+                  <a href="/distrouter/{{ $distrouter->id }}/config-backup/{{ $b->id }}" title="Unduh .rsc"><i class="fas fa-download"></i></a>
+                @else - @endif
+              </td>
+            </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+      <small class="text-muted d-block mt-2">
+        File berisi export lengkap (<code>/export show-sensitive</code>, termasuk password) untuk restore. "Tidak berubah" berarti konfigurasi sama dengan backup tersimpan sebelumnya, sehingga tidak dibuat file baru.
+      </small>
+      @endif
     </div>
   </div>
 

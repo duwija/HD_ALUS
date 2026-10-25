@@ -365,7 +365,7 @@ class TenantManagementController extends Controller
                 "public/tenants/{$rescode}/storage",
                 "public/tenants/{$rescode}/upload",
                 "public/tenants/{$rescode}/upload/customerfiles",
-                "public/tenants/{$rescode}/backup",
+                "storage/tenants/{$rescode}/app/backup",
                 "public/tenants/{$rescode}/users",
             ];
 
@@ -710,7 +710,7 @@ class TenantManagementController extends Controller
                 'storage'       => "public/tenants/{$rescode}/storage",
                 'upload'        => "public/tenants/{$rescode}/upload",
                 'customerfiles' => "public/tenants/{$rescode}/upload/customerfiles",
-                'backup'        => "public/tenants/{$rescode}/backup",
+                'backup'        => "storage/tenants/{$rescode}/app/backup",
                 'users'         => "public/tenants/{$rescode}/users",
                 'img'           => "public/tenants/{$rescode}/img",
             ],
@@ -1277,12 +1277,8 @@ class TenantManagementController extends Controller
             $dbPort = $tenant->db_port ?? '3306';
             
             // Create backup directory if not exists
-            $backupDir = public_path("tenants/{$rescode}/backup");
-            if (!is_dir($backupDir)) {
-                mkdir($backupDir, 0755, true);
-                @chown($backupDir, 'apache');
-                @chgrp($backupDir, 'apache');
-            }
+            // Storage tenant (bukan public/): dump database tidak boleh bisa diunduh lewat web.
+            $backupDir = \App\Services\TenantBackupStorage::dir($rescode);
             
             // Generate filename with timestamp
             $timestamp = date('Y-m-d_His');
@@ -1357,7 +1353,7 @@ class TenantManagementController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
         $rescode = $tenant->rescode;
-        $backupDir = public_path("tenants/{$rescode}/backup");
+        $backupDir = \App\Services\TenantBackupStorage::dir($rescode);
         
         $files = [];
         
@@ -1391,9 +1387,9 @@ class TenantManagementController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
         $rescode = $tenant->rescode;
-        $filepath = public_path("tenants/{$rescode}/backup/{$filename}");
+        $filepath = \App\Services\TenantBackupStorage::file($rescode, $filename);
         
-        if (!file_exists($filepath)) {
+        if (!$filepath) {
             abort(404, 'Backup file not found');
         }
         
@@ -1408,9 +1404,9 @@ class TenantManagementController extends Controller
         try {
             $tenant = Tenant::findOrFail($id);
             $rescode = $tenant->rescode;
-            $filepath = public_path("tenants/{$rescode}/backup/{$filename}");
+            $filepath = \App\Services\TenantBackupStorage::file($rescode, $filename);
             
-            if (!file_exists($filepath)) {
+            if (!$filepath) {
                 return redirect()->back()->with('error', 'Backup file not found');
             }
             

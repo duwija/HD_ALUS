@@ -1,72 +1,52 @@
 @extends('layout.main')
 @section('title','Backup File')
 @section('content')
+@php $kb = fn($b) => number_format($b / 1024, 1, ',', '.') . ' KB'; @endphp
 <section class="content-header">
 
+  <div class="alert alert-light border small mb-3">
+    <i class="fas fa-lock mr-1"></i> Backup konfigurasi router disimpan terenkripsi di storage server (tidak bisa diakses langsung dari internet)
+    selama <strong>{{ $retentionDays }} hari</strong>. Unduh file yang ingin disimpan lebih lama.
+  </div>
+
+  {{-- Backup konfigurasi MikroTik --}}
   <div class="card card-primary card-outline">
     <div class="card-header">
-      <h3 class="card-title">Backup File  </h3>
-      
+      <h3 class="card-title"><i class="fas fa-network-wired mr-1"></i> Backup Konfigurasi MikroTik</h3>
     </div>
-
-    <!-- /.card-header -->
     <div class="card-body">
-      <table id="example1" class="table table-bordered table-striped">
-
-        <thead >
+      <table class="table table-bordered table-striped table-sm">
+        <thead>
           <tr>
-            <th scope="col">#</th>
-            <th scope="col">Name</th>
-            <th scope="col">File Date</th>
-            <th scope="col">Action</th>
-            <!-- <th scope="col">Action</th> -->
+            <th>#</th>
+            <th>Router</th>
+            <th>Tanggal</th>
+            <th>RouterOS</th>
+            <th class="text-right">Ukuran</th>
+            <th>Aksi</th>
           </tr>
         </thead>
         <tbody>
-         @foreach($files as $file)
-         <tr>
-           <th scope="row">{{ $loop->iteration }}</th>
-           <td>   {{ $file->getFilename() }}</td>
-           <td> {{ date('Y-m-d H:i:s', $file->getMTime()) }} </td>
-           <td> 
-            <div class="row " >
-              <a class="btn btn-primary m-2" href="{{ route('file.download', $file->getFilename()) }}"> Download </a>
-              <form id="delete-form-{{ $loop->iteration }}" action="{{ route('file.delete', $file->getFilename()) }}" method="post">
-                @csrf
-                @method('DELETE')
-                <button class="btn btn-danger m-2" type="button" onclick="confirmDelete({{ $loop->iteration }}, '{{ $file->getFilename() }}')">Delete</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-        @endforeach
-
-      </tbody>
-    </table>
+        @forelse($routerBackups as $b)
+          <tr>
+            <td>{{ $loop->iteration }}</td>
+            <td><a href="{{ url('distrouter/' . $b->distrouter_id) }}#mk-backup">{{ $b->router_name }}</a></td>
+            <td>{{ $b->created_at->format('Y-m-d H:i:s') }}</td>
+            <td>{{ $b->ros_version ?: '-' }}</td>
+            <td class="text-right">{{ $b->size ? $kb($b->size) : '-' }}</td>
+            <td>
+              <a class="btn btn-primary btn-sm" href="{{ url('distrouter/' . $b->distrouter_id . '/config-backup/' . $b->id) }}"><i class="fas fa-download"></i> Download .rsc</a>
+            </td>
+          </tr>
+        @empty
+          <tr><td colspan="6" class="text-center text-muted">Belum ada backup konfigurasi router.</td></tr>
+        @endforelse
+        </tbody>
+      </table>
+      <small class="text-muted">Dibuat otomatis tiap hari 02:30 (hanya bila konfigurasi berubah). Backup terakhir tiap router selalu disimpan walau lebih dari {{ $retentionDays }} hari.</small>
+    </div>
   </div>
-</div>
 
 </section>
 
-@endsection
-
-@section('footer-scripts')
-<script>
-function confirmDelete(id, filename) {
-    Swal.fire({
-        title: 'Hapus File Backup?',
-        text: "File '" + filename + "' akan dihapus permanen!",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Ya, Hapus!',
-        cancelButtonText: 'Batal'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            document.getElementById('delete-form-' + id).submit();
-        }
-    });
-}
-</script>
 @endsection
