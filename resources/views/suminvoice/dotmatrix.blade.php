@@ -44,21 +44,23 @@
     /* Struk printer thermal 58 mm (area cetak ±48 mm) */
     @page { size: 58mm auto; margin: 0; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #eee; color: #000; font: 11px/1.35 "Courier New", Courier, monospace; }
+    /* Thermal mencetak tipis: semua teks hitam pekat & tebal, font sans-serif yang lebih berisi dari Courier */
+    body { margin: 0; background: #eee; color: #000; font: 700 12px/1.35 Arial, Helvetica, "Liberation Sans", sans-serif;
+           -webkit-print-color-adjust: exact; print-color-adjust: exact; -webkit-font-smoothing: none; }
     .receipt { width: 58mm; margin: 10px auto; padding: 3mm 4mm 5mm; background: #fff; }
     .center { text-align: center; }
     .right { text-align: right; }
-    .bold { font-weight: 700; }
-    .company { font-size: 14px; font-weight: 700; text-transform: uppercase; }
-    .small { font-size: 9.5px; }
-    .sep { border-top: 1px dashed #000; margin: 5px 0; }
-    .sep.double { border-top: 3px double #000; }
+    .bold { font-weight: 900; }
+    .company { font-size: 15px; font-weight: 900; text-transform: uppercase; }
+    .small { font-size: 10.5px; }
+    .sep { border-top: 2px dashed #000; margin: 5px 0; }
+    .sep.double { border-top: 4px double #000; }
     table { width: 100%; border-collapse: collapse; }
     td { padding: 1px 0; vertical-align: top; }
     .kv td:first-child { white-space: nowrap; padding-right: 4px; }
     .item-name { padding-top: 3px; }
-    .status { margin: 4px 0; padding: 3px 0; border: 1px solid #000; font-weight: 700; font-size: 13px; letter-spacing: 1px; }
-    .total td { font-size: 13px; font-weight: 700; padding-top: 3px; }
+    .status { margin: 4px 0; padding: 3px 0; border: 2px solid #000; font-weight: 900; font-size: 14px; letter-spacing: 1px; }
+    .total td { font-size: 14px; font-weight: 900; padding-top: 3px; }
     .qr svg { width: 26mm; height: 26mm; }
     .no-print { text-align: center; margin: 10px; }
     .no-print button { font: 13px sans-serif; padding: 6px 20px; cursor: pointer; }
