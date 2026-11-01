@@ -78,6 +78,13 @@ class MikrotikSyncController extends Controller
                     $distrouter->password, $distrouter->port,
                     $customer->pppoe
                 );
+            } elseif ($customer->id_status == 4) {
+                // Blocked → metode isolir tenant (disable / ganti profile)
+                Distrouter::mikrotik_isolir(
+                    $distrouter->ip, $distrouter->user,
+                    $distrouter->password, $distrouter->port,
+                    $customer->pppoe
+                );
             } else {
                 Distrouter::mikrotik_disable(
                     $distrouter->ip, $distrouter->user,

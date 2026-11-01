@@ -273,3 +273,4 @@ window.addEventListener('DOMContentLoaded', function() {
     if (first) loadLog(first);
 });
 </script>
+@endsection

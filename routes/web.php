@@ -112,6 +112,10 @@ Route::prefix('tagihan')->group(function() {
     });
 });
 
+// Captive portal isolir (publik) — tujuan redirect web proxy MikroTik untuk address-list isolir
+Route::get('/isolir', 'IsolirPortalController@show')->name('isolir.portal');
+Route::post('/isolir/cek', 'IsolirPortalController@lookup')->middleware('throttle:10,1')->name('isolir.portal.lookup');
+
 // Sales Portal Routes
 Route::prefix('sales')->group(function() {
     // Public routes (login & activation)
@@ -325,7 +329,10 @@ Route::post('/settings/auto-isolir', 'AutoIsolirSettingController@update')->name
 Route::post('/settings/auto-isolir/reminder', 'AutoIsolirSettingController@updateReminder')->name('settings.auto-isolir.reminder');
 Route::post('/settings/auto-isolir/inv-note', 'AutoIsolirSettingController@updateInvNote')->name('settings.auto-isolir.inv-note');
 Route::post('/settings/auto-isolir/auto-invoice', 'AutoIsolirSettingController@updateAutoInvoice')->name('settings.auto-isolir.auto-invoice');
-Route::post('/settings/auto-isolir/daily-report', 'AutoIsolirSettingController@updateDailyReport')->name('settings.auto-isolir.daily-report');
+Route::post('/settings/auto-isolir/isolir-method', 'AutoIsolirSettingController@updateIsolirMethod')->name('settings.auto-isolir.isolir-method');
+Route::get('/settings/auto-isolir/mikrotik-script', 'AutoIsolirSettingController@mikrotikScript')->name('settings.auto-isolir.mikrotik-script');
+Route::post('/settings/auto-isolir/notification','AutoIsolirSettingController@updateNotification')->name('settings.auto-isolir.notification');
+Route::post('/settings/auto-isolir/daily-report','AutoIsolirSettingController@updateDailyReport')->name('settings.auto-isolir.daily-report');
 Route::post('/settings/auto-isolir/daily-report/send', 'AutoIsolirSettingController@sendDailyReportNow')->name('settings.auto-isolir.daily-report.send');
 Route::get('/warestart', 'HomeController@warestart');
 
@@ -923,6 +930,7 @@ Route::get('/olt/health/top-rx/{id}','OltController@oltTopWorstRx');
 Route::get('/olt/health/distance-map/{id}','OltController@oltDistanceMap');
 Route::post('/olt/onuregister','OltController@configure');
 Route::post('/olt/onuregistercst','OltController@configurecst');
+Route::post('/olt/onuregister-cdata','OltController@configureCdata');
 
 Route::delete('/olt/delete/{oltId}/{oltPonIndex}/{onuId}','OltController@onudelete');
 Route::post('/olt/reboot/{oltId}/{oltPonIndex}/{onuId}','OltController@onureboot');

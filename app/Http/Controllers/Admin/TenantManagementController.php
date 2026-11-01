@@ -179,14 +179,7 @@ class TenantManagementController extends Controller
             $rows[] = $row;
         }
 
-        // Total pajak = jumlah pajak per tenant (tiap tenant dihitung & dibulatkan
-        // sendiri), supaya tile ringkasan sama persis dengan total tabel rincian.
-        $totals['tax'] = $this->computeTax(0);
-        foreach ($rows as $row) {
-            foreach (['dpp', 'ppn', 'bhp', 'uso', 'total_kewajiban'] as $k) {
-                $totals['tax'][$k] += $row['tax'][$k];
-            }
-        }
+        $totals['tax'] = $this->computeTax($totals['revenue_this_month']);
 
         return view('tenants.dashboard', [
             'rows' => $rows,

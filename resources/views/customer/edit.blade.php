@@ -1,5 +1,6 @@
 @extends('layout.main')
 @section('title','Edit Customer')
+@section('content')
 
 <script type="text/javascript">
   function copy_name()
@@ -50,7 +51,6 @@
       document.getElementById("customer_id").disabled=true;}
   </script>
 
-  @section('content')
   <section class="content-header">
 
     <div class="card card-primary card-outline">

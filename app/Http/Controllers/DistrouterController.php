@@ -1141,6 +1141,7 @@ public function show($id)
       //  dd($request);
 
         $validatedData = $request->validate([
+            'name'     => ['required', 'string', 'max:255', \Illuminate\Validation\Rule::unique('distrouters', 'name')->ignore($id)],
             'ip'       => 'required|ip',
             'port'     => 'required|integer|min:1|max:65535',
             'web'      => 'nullable|integer|min:1|max:65535',
@@ -1150,6 +1151,7 @@ public function show($id)
         ]);
 
         $updateData = [
+            'name'       => trim($validatedData['name']),
             'ip'         => $validatedData['ip'],
             'port'       => $validatedData['port'],
             'web'        => $validatedData['web'] ?? null,

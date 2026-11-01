@@ -187,7 +187,11 @@ class CreateInvJob implements ShouldQueue
 
 
             DB::commit();
-            if ($result) {
+            $notifyCustomer = tenant_notify_enabled('invoice_create');
+            if (!$notifyCustomer) {
+                $notif = 'Notification OFF (setting tenant)';
+            }
+            if ($result && $notifyCustomer) {
 
                 $encryptedUrl = Crypt::encryptString($customer->id);
                 $duedate = $due_date ?: 'N/A';
@@ -264,7 +268,7 @@ class CreateInvJob implements ShouldQueue
 
                     try {
                         Mail::to($customer->email)->send(new EmailNotification($data));
-                        $notif='Notification by Email '.$e->getMessage();
+                        $notif='Notification by Email';
                     } catch (\Exception $e) {
                        \Log::error("Gagal kirim email ke {$customer->email} untuk {$customer->name} ({$customer->customer_id}): " . $e->getMessage());
                        $notif='Notification by Email ERROR';
@@ -274,8 +278,8 @@ class CreateInvJob implements ShouldQueue
            }
        }
 
-       // ── FCM Push Notification (selalu dikirim jika ada fcm_token) ──
-       if (!empty($customer->fcm_token)) {
+       // ── FCM Push Notification (selalu dikirim jika ada fcm_token, kecuali notifikasi dimatikan tenant) ──
+       if ($notifyCustomer && !empty($customer->fcm_token)) {
            try {
                \App\Services\FcmService::send(
                    $customer->fcm_token,

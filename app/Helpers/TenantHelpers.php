@@ -86,6 +86,23 @@ if (!function_exists('tenant_has_feature')) {
     }
 }
 
+if (!function_exists('tenant_notify_enabled')) {
+    /**
+     * Cek saklar notifikasi pelanggan per tenant (diatur di /settings/auto-isolir).
+     * Key di isp_master.tenants.features: notif_invoice_create / notif_payment.
+     * Key belum ada → dianggap aktif (perilaku lama).
+     *
+     * @param string $event invoice_create | payment
+     * @return bool
+     */
+    function tenant_notify_enabled($event)
+    {
+        $features = tenant('features') ?? [];
+        $key = 'notif_' . $event;
+        return !array_key_exists($key, $features) || (bool) $features[$key];
+    }
+}
+
 if (!function_exists('tenant_config')) {
     /**
      * Get tenant config value

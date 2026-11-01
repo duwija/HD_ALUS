@@ -123,7 +123,7 @@ class IsolirJob implements ShouldQueue
         
 
 
-        \App\Distrouter::mikrotik_disable($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
+        \App\Distrouter::mikrotik_isolir($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
 
 
 

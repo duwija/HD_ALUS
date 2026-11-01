@@ -146,4 +146,13 @@ return [
     'oidOltPortTxBias'      => '.1.3.6.1.4.1.34592.1.5.1.1.2.17.2.1.3.1.0',
     'oidOltPortTxPower'     => '.1.3.6.1.4.1.34592.1.5.1.1.2.17.2.1.4.1.0',
     'oidOltPortRxPower'     => '.1.3.6.1.4.1.34592.1.5.1.1.2.17.2.1.5.1.0',
+
+    // Autofind (ONT belum terdaftar) — .2.8.4.7.1, ditemukan live 2026-10-31 di OLT
+    // PESAGI 01/02 (FD1608Y) dengan mencari SN ONT yang baru dihapus; isinya cocok 1:1
+    // dengan CLI "show ont autofind all". Index sama dengan tabel ONT tapi suku terakhir
+    // = urutan autofind per PON, bukan ONT-ID: decode_cdata17409_index() -> port, urutan.
+    // Kolom 4 = password SN, 5/6 = LOID/password LOID, 8/9 = versi SW/HW.
+    'oidOnuUncfgType'   => '.1.3.6.1.4.1.17409.2.8.4.7.1.2', // Equipment ID, mis. "F609V9.0"
+    'oidOnuUncfgSn'     => '.1.3.6.1.4.1.17409.2.8.4.7.1.3', // "ZTEG-CFEAF9B1" (pakai tanda -)
+    'oidOnuUncfgTime'   => '.1.3.6.1.4.1.17409.2.8.4.7.1.7', // DateAndTime 11 byte (07EA 0A 1F 16 19 30 ..)
 ];

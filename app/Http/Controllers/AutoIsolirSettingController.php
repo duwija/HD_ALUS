@@ -66,7 +66,128 @@ class AutoIsolirSettingController extends Controller
             'autoInvoicePeriod' => ($features['auto_invoice_period'] ?? 'current') === 'next' ? 'next' : 'current',
             'autoInvoiceLast'   => $features['auto_invoice_last'] ?? null,
             'dailyReportEmails' => DailyReport::normalizeEmails($features['daily_report_emails'] ?? []),
+            'isolirMethod'  => \App\Distrouter::isolirSetting()[0],
+            'isolirProfile' => \App\Distrouter::isolirSetting()[1],
+            // Key belum ada → aktif (sama dengan tenant_notify_enabled)
+            'notifInvoiceCreate' => !array_key_exists('notif_invoice_create', $features) || (bool) $features['notif_invoice_create'],
+            'notifPayment'       => !array_key_exists('notif_payment', $features) || (bool) $features['notif_payment'],
         ]);
+    }
+
+    /**
+     * Metode isolir MikroTik: disable secret PPPoE, atau ganti profile secret ke profile isolir.
+     * Dibaca lewat Distrouter::isolirSetting() di mikrotik_isolir() / mikrotik_enable().
+     */
+    public function updateIsolirMethod(Request $request)
+    {
+        $this->authorizeAdmin();
+
+        $request->validate([
+            'isolir_method'  => 'required|in:disable,profile',
+            'isolir_profile' => ['nullable', 'string', 'max:50', 'regex:/^[A-Za-z0-9_.\-]+$/'],
+        ], [
+            'isolir_profile.regex' => 'Nama profile hanya boleh huruf, angka, titik, strip, dan underscore.',
+        ]);
+
+        $method  = $request->input('isolir_method');
+        $profile = trim((string) $request->input('isolir_profile')) ?: 'ISOLIR';
+
+        $tenant = $this->currentTenantRow();
+        [$oldMethod, $oldProfile] = \App\Distrouter::isolirSetting();
+
+        DB::connection('isp_master')->update(
+            "UPDATE tenants SET features = JSON_SET(COALESCE(NULLIF(features, ''), '{}'), '$.isolir_method', ?, '$.isolir_profile', ?), updated_at = ? WHERE id = ?",
+            [$method, $profile, now(), $tenant->id]
+        );
+
+        $user = Auth::user();
+        Log::channel('isolir')->info(sprintf(
+            '[TenantSetting] tenant=%s isolir_method %s/%s -> %s/%s oleh user #%s (%s) ip=%s',
+            $tenant->domain, $oldMethod, $oldProfile, $method, $profile, $user->id, $user->name, $request->ip()
+        ));
+
+        return redirect('settings/auto-isolir')->with('success', $method === 'profile'
+            ? "Metode isolir: ganti profile ke {$profile}."
+            : 'Metode isolir: disable secret PPPoE.');
+    }
+
+    /**
+     * Generator script firewall + web proxy MikroTik untuk captive portal /isolir.
+     * Hanya menampilkan script (copy-paste ke terminal router), tidak mengubah router.
+     */
+    public function mikrotikScript(Request $request)
+    {
+        $this->authorizeAdmin();
+
+        $request->validate([
+            'ros'        => 'nullable|in:6,7',
+            'proxy_port' => 'nullable|integer|between:1025,65535',
+            'extra'      => 'nullable|string|max:2000',
+        ]);
+
+        $domain = strtolower((string) tenant_config('domain_name', env('DOMAIN_NAME')));
+        [$method, $profile] = \App\Distrouter::isolirSetting();
+        [$extraHosts, $invalidHosts] = \App\Services\IsolirScriptBuilder::parseHosts($request->input('extra'));
+
+        $opt = [
+            'domain'      => $domain,
+            'profile'     => $profile,
+            'ros'         => (int) $request->input('ros', 7),
+            'proxy_port'  => (int) $request->input('proxy_port', 8082),
+            'extra_hosts' => $extraHosts,
+        ];
+
+        return view('admin.isolir-script', [
+            'opt'          => $opt,
+            'method'       => $method,
+            'extra'        => $request->input('extra', ''),
+            'invalidHosts' => $invalidHosts,
+            'domainValid'  => \App\Services\IsolirScriptBuilder::isValidHost($domain),
+            'gatewayHosts' => \App\Services\IsolirScriptBuilder::gatewayHosts(),
+            'script'       => \App\Services\IsolirScriptBuilder::build($opt),
+            'rollback'     => \App\Services\IsolirScriptBuilder::rollback(),
+        ]);
+    }
+
+    /**
+     * Saklar notifikasi pelanggan saat invoice dibuat / saat pelunasan.
+     * Dibaca lewat tenant_notify_enabled() di CreateInvJob, SuminvoiceController, XenditCallbackController.
+     */
+    public function updateNotification(Request $request)
+    {
+        $this->authorizeAdmin();
+
+        $request->validate([
+            'notif_invoice_create' => 'required|boolean',
+            'notif_payment'        => 'required|boolean',
+        ]);
+        $onCreate  = $request->boolean('notif_invoice_create');
+        $onPayment = $request->boolean('notif_payment');
+
+        $tenant = $this->currentTenantRow();
+        DB::connection('isp_master')->table('tenants')
+            ->where('id', $tenant->id)
+            ->update([
+                'features'   => DB::raw("JSON_SET(COALESCE(NULLIF(features, ''), '{}'), '$.notif_invoice_create', " . ($onCreate ? 'true' : 'false') . ", '$.notif_payment', " . ($onPayment ? 'true' : 'false') . ')'),
+                'updated_at' => now(),
+            ]);
+
+        $user = Auth::user();
+        Log::channel('notif')->info(sprintf(
+            '[TenantSetting] tenant=%s notif_invoice_create=%s notif_payment=%s oleh user #%s (%s) ip=%s',
+            $tenant->domain,
+            $onCreate ? 'ON' : 'OFF',
+            $onPayment ? 'ON' : 'OFF',
+            $user->id,
+            $user->name,
+            $request->ip()
+        ));
+
+        return redirect('settings/auto-isolir')->with('success', sprintf(
+            'Notifikasi pelanggan disimpan: saat invoice dibuat %s, saat pelunasan %s.',
+            $onCreate ? 'AKTIF' : 'NONAKTIF',
+            $onPayment ? 'AKTIF' : 'NONAKTIF'
+        ));
     }
 
     /**

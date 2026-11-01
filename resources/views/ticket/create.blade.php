@@ -7,6 +7,7 @@
 @push('summernote-script')
 <script src="{{ url('dashboard/plugins/summernote/summernote-bs4.min.js') }}"></script>
 @endpush
+@section('content')
 <script type="text/javascript">
   function copy_name()
   {
@@ -20,7 +21,6 @@
   }
 </script>
 
-@section('content')
 <section class="content-header">
 
   <div class="card card-primary card-outline">

@@ -2722,85 +2722,15 @@ if (!empty($request['tax']) && $request['tax'] != 0) {
 
 
 
-$sumamount = $totalAmount;
-
-$encryptedurl = Crypt::encryptString($customers->id);
-if($customers->notification == 1)
-{
-    // $response = qontak_whatsapp_helper_info_new_inv(
-    //     $customers->phone,
-    //     $customers->name,
-    //     $customers->customer_id,
-    //     $sumamount,
-    //     $request->due_date,
-    //     "/invoice/cst/" . $encryptedurl
-    // );
-
-
- $message = "*[Informasi Pembayaran Internet]*";
- $message .= "\n\n";
- $message .= "Yth. " . $customers->name . ",";
- $message .= "\n\n";
- $message .= "Tagihan Anda dengan Customer ID (CID) *" . $customers->customer_id . "* telah diterbitkan.";
- $message .= "\n*Total Tagihan:* Rp." . number_format($sumamount, 0, ',', '.') . "";
- $message .= "\n*Batas Pembayaran:* " . $request->due_date;
- $message .= "\n\n";
- $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
- $message .= "\n" . \App\Services\WaService::maybeShortenUrlForGateway(
-     'https://' . tenant_config('domain_name', env("DOMAIN_NAME")) . '/invoice/cst/' . $encryptedurl
- );
- $message .= "\n\n";
- $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
- $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
- $message .= "\n\n";
- $message .= "".config("app.signature")."";
- $msgresult = \App\Services\WaService::sendPaymentConfirmationOrGateway(
-     $customers->phone,
-     $customers->name,
-     (string) ($latest_number ?? ''),
-     (string) $customers->customer_id,
-     $sumamount,
-     '/invoice/cst/' . $encryptedurl,
-     $message,
-     'WA_TAMPLATE_ID_1',
-     [
-         'due_date' => $request->due_date,
-         'billing_month' => Carbon::parse($request->invoice_date)->translatedFormat('F Y'),
-     ]
- );
-
-} elseif ($customers->notification == 2) {
-
-
-   if (!empty($customers->email)) {
-    $data = [
-        'phone' => $customers->phone,
-        'name' => $customers->name,
-        'customer_id' => $customers->customer_id,
-        'number' => "#" . $latest_number,
-        'total_amount' => $sumamount,
-        'date' => $date,
-        'due_date' => $request->due_date,
-        'url' => "/invoice/cst/" . $encryptedurl,
-    ];
-
-    try {
-        Mail::to($customers->email)->send(new EmailNotification($data));
-    } catch (\Exception $e) {
-        \Log::error("Gagal kirim email ke {$customers->email}: " . $e->getMessage());
-    }
-}
-
-
-}
-
-
-
-
-
-
 DB::commit();
 $msg = "Success create invoice.";
+
+// Notifikasi dikirim setelah commit agar pelanggan tidak menerima info invoice yang ternyata batal tersimpan
+try {
+    $this->notifyNewInvoice($customers, (string) $latest_number, $totalAmount, $request->due_date, $request->invoice_date, $date);
+} catch (\Throwable $e) {
+    \Log::channel('notif')->error("[NEW INV] Notifikasi gagal CID {$customers->customer_id}: " . $e->getMessage());
+}
 //Disable WA
 $msgresult="";
 // $msgresult= \App\Suminvoice::wa_payment($customers->phone,$message);
@@ -2819,6 +2749,109 @@ return redirect ('invoice/'.$request->id_customer)->with('info',$msg);
 
 
 
+}
+
+/**
+ * Notifikasi invoice baru untuk invoice manual — sama dengan alur CreateInvJob (invoice otomatis).
+ */
+private function notifyNewInvoice($customers, string $invoiceNo, $amount, $dueDate, $invoiceDate, $date): void
+{
+    if (!tenant_notify_enabled('invoice_create')) {
+        return;
+    }
+
+    $encryptedurl = Crypt::encryptString($customers->id);
+    $billingMonth = Carbon::parse($invoiceDate)->translatedFormat('F Y');
+
+    if ($customers->notification == 1) {
+        if (\App\Services\WaService::hasQontakConfig('WA_TAMPLATE_ID_2')) {
+            qontak_whatsapp_helper_info_new_inv(
+                $customers->phone,
+                $customers->name,
+                $customers->customer_id,
+                $amount,
+                $dueDate,
+                "/invoice/cst/" . $encryptedurl,
+                $invoiceNo,
+                $billingMonth
+            );
+        } else {
+            $message = "*[Informasi Pembayaran Internet]*";
+            $message .= "\n\n";
+            $message .= "Yth. " . $customers->name . ",";
+            $message .= "\n\n";
+            $message .= "Tagihan Anda dengan Customer ID (CID) *" . $customers->customer_id . "* telah diterbitkan.";
+            $message .= "\n*Total Tagihan:* Rp." . number_format($amount, 0, ',', '.') . "";
+            $message .= "\n*Batas Pembayaran:* " . $dueDate;
+            $message .= "\n\n";
+            $message .= "Untuk informasi lebih lanjut, silakan klik link berikut:";
+            $message .= "\n" . \App\Services\WaService::maybeShortenUrlForGateway(
+                'https://' . tenant_config('domain_name', env("DOMAIN_NAME")) . '/invoice/cst/' . $encryptedurl
+            );
+            $message .= "\n\n";
+            $message .= "Jika sudah melakukan pembayaran, abaikan pesan ini.";
+            $message .= "\nJika ada pertanyaan, hubungi CS kami di ".tenant_config('payment_wa', env("PAYMENT_WA"));
+            $message .= "\n\n";
+            $message .= "".config("app.signature")."";
+
+            // Titiwa (WA_TAMPLATE_ID_2) jika dikonfigurasi, fallback ke WA gateway biasa
+            \App\Services\WaService::sendPaymentConfirmationOrGateway(
+                $customers->phone,
+                $customers->name,
+                $invoiceNo,
+                (string) $customers->customer_id,
+                $amount,
+                '/invoice/cst/' . $encryptedurl,
+                $message,
+                'WA_TAMPLATE_ID_2',
+                [
+                    'due_date' => $dueDate,
+                    'billing_month' => $billingMonth,
+                ]
+            );
+        }
+    } elseif ($customers->notification == 2 && !empty($customers->email)) {
+        $data = [
+            'phone' => $customers->phone,
+            'name' => $customers->name,
+            'customer_id' => $customers->customer_id,
+            'number' => "#" . $invoiceNo,
+            'total_amount' => $amount,
+            'date' => $date,
+            'due_date' => $dueDate,
+            'url' => "/invoice/cst/" . $encryptedurl,
+        ];
+
+        try {
+            Mail::to($customers->email)->send(new EmailNotification($data));
+        } catch (\Exception $e) {
+            \Log::error("Gagal kirim email ke {$customers->email}: " . $e->getMessage());
+        }
+    }
+
+    // FCM Push Notification (selalu dikirim jika ada fcm_token), sama dengan CreateInvJob
+    if (!empty($customers->fcm_token)) {
+        try {
+            \App\Services\FcmService::send(
+                $customers->fcm_token,
+                '📄 Tagihan Baru Tersedia',
+                'Tagihan untuk ' . $customers->name . ' sebesar Rp ' . number_format($amount, 0, ',', '.') . ' telah diterbitkan.',
+                [
+                    'type'        => 'new_invoice',
+                    'customer_id' => $customers->customer_id,
+                    'amount'      => $amount,
+                    'due_date'    => $dueDate ?? '',
+                    'url'         => '/tagihan',
+                ]
+            );
+        } catch (\App\Exceptions\FcmTokenUnregisteredException $eFcmUnreg) {
+            $customers->fcm_token = null;
+            $customers->save();
+            \Log::channel('notif')->warning('[FCM] Token UNREGISTERED — dihapus dari DB | CID ' . $customers->customer_id . ' | ' . $customers->name);
+        } catch (\Exception $eFcm) {
+            \Log::channel('notif')->error('[FCM] Invoice manual error: ' . $eFcm->getMessage());
+        }
+    }
 }
 
 public function testwa()
@@ -3694,7 +3727,38 @@ $jumlah_rupiah = number_format($jumlah, 0, ',', '.'); // Format menjadi rupiah
 
 $encryptedurl = Crypt::encryptString($customers->id);
 
-if($customers->notification == 1)
+
+
+
+
+
+
+
+$notif_group = "[OFFLINE PAYMENT]";
+$notif_group .= "\n\nPembayaran dari pelanggan ";
+$notif_group .= "\nCID :" . $customers->customer_id. "" ;
+$notif_group .= "\nNama :" . $customers->name."" ;
+$notif_group .= "\nSUDAH DITERIMA";
+$notif_group .= "\nJumlah: Rp " . $jumlah_rupiah;
+$notif_group .= "\nOleh : ". $users->name."";
+$notif_group .= "\n\nUntuk melihat detail pembayaran, silakan klik tautan berikut:";
+$notif_group .= "\n👉 " . url("/suminvoice/" . $request->tempcode);
+$notif_group .= "\n\nTerima kasih";
+$notif_group .= "\n~ " . config("app.signature") . " ~";
+
+
+
+
+
+
+DB::commit();
+Log::channel('payment')->info("[OFFLINE PAYMENT ] Pelanggan ID: {$customers->customer_id}  |  INV no: ".$request->number." | ".$invstatus." | ".$logMessage);
+
+// Notifikasi ke pelanggan dikirim setelah commit agar tidak ada info lunas untuk pembayaran yang batal tersimpan
+try {
+if (!tenant_notify_enabled('payment')) {
+    // dimatikan dari /settings/auto-isolir
+} elseif($customers->notification == 1)
 {
     $message  = "\n\n";
     $message .= "\nPelanggan Yth. ";
@@ -3781,32 +3845,9 @@ if($customers->notification == 1)
     );
 
 }
-
-
-
-
-
-
-
-$notif_group = "[OFFLINE PAYMENT]";
-$notif_group .= "\n\nPembayaran dari pelanggan ";
-$notif_group .= "\nCID :" . $customers->customer_id. "" ;
-$notif_group .= "\nNama :" . $customers->name."" ;
-$notif_group .= "\nSUDAH DITERIMA";
-$notif_group .= "\nJumlah: Rp " . $jumlah_rupiah;
-$notif_group .= "\nOleh : ". $users->name."";
-$notif_group .= "\n\nUntuk melihat detail pembayaran, silakan klik tautan berikut:";
-$notif_group .= "\n👉 " . url("/suminvoice/" . $request->tempcode);
-$notif_group .= "\n\nTerima kasih";
-$notif_group .= "\n~ " . config("app.signature") . " ~";
-
-
-
-
-
-
-DB::commit();
-Log::channel('payment')->info("[OFFLINE PAYMENT ] Pelanggan ID: {$customers->customer_id}  |  INV no: ".$request->number." | ".$invstatus." | ".$logMessage);
+} catch (\Throwable $eNotif) {
+    \Log::channel('notif')->error("[OFFLINE PAYMENT] Notifikasi gagal CID {$customers->customer_id}: " . $eNotif->getMessage());
+}
  //Disable WA
 // $msg .="\n Wa to Customer : ".$response;
 

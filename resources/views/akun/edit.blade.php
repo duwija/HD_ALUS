@@ -1,5 +1,6 @@
 @extends('layout.main')
 @section('title',' Site')
+@section('content')
 
 <script type="text/javascript">
 
@@ -9,7 +10,6 @@
 
   }
 </script>
-@section('content')
 <section class="content-header">
 
   <div class="card card-primary card-outline">

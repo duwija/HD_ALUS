@@ -25,6 +25,213 @@ class Distrouter extends Model
 		return $this->hasmany('\App\Customer', 'id_distrouter');
 	}
 
+	// Pool & alamat untuk profile isolir yang dibuat otomatis bila belum ada di router
+	const ISOLIR_POOL_NAME   = 'ISOLIR';
+	const ISOLIR_POOL_RANGES = '172.20.0.2-172.20.255.254';
+	const ISOLIR_LOCAL_ADDR  = '172.20.0.1';
+	const ISOLIR_DNS         = '8.8.8.8,1.1.1.1';
+	const ISOLIR_SUBNET      = '172.20.0.0/16';
+
+	/**
+	 * Metode isolir tenant (Settings → Metode Isolir), disimpan di isp_master.tenants.features:
+	 *   isolir_method  : disable (default) | profile
+	 *   isolir_profile : nama profile PPP isolir (default ISOLIR)
+	 *
+	 * @return array{0:string,1:string} [method, profileName]
+	 */
+	public static function isolirSetting(): array
+	{
+		$features = tenant('features') ?? [];
+		$method   = ($features['isolir_method'] ?? 'disable') === 'profile' ? 'profile' : 'disable';
+		$profile  = trim((string) ($features['isolir_profile'] ?? '')) ?: 'ISOLIR';
+
+		return [$method, $profile];
+	}
+
+	/**
+	 * Jalankan perintah API dan lempar exception bila router membalas !trap
+	 * (library tidak melempar sendiri, pesan error ada di ['after']['message']).
+	 */
+	private static function apiWrite(Client $client, Query $query): array
+	{
+		$out = $client->query($query)->read();
+		if (isset($out['after']['message'])) {
+			throw new \RuntimeException($out['after']['message']);
+		}
+		return $out;
+	}
+
+	/**
+	 * Pastikan profile isolir ada di router. Jika belum: buat pool ISOLIR (172.20.0.0/16)
+	 * lalu profile isolir yang memakai pool tersebut dan memasukkan pelanggan ke address-list "isolir".
+	 */
+	private static function ensureIsolirProfile(Client $client, string $profile): void
+	{
+		$exists = $client->query((new Query('/ppp/profile/print'))->where('name', $profile))->read();
+		if (!empty($exists[0]['.id'])) {
+			return;
+		}
+
+		$pool = $client->query((new Query('/ip/pool/print'))->where('name', self::ISOLIR_POOL_NAME))->read();
+		if (empty($pool[0]['.id'])) {
+			static::apiWrite($client, (new Query('/ip/pool/add'))
+				->equal('name', self::ISOLIR_POOL_NAME)
+				->equal('ranges', self::ISOLIR_POOL_RANGES)
+				->equal('comment', 'Pool isolir (dibuat otomatis oleh billing)'));
+		}
+
+		static::apiWrite($client, (new Query('/ppp/profile/add'))
+			->equal('name', $profile)
+			->equal('local-address', self::ISOLIR_LOCAL_ADDR)
+			->equal('remote-address', self::ISOLIR_POOL_NAME)
+			->equal('address-list', 'isolir')
+			->equal('rate-limit', '64k/64k')
+			->equal('dns-server', self::ISOLIR_DNS)
+			->equal('comment', 'Profile isolir (dibuat otomatis oleh billing)'));
+
+		\Log::channel('isolir')->info("[ISOLIR] Profile '{$profile}' + pool " . self::ISOLIR_POOL_NAME . " dibuat otomatis di router.");
+	}
+
+	/**
+	 * Isolir pelanggan (status Blocked) sesuai metode tenant:
+	 *  - disable : disable secret PPPoE (sama dengan mikrotik_disable)
+	 *  - profile : ganti profile secret ke profile isolir, secret tetap enable, sesi aktif diputus
+	 * Pelanggan Inactive/terminate tetap memakai mikrotik_disable, bukan fungsi ini.
+	 */
+	public static function mikrotik_isolir($ip, $user, $pass, $port, $cid)
+	{
+		[$method, $isolirProfile] = static::isolirSetting();
+
+		if ($method !== 'profile') {
+			return static::mikrotik_disable($ip, $user, $pass, $port, $cid);
+		}
+
+		try {
+			$client = new Client([
+				'host' => $ip,
+				'user' => $user,
+				'pass' => $pass,
+				'port' => $port
+			]);
+
+			static::ensureIsolirProfile($client, $isolirProfile);
+
+			$secrets = $client->query((new Query('/ppp/secret/print'))->where('name', $cid))->read();
+
+			$wasDisabled = null;
+			$oldProfile  = null;
+			foreach ($secrets as $secret) {
+				$wasDisabled = $secret['disabled'] ?? 'false';
+				$oldProfile  = $secret['profile'] ?? null;
+
+				static::apiWrite($client, (new Query('/ppp/secret/set'))
+					->equal('.id', $secret['.id'])
+					->equal('profile', $isolirProfile)
+					->equal('disabled', 'false'));
+			}
+
+			// Putus sesi aktif supaya modem login ulang dengan profile isolir
+			if (!empty($secrets)) {
+				$actives = $client->query((new Query('/ppp/active/print'))->where('name', $cid))->read();
+				foreach ($actives as $active) {
+					$client->query((new Query('/ppp/active/remove'))->equal('.id', $active['.id']))->read();
+				}
+			}
+
+			static::logPppoeStatusChange($cid, $wasDisabled, 'false');
+			static::logPppoeProfileChange($cid, $oldProfile, $isolirProfile);
+
+		} catch (Exception $ex) {
+			throw new \RuntimeException('MikroTik isolir (profile) failed for ' . $cid . ': ' . $ex->getMessage(), 0, $ex);
+		}
+	}
+
+	/**
+	 * Profile secret sebelum diisolir, diambil dari Customerlog yang ditulis mikrotik_isolir()
+	 * (topic pppoe_status, "PPPoE Profile" old → profile isolir). Banyak secret di router memakai
+	 * profile yang namanya beda dari nama plan billing (dengan pool IP sendiri), jadi kembali ke
+	 * nama plan bisa mengubah kecepatan/pool. Return null bila tidak ada catatan atau profile
+	 * tersebut sudah tidak ada di router.
+	 */
+	private static function profileBeforeIsolir(Client $client, string $cid, string $isolirProfile): ?string
+	{
+		$customer = \App\Customer::withTrashed()->where('pppoe', $cid)->first();
+		if (!$customer) {
+			return null;
+		}
+
+		$logs = \App\Customerlog::where('id_customer', $customer->id)
+			->where('topic', 'pppoe_status')
+			->orderByDesc('id')
+			->limit(50)
+			->get(['updates']);
+
+		$candidate = null;
+		foreach ($logs as $log) {
+			$change = json_decode((string) $log->updates, true)['PPPoE Profile'] ?? null;
+			if (($change['new'] ?? null) === $isolirProfile && !empty($change['old']) && $change['old'] !== $isolirProfile) {
+				$candidate = $change['old'];
+				break;
+			}
+		}
+		if ($candidate === null) {
+			return null;
+		}
+
+		$exists = $client->query((new Query('/ppp/profile/print'))->where('name', $candidate))->read();
+		return !empty($exists[0]['.id']) ? $candidate : null;
+	}
+
+	/**
+	 * Kembalikan profile secret yang sedang di profile isolir ke profile sebelum diisolir;
+	 * bila tidak tercatat, ke profile paket (nama plan pelanggan).
+	 * Return true bila profile diubah (sesi perlu diputus agar kecepatan paket berlaku).
+	 */
+	private static function restoreProfileFromIsolir(Client $client, array $secret, string $cid): bool
+	{
+		[, $isolirProfile] = static::isolirSetting();
+
+		if (($secret['profile'] ?? null) !== $isolirProfile) {
+			return false;
+		}
+
+		$target = static::profileBeforeIsolir($client, $cid, $isolirProfile);
+
+		if ($target === null) {
+			$customer = \App\Customer::withTrashed()->where('pppoe', $cid)->first();
+			$plan     = $customer ? \App\Plan::withTrashed()->find($customer->id_plan) : null;
+			if (!$plan || trim((string) $plan->name) === '') {
+				throw new \RuntimeException("Plan pelanggan {$cid} tidak ditemukan, profile tidak bisa dikembalikan dari {$isolirProfile}");
+			}
+
+			// Pastikan profile paket ada di router (sama seperti saat pelanggan dibuat)
+			static::mikrotik_addprofile_client($client, $plan->name, $plan->speed, $plan->description);
+			$target = $plan->name;
+		}
+
+		static::apiWrite($client, (new Query('/ppp/secret/set'))
+			->equal('.id', $secret['.id'])
+			->equal('profile', $target));
+
+		static::logPppoeProfileChange($cid, $isolirProfile, $target);
+
+		return true;
+	}
+
+	/** Versi mikrotik_addprofile yang memakai koneksi yang sudah terbuka. */
+	private static function mikrotik_addprofile_client(Client $client, $name, $limit, $comment): void
+	{
+		$profiles = $client->query((new Query('/ppp/profile/print'))->where('name', $name))->read();
+		if (!empty($profiles[0]['.id'])) {
+			return;
+		}
+
+		static::apiWrite($client, (new Query('/ppp/profile/add'))
+			->equal('name', $name)
+			->equal('rate-limit', $limit)
+			->equal('comment', $comment));
+	}
+
 	public static function mikrotik_connection ($host,$user,$pass,$port)
 	{
 		try {
@@ -144,7 +351,23 @@ class Distrouter extends Model
 					$query_enable = (new Query('/ppp/secret/set'))
 					->equal('.id', $user['.id'])
 					->equal('disabled', 'false');
+					// Secret yang sedang di profile isolir dikembalikan ke profile paket
+					[, $isolirProfile] = static::isolirSetting();
+					$restoreProfile = ($user['profile'] ?? null) === $isolirProfile && !empty($profile);
+					if ($restoreProfile) {
+						// Utamakan profile sebelum diisolir (bisa beda nama dengan plan)
+						$profile = static::profileBeforeIsolir($client, $cid, $isolirProfile) ?? $profile;
+						$query_enable->equal('profile', $profile);
+					}
 					$client->query($query_enable)->read();
+
+					if ($restoreProfile) {
+						static::logPppoeProfileChange($cid, $isolirProfile, $profile);
+						$actives = $client->query((new Query('/ppp/active/print'))->where('name', $cid))->read();
+						foreach ($actives as $active) {
+							$client->query((new Query('/ppp/active/remove'))->equal('.id', $active['.id']))->read();
+						}
+					}
 				}
 			} else {
 				$query_add = (new Query('/ppp/secret/add'))
@@ -300,6 +523,7 @@ class Distrouter extends Model
 			$secrets = $client->query($query)->read();
 
 			$wasDisabled = null;
+			$profileRestored = false;
 			foreach ($secrets as $secret) {
 
 				$wasDisabled = $secret['disabled'] ?? 'false';
@@ -310,6 +534,19 @@ class Distrouter extends Model
 				->equal('disabled', 'false');
 
 				$client->query($query)->read();
+
+				// Jika diisolir dengan metode profile → kembalikan ke profile paket (nama plan)
+				if (static::restoreProfileFromIsolir($client, $secret, $cid)) {
+					$profileRestored = true;
+				}
+			}
+
+			// Putus sesi yang masih memakai profile isolir agar login ulang dengan profile paket
+			if ($profileRestored) {
+				$actives = $client->query((new Query('/ppp/active/print'))->where('name', $cid))->read();
+				foreach ($actives as $active) {
+					$client->query((new Query('/ppp/active/remove'))->equal('.id', $active['.id']))->read();
+				}
 			}
 
 			static::logPppoeStatusChange($cid, $wasDisabled, 'false');
@@ -410,6 +647,30 @@ class Distrouter extends Model
 			]);
 		} catch (\Exception $e) {
 			\Log::warning("Gagal mencatat Customerlog pppoe_status untuk {$cid}: " . $e->getMessage());
+		}
+	}
+
+
+	/** Catat perubahan profile PPPoE (isolir ↔ paket) ke Customerlog. */
+	private static function logPppoeProfileChange($cid, $fromProfile, $toProfile)
+	{
+		if ($fromProfile === null || $fromProfile === $toProfile) return;
+
+		try {
+			$customer = \App\Customer::where('pppoe', $cid)->first();
+			if (!$customer) return;
+
+			\App\Customerlog::create([
+				'id_customer' => $customer->id,
+				'date'        => now(),
+				'updated_by'  => 'System (MikroTik)',
+				'topic'       => 'pppoe_status',
+				'updates'     => json_encode([
+					'PPPoE Profile' => ['old' => $fromProfile, 'new' => $toProfile],
+				]),
+			]);
+		} catch (\Exception $e) {
+			\Log::warning("Gagal mencatat Customerlog pppoe_profile untuk {$cid}: " . $e->getMessage());
 		}
 	}
 
@@ -523,6 +784,7 @@ class Distrouter extends Model
 		$status['uptime']  = 'Unknow';
 		$status['user']  = 'User not Found';
 		$status['ip_count']  = 0;
+		$status['profile']   = null;
 
 		
 		
@@ -543,6 +805,7 @@ class Distrouter extends Model
 					'false' => 'Enable',
 					default => 'Unknown',
 				};
+				$status['profile'] = $secret[0]['profile'] ?? null;
 
             // 2. Get PPP active
 				$active = $client->query((new Query('/ppp/active/print'))->where('name', $cid))->read();

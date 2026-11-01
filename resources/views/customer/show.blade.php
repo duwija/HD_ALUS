@@ -189,7 +189,9 @@
 
              <tr>
                <th style="width: 25%" class="text-right">Plan :</th>
-               <td>{{$customer->plan_name->name}} ( Rp. {{number_format($customer->plan_name->price, 0, ',', '.')}} )</td>
+               <td>{{$customer->plan_name->name}} ( Rp. {{number_format($customer->plan_name->price, 0, ',', '.')}} )
+                 <span id="profile-check" class="ml-1"></span>
+               </td>
              </tr>
 
              @if($customer->addons && $customer->addons->count() > 0)
@@ -318,8 +320,9 @@
         <i class="fas fa-sun"></i> {{ $customer->id_onu }}
       </button>
 
+      {{-- Disembunyikan sampai getOntStatus() membaca redaman (Rx) ONT --}}
       <button type="button" name="btn_onu_reboot" id="btn_onu_reboot"
-      class="btn mb-1 bg-warning btn-sm pb-1" data-toggle="modal" data-target="#modal_reboot">
+      class="btn mb-1 bg-warning btn-sm pb-1 d-none" data-toggle="modal" data-target="#modal_reboot">
       <i class="fas fa-sync-alt"></i> reboot
     </button>
     @endif
@@ -788,7 +791,7 @@
 </section>
 <!-- /.content-header -->
 
-@endsection
+{{-- modals ikut di section content (di luar section dicetak sebelum <html>, bikin FOUC) --}}
 
 <!-- Modals Section -->
 <div class="modal fade" id="modal-wa">
@@ -1106,6 +1109,7 @@
   <!-- /.modal-dialog -->
 </div>
 <!-- /.modal-monitor -->
+@endsection
 
 @section('footer-scripts')
 
@@ -1298,8 +1302,12 @@ $(document).ready(function() {
         },
         success: function (data) {
           $('#ont_status').html(data);
+          // Reboot hanya jika ONT terdeteksi punya power/redaman: tombol status berisi "Rx: <angka>"
+          const hasPower = /Rx:\s*-?\d/.test($('#ont_status #powerButton').text());
+          $('#btn_onu_reboot').toggleClass('d-none', !hasPower);
         },
         error: function (xhr) {
+          $('#btn_onu_reboot').addClass('d-none');
           console.warn('Error fetching ONT status:', xhr.status, xhr.responseText);
           $('#ont_status').html(
             `<span class="badge badge-danger">
@@ -1489,6 +1497,20 @@ $(document).ready(function() {
 
 
 
+      // Tanda kesesuaian profile PPPoE di router dengan nama plan
+      function renderProfileCheck(res) {
+        const esc = (v) => $('<div>').text(v ?? '-').html();
+        const profile = esc(res.profile);
+        const map = {
+          match:    ['text-success', 'fa-check-circle',         `Profile PPPoE: ${profile} (sesuai plan)`],
+          mismatch: ['text-danger',  'fa-exclamation-triangle', `Profile PPPoE di router (${profile}) berbeda dengan nama plan (${esc(res.plan_name)})`],
+          isolir:   ['text-warning', 'fa-user-lock',            `Profile PPPoE: ${profile} (isolir)`],
+        };
+        const m = map[res.profile_state];
+        if (!m) { $("#profile-check").html(''); return; }
+        $("#profile-check").html(`<i class="fas ${m[1]} ${m[0]}" title="${m[2]}" style="cursor: help;"></i>`);
+      }
+
       function loadRouterStatus(customerId) {
 
        $.get(`/customer/${customerId}/router-status`, function (res) {
@@ -1507,6 +1529,7 @@ $(document).ready(function() {
           html += `<span class="badge badge-danger ml-2">IP Conflict</span>`;
         }
         $("#mikrotik-status").html(html);
+        renderProfileCheck(res);
         $("#btn-traffic")
         .prop("disabled", false)
         .removeAttr("disabled")

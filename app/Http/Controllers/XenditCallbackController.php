@@ -1024,6 +1024,15 @@ return("ACCEPTED");
      */
     private function sendPaymentNotification($customers, $invoiceNumber, $amount, $source = '')
     {
+        if (!tenant_notify_enabled('payment')) {
+            Log::channel('payment')->info('[PAYMENT NOTIF] skipped: notifikasi pelunasan dimatikan tenant', [
+                'source' => $source,
+                'customer_id' => $customers->customer_id ?? null,
+                'invoice_number' => $invoiceNumber,
+            ]);
+            return;
+        }
+
         try {
             $encryptedurl  = Crypt::encryptString($customers->id);
             $jumlah_rupiah = number_format($amount, 0, ',', '.');
@@ -1089,7 +1098,18 @@ return("ACCEPTED");
                     $message .= "\n\nUntuk info lebih lengkap silahkan klik link:";
                     $message .= "\n" . $shortPaymentUrl;
                     $message .= "\n\n" . config("app.signature");
-                    $result = WaGatewayHelper::wa_payment($customers->phone, $message);
+                    // Titiwa (WA_TAMPLATE_ID_3) jika dikonfigurasi, fallback ke WA gateway — sama dengan pelunasan manual
+                    $waProvider = \App\Services\WaService::hasTitiwaConfig('WA_TAMPLATE_ID_3') ? 'titiwa' : 'gateway';
+                    $result = \App\Services\WaService::sendPaymentConfirmationOrGateway(
+                        (string) $customers->phone,
+                        (string) $customers->name,
+                        (string) $invoiceNumber,
+                        (string) $customers->customer_id,
+                        $amount,
+                        $openUrl,
+                        $message,
+                        'WA_TAMPLATE_ID_3'
+                    );
 
                     Log::channel('payment')->log(
                         ($result['status'] ?? null) === 'success' ? 'info' : 'warning',
@@ -1098,7 +1118,7 @@ return("ACCEPTED");
                             'tenant' => $tenantDomain,
                             'source' => $source,
                             'channel' => 'whatsapp',
-                            'provider' => 'gateway',
+                            'provider' => $waProvider,
                             'customer_id' => $customers->customer_id,
                             'invoice_number' => $invoiceNumber,
                             'status' => $result['status'] ?? 'failed',

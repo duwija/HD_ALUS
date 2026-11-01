@@ -416,7 +416,6 @@
 
 </div>
 
-@endsection
 
 <script type="text/javascript">
   function parseRibuan(val) {
@@ -573,3 +572,4 @@
     }
   });
 </script>
+@endsection

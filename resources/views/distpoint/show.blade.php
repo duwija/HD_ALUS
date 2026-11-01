@@ -4,6 +4,7 @@
 @inject('olt', 'App\Olt')
 
 @endsection
+@section('content')
 <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 <script type="text/javascript">
   google.charts.load('current', {packages:["orgchart"]});
@@ -76,7 +77,6 @@
 
 
 
-@section('content')
 <section class="content-header">
 
   <div class="card card-primary card-outline">

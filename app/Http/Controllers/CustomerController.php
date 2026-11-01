@@ -354,7 +354,7 @@ class CustomerController extends Controller
   public function ajaxRouterStatus($id)
   {
     try {
-        $customer = \App\Customer::with('distrouter')->findOrFail($id);
+        $customer = \App\Customer::with(['distrouter', 'plan_name'])->findOrFail($id);
 
         if (!$customer->distrouter) {
             return response()->json(['success' => false, 'message' => 'Router tidak ditemukan.'], 404);
@@ -383,8 +383,21 @@ class CustomerController extends Controller
             default => 'btn-warning',
         };
 
+        // Bandingkan profile secret di router dengan nama plan (acuan restore profile isolir)
+        $profile  = $status['profile'] ?? null;
+        $planName = $customer->plan_name->name ?? null;
+        $profileState = match (true) {
+            $profile === null || $planName === null           => 'unknown',
+            $profile === \App\Distrouter::isolirSetting()[1] => 'isolir',
+            $profile === $planName                            => 'match',
+            default                                           => 'mismatch',
+        };
+
         return response()->json([
             'success' => true,
+            'profile'       => $profile,
+            'plan_name'     => $planName,
+            'profile_state' => $profileState,
             'status_user' => $status['user'] ?? 'Unknown',
             'online'     => $status['online'] ?? 'Unknown',
             'ip'         => $status['ip'] ?? '-',
@@ -756,7 +769,9 @@ public function subscribeform($id)
     //         return ''; // Return empty string if not Active or Block
     //     })
     ->addColumn('plan', function ($customer) {
-        return '<a class="text-center">'.$customer->plan_name->name.'('.$customer->plan_name->price.')</a>';
+        return $customer->plan_name ?
+        '<a class="text-center">'.$customer->plan_name->name.'('.$customer->plan_name->price.')</a>' :
+        '<a class="text-center text-danger">No Plan</a>';
     })
     ->editColumn('id_merchant', function ($customer) {
         return $customer->merchant_name ? 
@@ -766,14 +781,15 @@ public function subscribeform($id)
     ->addColumn('status_cust', function ($customer) {
 
 
-        $badgeClass = match ($customer->status_name->name) {
+        $statusName = $customer->status_name->name ?? 'Unknown';
+        $badgeClass = match ($statusName) {
             'Active' => 'badge-success',
             'Inactive' => 'badge-secondary',
             'Block' => 'badge-danger',
             'Company_Properti' => 'badge-primary',
             default => 'badge-warning',
         };
-        return '<a class="badge text-white text-center '.$badgeClass.'">'.$customer->status_name->name.'</a>';
+        return '<a class="badge text-white text-center '.$badgeClass.'">'.$statusName.'</a>';
     })
     ->addColumn('invoice', function ($customer) {
         $count_inv = new \App\Suminvoice();
@@ -1636,7 +1652,7 @@ public function table_invoice(Request $request)
 
 
               \App\Distrouter::mikrotik_addprofile($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$plan->name,$plan->speed,$plan->description);
-              \App\Distrouter::mikrotik_addsecreate($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$request->pppoe,$request->password,$plan->name,$request->name);
+              \App\Distrouter::mikrotik_addsecreate($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$request->pppoe,$request->password,$plan->name,$request->name,$request->ip);
 
 
 
@@ -2422,7 +2438,7 @@ public function isolir_customer($id, $status)
                 'id_status' => 4,
 
             ]);
-              \App\Distrouter::mikrotik_disable($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
+              \App\Distrouter::mikrotik_isolir($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
 
           }
       }
@@ -2471,7 +2487,7 @@ public function update_status(Request $request)
                 'id_status' => 4,
 
             ]);
-              \App\Distrouter::mikrotik_disable($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
+              \App\Distrouter::mikrotik_isolir($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
 
           }
       }
@@ -2520,7 +2536,7 @@ public function update_status_2(Request $request)
                 'id_status' => 4,
 
             ]);
-              \App\Distrouter::mikrotik_disable($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
+              \App\Distrouter::mikrotik_isolir($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
 
           }
       }
@@ -2813,7 +2829,7 @@ public function update(Request $request, $id)
             try {
                 $plan_new = Plan::find($request->id_plan);
                 Distrouter::mikrotik_addprofile($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $plan_new->name, $plan_new->speed, $plan_new->description);
-                Distrouter::mikrotik_addsecreate($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe, $request->password, $plan_new->name, $request->name);
+                Distrouter::mikrotik_addsecreate($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe, $request->password, $plan_new->name, $request->name, $request->ip);
             } catch (\Exception $ex) {
                 \Log::error($ex);
             }
@@ -2821,7 +2837,12 @@ public function update(Request $request, $id)
             ($plan->id == $request->id_plan) &&
             ($distrouter->id == $request->id_distrouter)) {
             try {
-                Distrouter::mikrotik_disable($distrouter->ip, $distrouter->user, $distrouter->password, $distrouter->port, $customer->pppoe);
+                // Blocked → metode isolir tenant; status lain (Inactive dll) → disable
+                if ((int) $request->id_status === 4) {
+                    Distrouter::mikrotik_isolir($distrouter->ip, $distrouter->user, $distrouter->password, $distrouter->port, $customer->pppoe);
+                } else {
+                    Distrouter::mikrotik_disable($distrouter->ip, $distrouter->user, $distrouter->password, $distrouter->port, $customer->pppoe);
+                }
             } catch (\Exception $ex) {
                 \Log::error($ex);
             }
@@ -2831,7 +2852,7 @@ public function update(Request $request, $id)
                 $plan_new = Plan::find($request->id_plan);
                 Distrouter::mikrotik_remove($distrouter->ip, $distrouter->user, $distrouter->password, $distrouter->port, $customer->pppoe);
                 Distrouter::mikrotik_addprofile($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $plan_new->name, $plan_new->speed, $plan_new->description);
-                Distrouter::mikrotik_addsecreate($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe, $request->password, $plan_new->name, $request->name);
+                Distrouter::mikrotik_addsecreate($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe, $request->password, $plan_new->name, $request->name, $request->ip);
                 Distrouter::mikrotik_remove_active_connection($distrouter->ip, $distrouter->user, $distrouter->password, $distrouter->port, $customer->pppoe);
             } catch (\Exception $ex) {
                 \Log::error($ex);
@@ -2842,8 +2863,13 @@ public function update(Request $request, $id)
                 $plan_new = Plan::find($request->id_plan);
                 Distrouter::mikrotik_remove($distrouter->ip, $distrouter->user, $distrouter->password, $distrouter->port, $customer->pppoe);
                 Distrouter::mikrotik_addprofile($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $plan_new->name, $plan_new->speed, $plan_new->description);
-                Distrouter::mikrotik_addsecreate($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe, $request->password, $plan_new->name, $request->name);
-                Distrouter::mikrotik_disable($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $customer->pppoe);
+                Distrouter::mikrotik_addsecreate($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe, $request->password, $plan_new->name, $request->name, $request->ip);
+                // Secret baru dibuat dengan $request->pppoe — isolir/disable harus ke nama itu, bukan nama lama
+                if ((int) $request->id_status === 4) {
+                    Distrouter::mikrotik_isolir($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe);
+                } else {
+                    Distrouter::mikrotik_disable($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe);
+                }
             } catch (\Exception $ex) {
                 \Log::error($ex);
             }
@@ -3009,7 +3035,10 @@ public function update(Request $request, $id)
                 $plan_new->name, $request->name, $request->ip
             );
 
-            if ($isDisabled) {
+            // Secret dibuat ulang dengan profile paket → terapkan lagi isolir / disable sesuai status
+            if ((int) $request->id_status === 4) {
+                Distrouter::mikrotik_isolir($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe);
+            } elseif ($isDisabled) {
                 Distrouter::mikrotik_disable($distrouter_new->ip, $distrouter_new->user, $distrouter_new->password, $distrouter_new->port, $request->pppoe);
             }
         } catch (\Exception $ex) {
@@ -3505,7 +3534,8 @@ public function convertToActive(Request $request, $id)
                 $customer->pppoe,
                 $customer->password,
                 $plan->name,
-                $customer->name
+                $customer->name,
+                $customer->ip
             );
 
             $message = 'Lead successfully converted to Active customer and configured on MikroTik!';

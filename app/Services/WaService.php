@@ -578,7 +578,7 @@ class WaService
         return $configuredProvider;
     }
 
-    protected static function hasTitiwaConfig(string $templateKey = 'WA_TAMPLATE_ID_4'): bool
+    public static function hasTitiwaConfig(string $templateKey = 'WA_TAMPLATE_ID_4'): bool
     {
         return static::getTitiwaHost() !== ''
             && static::getTitiwaApiKey() !== ''

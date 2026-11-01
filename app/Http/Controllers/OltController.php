@@ -578,6 +578,12 @@ class OltController extends Controller
                 $customers = \App\Customer::where('id_olt', $olt->id)->get();
                 $rows = $this->collectCdataOnuMetrics($snmp, $zteoid, $ontStatuses, $customers, $olt);
 
+                // Autofind CDATA GPON ada di tree 17409 (.2.8.4.7.1), bukan 34592 dari $zteoid.
+                if (get_olt_vendor($olt) === 'CDATA GPON') {
+                    $uncfg = @$snmp->walk(config('cdata_gpon_17409_oid.oidOnuUncfgSn'));
+                    $onuUncfgValue = is_array($uncfg) ? count($uncfg) : 0;
+                }
+
                 $onuCount = count($rows);
                 foreach ($rows as $row) {
                     $entryBase = [
@@ -5862,6 +5868,12 @@ public function getOltPon($id)
                                 $oidOltGmportProfile = [];
                                 $oidOltTconProfile = [];
 
+                                // CDATA GPON: autofind tidak tersedia via SNMP (OID 34592 .18.5 "No Such Object"
+                                // di FD1608Y) — form terpisah, autofind dibaca lewat CLI.
+                                if (get_olt_vendor($olt) === 'CDATA GPON') {
+                                    return $this->addonuCdata($customer, $olt);
+                                }
+
                                 if (empty($onuUncfgSn)) {
                                     return redirect('/customer/' . $customer->id . '/edit')
                                         ->with('warning', 'Vendor OLT belum didukung untuk listing Unconfigure ONU.');
@@ -5990,6 +6002,206 @@ public function getOltPon($id)
                                     'oidOltTconProfile' => $oidOltTconProfile,
                                 ]);
                             }
+
+/**
+ * Daftar ONT belum terdaftar di CDATA GPON. Utama via SNMP (tabel autofind 17409 .2.8.4.7.1,
+ * sama seperti vendor lain); kalau SNMP gagal, fallback ke CLI (pyhton/autofind_cdata.py).
+ * Return ['onus' => [[port, sn, equipment, time], ...], 'error' => string|null].
+ */
+private function cdataAutofind($olt): array
+{
+    $cfg = config('cdata_gpon_17409_oid') ?: [];
+    try {
+        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
+        $snmp->valueretrieval = SNMP_VALUE_PLAIN;
+        $sns = @$snmp->walk($cfg['oidOnuUncfgSn']);
+        if (is_array($sns)) {
+            $types = @$snmp->walk($cfg['oidOnuUncfgType']) ?: [];
+            $times = @$snmp->walk($cfg['oidOnuUncfgTime']) ?: [];
+            $snmp->close();
+            $byIdx = function (array $walk) {
+                $out = [];
+                foreach ($walk as $k => $v) {
+                    $parts = explode('.', $k);
+                    $out[end($parts)] = $v;
+                }
+                return $out;
+            };
+            $types = $byIdx($types);
+            $times = $byIdx($times);
+            $onus = [];
+            foreach ($byIdx($sns) as $idx => $sn) {
+                $d = decode_cdata17409_index((int) $idx);
+                $t = $times[$idx] ?? '';
+                // DateAndTime: 2 byte tahun + bulan, hari, jam, menit, detik.
+                $time = strlen($t) >= 7
+                    ? sprintf('%04d-%02d-%02d %02d:%02d:%02d', (ord($t[0]) << 8) | ord($t[1]), ord($t[2]), ord($t[3]), ord($t[4]), ord($t[5]), ord($t[6]))
+                    : '';
+                $onus[] = [
+                    'port' => $d['port'],
+                    'sn' => strtoupper(str_replace('-', '', trim($sn))),
+                    'equipment' => trim($types[$idx] ?? ''),
+                    'time' => $time,
+                ];
+            }
+            return ['onus' => $onus, 'error' => null];
+        }
+        $snmp->close();
+    } catch (\Throwable $e) {
+        \Log::info('CDATA autofind SNMP failed for OLT ' . $olt->id . ', fallback CLI: ' . $e->getMessage());
+    }
+
+    $process = new Process(["python3", env("PHYTON_DIR") . "autofind_cdata.py",
+        $olt->ip, $olt->user, $olt->password, $olt->port, 10]);
+    $process->setTimeout(60);
+    try {
+        $process->run();
+        $data = json_decode(trim($process->getOutput()), true);
+    } catch (\Throwable $e) {
+        $data = ['ok' => false, 'error' => $e->getMessage()];
+    }
+    if (!is_array($data) || empty($data['ok'])) {
+        $error = $data['error'] ?? ('Script autofind gagal: ' . trim($process->getErrorOutput()));
+        \Log::warning('CDATA autofind failed for OLT ' . $olt->id . ': ' . $error);
+        return ['onus' => [], 'error' => $error];
+    }
+    return ['onus' => $data['onus'] ?? [], 'error' => null];
+}
+
+/**
+ * Form register ONT untuk CDATA GPON. Daftar ONT terdaftar dibaca dari tree OEM 17409
+ * (.2.8.4.1.1 col 2 = "gpon 0/0/<pon> onu <id> <desc>", col 3 = SN hex) untuk
+ * menghitung ONU ID kosong per PON dan mencegah SN dobel.
+ */
+private function addonuCdata($customer, $olt)
+{
+    // Tree OEM 17409 (bukan get_olt_oid_config() yang memberi tree 34592 — kosong di unit ini).
+    $cfg = config('cdata_gpon_17409_oid') ?: [];
+    $used = [];      // pon => [onuId, ...]
+    $usedSn = [];    // SN => "pon/onu"
+    $snmpError = null;
+
+    try {
+        $snmp = new \SNMP(\SNMP::VERSION_2c, $olt->ip . ':' . ($olt->snmp_port ?? 161), $olt->community_ro);
+        $snmp->valueretrieval = SNMP_VALUE_PLAIN;
+        $names = @$snmp->walk($cfg['oidOnuName'] ?? '.1.3.6.1.4.1.17409.2.8.4.1.1.2');
+        $sns = @$snmp->walk($cfg['oidOnuSn'] ?? '.1.3.6.1.4.1.17409.2.8.4.1.1.3');
+        $snmp->close();
+
+        if (!is_array($names)) {
+            $snmpError = 'Gagal membaca daftar ONT dari OLT via SNMP.';
+            $names = [];
+        }
+        $snByIndex = [];
+        foreach ((array) $sns as $k => $v) {
+            $parts = explode('.', $k);
+            $snByIndex[end($parts)] = $v;
+        }
+        foreach ($names as $k => $v) {
+            $parts = explode('.', $k);
+            $idx = (int) end($parts);
+            $d = decode_cdata17409_index($idx);
+            if ($d['port'] < 1 || $d['onu'] < 1) {
+                continue;
+            }
+            $used[$d['port']][] = $d['onu'];
+            if (isset($snByIndex[$idx])) {
+                $raw = $snByIndex[$idx];
+                // Plain retrieval gives 8 raw bytes: 4 ASCII vendor + 4 bytes hex serial.
+                $sn = strlen($raw) === 8 ? substr($raw, 0, 4) . strtoupper(bin2hex(substr($raw, 4))) : trim($raw);
+                $usedSn[$sn] = $d['port'] . '/' . $d['onu'];
+            }
+        }
+    } catch (\Throwable $e) {
+        \Log::warning('SNMP addonuCdata failed for ' . $olt->ip . ': ' . $e->getMessage());
+        $snmpError = 'Gagal membaca daftar ONT dari OLT via SNMP: ' . $e->getMessage();
+    }
+
+    // Jumlah PON dari tipe (FD1604/FD1608/FD1616), minimal setinggi PON yang sudah terpakai.
+    $ponCount = preg_match('/16(\d{2})/', (string) $olt->type, $m) ? (int) $m[1] : 8;
+    $ponCount = max($ponCount, $used ? max(array_keys($used)) : 0, 1);
+
+    // ONU ID kosong per PON (CDATA GPON: 1..128).
+    $freeIds = [];
+    for ($p = 1; $p <= $ponCount; $p++) {
+        $freeIds[$p] = array_values(array_diff(range(1, 128), $used[$p] ?? []));
+    }
+
+    $onuprofile = \App\Oltonuprofile::where('id_olt', $olt->id)->orderBy('vlan')->get(['name', 'vlan']);
+
+    // Deskripsi default: nama customer tanpa spasi/karakter aneh (CLI tidak menerima spasi).
+    $defaultDesc = preg_replace('/[^A-Za-z0-9_().-]/', '', str_replace(' ', '', ucwords(strtolower($customer->name))));
+
+    $autofind = $this->cdataAutofind($olt);
+
+    return view('olt/addonu_cdata', [
+        'autofind' => $autofind['onus'],
+        'autofindError' => $autofind['error'],
+        'customer' => $customer,
+        'olt' => $olt,
+        'ponCount' => $ponCount,
+        'freeIds' => $freeIds,
+        'usedSn' => $usedSn,
+        'onuprofile' => $onuprofile,
+        'defaultDesc' => $defaultDesc,
+        'snmpError' => $snmpError,
+    ]);
+}
+
+public function configureCdata(Request $request)
+{
+    $olt = \App\Olt::findOrFail($request->olt);
+    $customer = \App\Customer::findOrFail($request->id_customer);
+    $back = redirect('/customer/' . $customer->id . '/edit');
+
+    if (get_olt_vendor($olt) !== 'CDATA GPON') {
+        return $back->with('error', 'OLT ini bukan CDATA GPON.');
+    }
+
+    // Semua nilai masuk ke baris CLI telnet — tolak spasi/kutip/karakter kontrol.
+    $request->merge(['sn' => strtoupper(trim((string) $request->sn))]);
+    $validator = \Validator::make($request->all(), [
+        'pon'         => 'required|integer|min:1|max:16',
+        'onu_id'      => 'required|integer|min:1|max:128',
+        'sn'          => ['required', 'regex:/^[A-Z0-9]{4}[0-9A-F]{8}$/'],
+        'description' => ['required', 'max:64', 'regex:/^[A-Za-z0-9_().-]+$/'],
+        'vlan'        => 'required|integer|min:1|max:4094',
+        'pppoe'       => ['required', 'max:64', 'regex:/^[A-Za-z0-9_.@-]+$/'],
+        'password'    => ['required', 'max:64', 'regex:/^[A-Za-z0-9_.@!$%*+=-]+$/'],
+    ], [
+        'sn.regex' => 'Format SN harus 12 karakter, contoh ZTEGCFEB4AEE.',
+        'description.regex' => 'Deskripsi hanya boleh huruf, angka, _ ( ) . - (tanpa spasi).',
+        'pppoe.regex' => 'Username PPPoE tidak boleh mengandung spasi/karakter khusus.',
+        'password.regex' => 'Password PPPoE tidak boleh mengandung spasi, kutip, atau #.',
+    ]);
+    if ($validator->fails()) {
+        return back()->withErrors($validator)->withInput();
+    }
+
+    $process = new Process(["python3", env("PHYTON_DIR") . "addont_cdata.py",
+        $olt->ip, $olt->user, $olt->password, $olt->port, 10,
+        $request->pon, $request->onu_id, $request->sn, $request->description,
+        $request->vlan, $request->pppoe, $request->password,
+        storage_path('logs/olt_cdata_register.log')]);
+    $process->setTimeout(240);
+
+    try {
+        $process->run();
+        $output = trim($process->getOutput());
+    } catch (\Throwable $e) {
+        $output = 'error:' . $e->getMessage();
+    }
+
+    [$status, $message] = array_pad(explode(':', $output, 2), 2, '');
+    if ($status !== 'success') {
+        $message = $message !== '' ? $message : ('Script gagal: ' . trim($process->getErrorOutput() ?: $output));
+        \Log::warning('CDATA register failed', ['olt' => $olt->id, 'pon' => $request->pon, 'onu' => $request->onu_id, 'msg' => $message]);
+        return $back->with('error', $message);
+    }
+
+    \App\Customer::where('id', $customer->id)->update(['id_onu' => $request->pon . ':' . $request->onu_id]);
+    return $back->with('success', $message);
+}
 
 public function getemptyonuid(Request $request)
 {
@@ -6226,6 +6438,20 @@ public function table_onu_unconfig(Request $request)
         // Pakai IP + snmp_port dari DB agar OLT dengan port non-default (mis. 1612) tetap reachable.
         $snmpHostWithPort = $olt->ip . ':' . ($olt->snmp_port ?? 161);
         $snmpCommunity = $olt->community_ro ?: $community;
+    }
+
+    // CDATA GPON: autofind tidak ada di SNMP — baca lewat CLI "show ont autofind all".
+    if ($olt && get_olt_vendor($olt) === 'CDATA GPON') {
+        $rows = [];
+        foreach ($this->cdataAutofind($olt)['onus'] as $af) {
+            $rows[] = [
+                'oltName' => $olt->name,
+                'oid' => 'PON ' . $af['port'],
+                'identifier' => $af['sn'],
+                'value' => $af['equipment'] ?: '-',
+            ];
+        }
+        return DataTables::of($rows)->addIndexColumn()->make(true);
     }
 
     $onuUncfgSn = $zteoid['oidOnuUncfgSn'];

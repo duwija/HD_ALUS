@@ -68,6 +68,61 @@
 
     <div class="row">
       <div class="col-lg-6">
+        <div class="card card-outline card-danger">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-network-wired mr-1"></i> Metode Isolir MikroTik</h3>
+          </div>
+          <div class="card-body">
+            <p class="mb-3">Cara memblokir PPPoE pelanggan saat status menjadi <strong>Blocked</strong> (auto isolir maupun manual).</p>
+
+            <form method="POST" action="{{ url('settings/auto-isolir/isolir-method') }}">
+              @csrf
+              <div class="custom-control custom-radio mb-2">
+                <input type="radio" class="custom-control-input" id="isolir_method_disable" name="isolir_method" value="disable"
+                       {{ old('isolir_method', $isolirMethod) === 'disable' ? 'checked' : '' }}>
+                <label class="custom-control-label" for="isolir_method_disable">
+                  <strong>Disable secret PPPoE</strong>
+                  <small class="text-muted d-block">Pelanggan tidak bisa login sama sekali. Saat aktif kembali, secret di-enable.</small>
+                </label>
+              </div>
+              <div class="custom-control custom-radio mb-2">
+                <input type="radio" class="custom-control-input" id="isolir_method_profile" name="isolir_method" value="profile"
+                       {{ old('isolir_method', $isolirMethod) === 'profile' ? 'checked' : '' }}>
+                <label class="custom-control-label" for="isolir_method_profile">
+                  <strong>Ganti profile ke profile isolir</strong>
+                  <small class="text-muted d-block">Pelanggan tetap login dengan profile isolir. Saat aktif kembali, profile dikembalikan ke profile paket (nama plan).</small>
+                </label>
+              </div>
+
+              <div class="form-group mt-3">
+                <label for="isolir_profile">Nama profile isolir</label>
+                <input type="text" name="isolir_profile" id="isolir_profile" maxlength="50"
+                       class="form-control @error('isolir_profile') is-invalid @enderror"
+                       value="{{ old('isolir_profile', $isolirProfile) }}" placeholder="ISOLIR">
+                @error('isolir_profile')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                <small class="text-muted">
+                  Jika belum ada di router, dibuat otomatis: pool <code>ISOLIR</code> (172.20.0.0/16), local address 172.20.0.1,
+                  address-list <code>isolir</code>, rate-limit 64k/64k. Jangan ganti nama ini selama masih ada pelanggan yang terisolir.
+                </small>
+              </div>
+
+              <div class="alert alert-warning py-2 small">
+                <i class="fas fa-exclamation-triangle"></i>
+                Metode profile <strong>membutuhkan aturan firewall</strong> untuk address-list <code>isolir</code> di setiap router.
+                Tanpa itu pelanggan isolir tetap bisa internet (hanya dibatasi 64k).
+                Pelanggan <strong>Inactive</strong> tetap di-disable apa pun metodenya.
+              </div>
+
+              <button type="submit" class="btn btn-primary"><i class="fas fa-save mr-1"></i> Simpan Metode</button>
+              <a href="{{ url('settings/auto-isolir/mikrotik-script') }}" class="btn btn-outline-danger ml-1">
+                <i class="fas fa-terminal mr-1"></i> Script Firewall &amp; Halaman Isolir
+              </a>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
         <div class="card card-outline card-warning">
           <div class="card-header">
             <h3 class="card-title"><i class="fas fa-bell mr-1"></i> Pengingat sebelum isolir</h3>
@@ -231,6 +286,52 @@
                 <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="fas fa-paper-plane mr-1"></i> Kirim laporan kemarin sekarang</button>
               </form>
             @endif
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <div class="card card-outline card-success">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-paper-plane mr-1"></i> Notifikasi Pelanggan</h3>
+          </div>
+          <div class="card-body">
+            <p class="mb-3">
+              Atur apakah pelanggan otomatis menerima notifikasi (WhatsApp / Email / Mobile App sesuai pilihan <em>Sent Notif</em> di data pelanggan).
+            </p>
+
+            <form method="POST" action="{{ url('settings/auto-isolir/notification') }}">
+              @csrf
+              <div class="form-group mb-3">
+                <div class="custom-control custom-switch">
+                  <input type="hidden" name="notif_invoice_create" value="0">
+                  <input type="checkbox" class="custom-control-input" id="notif_invoice_create"
+                         name="notif_invoice_create" value="1" {{ $notifInvoiceCreate ? 'checked' : '' }}>
+                  <label class="custom-control-label" for="notif_invoice_create">
+                    <strong>Saat invoice dibuat</strong>
+                  </label>
+                </div>
+                <small class="text-muted d-block ml-5">Invoice otomatis (terjadwal / menu Jobs) dan invoice manual.</small>
+              </div>
+
+              <div class="form-group mb-3">
+                <div class="custom-control custom-switch">
+                  <input type="hidden" name="notif_payment" value="0">
+                  <input type="checkbox" class="custom-control-input" id="notif_payment"
+                         name="notif_payment" value="1" {{ $notifPayment ? 'checked' : '' }}>
+                  <label class="custom-control-label" for="notif_payment">
+                    <strong>Saat pelunasan</strong>
+                  </label>
+                </div>
+                <small class="text-muted d-block ml-5">Pelunasan manual (kasir/admin) dan pembayaran online (payment gateway).</small>
+              </div>
+
+              <p class="text-muted mb-3"><small>
+                Notifikasi ke grup Telegram internal dan tombol kirim ulang manual di halaman invoice tidak terpengaruh.
+              </small></p>
+
+              <button type="submit" class="btn btn-primary"><i class="fas fa-save mr-1"></i> Simpan</button>
+            </form>
           </div>
         </div>
       </div>

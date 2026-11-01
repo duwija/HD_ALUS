@@ -1109,8 +1109,53 @@ function _requestGps() {
   );
 }
 
-// Jalankan saat halaman load
-_requestGps();
+// Popup izin lokasi hanya muncul saat user klik — tidak otomatis tiap buka tiket.
+// Kalau izin sudah "granted", lokasi diambil diam-diam tanpa popup.
+function _showGpsPrompt(denied) {
+  var first = document.querySelector('.gps-required-btn');
+  if (!first || document.getElementById('btn-enable-gps')) return;
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = 'btn-enable-gps';
+  btn.className = 'btn btn-sm btn-warning mr-2';
+  btn.innerHTML = denied
+    ? '<i class="fas fa-map-marker-alt mr-1"></i> Lokasi diblokir — izinkan di pengaturan browser'
+    : '<i class="fas fa-map-marker-alt mr-1"></i> Aktifkan Lokasi';
+  btn.addEventListener('click', function () {
+    _requestGps();
+  });
+  first.parentNode.insertBefore(btn, first);
+}
+
+var _origEnableGpsButtons = _enableGpsButtons;
+_enableGpsButtons = function () {
+  _origEnableGpsButtons();
+  var b = document.getElementById('btn-enable-gps');
+  if (b) b.remove();
+};
+
+var _origShowGpsDenied = _showGpsDenied;
+_showGpsDenied = function () {
+  _origShowGpsDenied();
+  var b = document.getElementById('btn-enable-gps');
+  if (b) b.remove();
+  _showGpsPrompt(true);
+};
+
+if (navigator.permissions && navigator.permissions.query) {
+  navigator.permissions.query({ name: 'geolocation' }).then(function (status) {
+    if (status.state === 'granted') {
+      _requestGps();
+    } else {
+      _showGpsPrompt(status.state === 'denied');
+    }
+  }).catch(function () {
+    _showGpsPrompt(false);
+  });
+} else {
+  // Browser lama tanpa Permissions API (mis. Safari lama): tetap minta saat diklik.
+  _showGpsPrompt(false);
+}
 
 // Isi hidden input setiap kali modal Update dibuka
 $('#modal-ticketupdate').on('show.bs.modal', function () {

@@ -285,7 +285,6 @@ $yearArray = range(2021, 2030);
 
 </div>
 
-@endsection
 
 <script type="text/javascript">
   
@@ -312,3 +311,4 @@ function calc() {
  
 }
 </script> --}}
+@endsection
