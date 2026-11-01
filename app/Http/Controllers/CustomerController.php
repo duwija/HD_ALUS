@@ -1807,7 +1807,12 @@ public function table_invoice(Request $request)
         'leadUpdates' => $customer->id_status == 1 ? \App\LeadUpdate::where('id_customer', $id)->orderBy('created_at', 'desc')->get() : collect([]),
         'workflowStages' => $customer->id_status == 1 ? \App\LeadWorkflow::orderBy('order')->get() : collect([]),
         'customerSteps' => $customer->id_status == 1 ? \App\CustomerStep::where('customer_id', $id)->orderBy('position')->get() : collect([]),
+        // Untuk form hapus customer: tunggakan (suminvoice belum lunas), item tagihan yang
+        // belum dibundel, dan ONU yang terhubung.
+        'unpaidSuminvoices' => Suminvoice::where('id_customer', $id)->where('payment_status', 0)
+            ->orderBy('date')->get(['id', 'number', 'date', 'total_amount']),
         'unpaidInvoiceCount' => \App\Invoice::where('id_customer', $id)->where('payment_status', 0)->count(),
+        'deleteOnuOlt' => (!empty($customer->id_olt) && !empty($customer->id_onu)) ? \App\Olt::find($customer->id_olt) : null,
     ]);
 }
 
@@ -3124,14 +3129,14 @@ public function update(Request $request, $id)
     }
     public function destroy(Request $request, $id)
     {
-      try
-      {
           $hasDeletionColumns = Schema::hasColumn('customers', 'deletion_type')
               && Schema::hasColumn('customers', 'deletion_reason');
 
           $validated = $request->validate([
               'deletion_type' => 'required|in:terminate,cancel',
               'deletion_reason' => 'required|string|min:5|max:1000',
+              'unpaid_action' => 'nullable|in:keep,cancel',
+              'onu_action' => 'nullable|in:keep,delete',
           ], [
               'deletion_type.required' => 'Pilihan status berhenti wajib diisi.',
               'deletion_type.in' => 'Pilihan status berhenti tidak valid.',
@@ -3150,26 +3155,88 @@ public function update(Request $request, $id)
               return redirect()->back()->with('error', 'Customer hanya dapat dihapus jika berstatus Inactive atau Potensial.');
           }
 
-          // Blok hapus jika masih ada invoice yang belum dibayar (payment_status=0)
-          $unpaidCount = \App\Invoice::where('id_customer', $id)
-              ->where('payment_status', 0)
-              ->count();
-          if ($unpaidCount > 0) {
+          // Tunggakan = suminvoice belum lunas; plus item tagihan yang belum dibundel ke suminvoice.
+          $unpaidSums = Suminvoice::where('id_customer', $id)->where('payment_status', 0)->get();
+          $draftItems = \App\Invoice::where('id_customer', $id)->where('payment_status', 0)->count();
+          $unpaidAction = $validated['unpaid_action'] ?? null;
+          if (($unpaidSums->isNotEmpty() || $draftItems > 0) && !$unpaidAction) {
               return redirect()->back()->with('error',
-                  "Tidak dapat menghapus customer. Terdapat {$unpaidCount} invoice yang belum dibayar. "
-                  . "Harap lunasi atau batalkan invoice tersebut terlebih dahulu."
+                  "Customer masih punya {$unpaidSums->count()} tagihan belum dibayar"
+                  . ($draftItems ? " dan {$draftItems} item tagihan belum dibuat invoice" : '')
+                  . ". Pilih apakah tagihan dibiarkan atau dibatalkan."
               );
           }
 
-          if ($hasDeletionColumns) {
-              $customers->deletion_type = $validated['deletion_type'];
-              $customers->deletion_reason = trim($validated['deletion_reason']);
+          $hasOnu = !empty($customers->id_olt) && !empty($customers->id_onu);
+          $onuAction = $validated['onu_action'] ?? null;
+          if ($hasOnu && !$onuAction) {
+              return redirect()->back()->with('error', "Customer terhubung ke ONU {$customers->id_onu}. Pilih apakah config ONU dihapus atau dibiarkan.");
+          }
+
+          $reason = trim($validated['deletion_reason']);
+          $by = Auth::user()->name ?? 'system';
+          $summary = [];
+
+          DB::beginTransaction();
+          try
+          {
+              // 1. Batalkan tagihan (belum di-commit, jadi ikut rollback bila langkah berikut gagal)
+              if ($unpaidAction === 'cancel') {
+                  $sumCtl = app(SuminvoiceController::class);
+                  foreach ($unpaidSums as $sum) {
+                      try {
+                          $sumCtl->cancelSuminvoiceRecord($sum, 'Customer dihapus: ' . $reason, $by);
+                      } catch (\Throwable $e) {
+                          throw new \RuntimeException("Gagal membatalkan tagihan {$sum->number}: " . $e->getMessage(), 0, $e);
+                      }
+                  }
+                  if ($draftItems > 0) {
+                      \App\Invoice::where('id_customer', $id)->where('payment_status', 0)
+                          ->update(['payment_status' => 5, 'monthly_fee' => 0]);
+                  }
+                  $summary['Tagihan'] = ['old' => $unpaidSums->count() . ' belum dibayar', 'new' => 'dibatalkan'];
+              } elseif ($unpaidSums->isNotEmpty() || $draftItems > 0) {
+                  $summary['Tagihan'] = ['old' => $unpaidSums->count() . ' belum dibayar', 'new' => 'dibiarkan'];
+              }
+
+              // 2. Hapus config ONU di OLT (gagal → batalkan semua, customer tidak dihapus)
+              $onuMessage = null;
+              if ($hasOnu && $onuAction === 'delete') {
+                  [$onuStatus, $onuMessage] = app(OltController::class)->deleteCustomerOnu($customers);
+                  if ($onuStatus === 'error') {
+                      throw new \RuntimeException('Gagal menghapus ONU ' . $customers->id_onu . ': ' . $onuMessage);
+                  }
+                  $summary['ONU'] = ['old' => $customers->id_onu, 'new' => 'config dihapus dari OLT'];
+                  $customers->id_onu = null;
+              } elseif ($hasOnu) {
+                  $summary['ONU'] = ['old' => $customers->id_onu, 'new' => 'config dibiarkan di OLT'];
+              }
+
+              if ($hasDeletionColumns) {
+                  $customers->deletion_type = $validated['deletion_type'];
+                  $customers->deletion_reason = $reason;
+              }
               $customers->save();
+
+              if ($summary) {
+                  Customerlog::create([
+                      'id_customer' => $customers->id,
+                      'date' => now(),
+                      'updated_by' => $by,
+                      'topic' => 'delete',
+                      'updates' => json_encode($summary),
+                  ]);
+              }
+
+              \App\Customer::destroy($id);
+              DB::commit();
+          }
+          catch (\Exception $ex) {
+              DB::rollBack();
+              return redirect()->back()->with('error', 'Customer tidak dihapus. ' . $ex->getMessage());
           }
 
           $distrouter = \App\Distrouter::withTrashed()->Where('id',$customers->id_distrouter)->first();
-          \App\Customer::destroy($id);
-
           if ($distrouter && $customers->pppoe) {
               try {
                   \App\Distrouter::mikrotik_remove($distrouter->ip,$distrouter->user,$distrouter->password,$distrouter->port,$customers->pppoe);
@@ -3178,11 +3245,14 @@ public function update(Request $request, $id)
               }
           }
 
-          return redirect('/home/')->with('success','Customer berhasil dihapus.');
-      }
-      catch (\Exception $ex) {
-        return redirect('/home/')->with('error','Gagal menghapus customer: ' . $ex->getMessage());
-    }
+          $msg = 'Customer berhasil dihapus.';
+          if ($unpaidAction === 'cancel' && $unpaidSums->isNotEmpty()) {
+              $msg .= " {$unpaidSums->count()} tagihan dibatalkan.";
+          }
+          if ($onuMessage !== null) {
+              $msg .= ' ONU: ' . $onuMessage;
+          }
+          return redirect('/home/')->with('success', $msg);
 }
 
 //   public function mikrotik($name, $customerid, $password)

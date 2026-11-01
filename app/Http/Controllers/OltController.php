@@ -1308,6 +1308,50 @@ public function configurecst(Request $request)
 
 
 
+/**
+ * Hapus config ONU milik customer di OLT (dipakai saat hapus customer).
+ * id_onu → parameter onudelete() memakai pemetaan yang sama dengan RebootOnuJob /
+ * tombol Reboot di customer/show. Return [status, pesan], status: success|warning|error.
+ */
+public function deleteCustomerOnu($customer): array
+{
+    if (empty($customer->id_olt) || empty($customer->id_onu) || !str_contains($customer->id_onu, ':')) {
+        return ['error', 'Customer tidak memiliki data ONU yang valid.'];
+    }
+    [$key, $onuValue] = explode(':', $customer->id_onu, 2);
+    $olt = \App\Olt::find($customer->id_olt);
+    if (!$olt || $key === '' || $onuValue === '') {
+        return ['error', 'OLT atau ID ONU customer tidak ditemukan.'];
+    }
+
+    $vendorCheck = strtolower(($olt->vendor ?? '') . ' ' . ($olt->type ?? '') . ' ' . ($olt->name ?? ''));
+    if (str_contains($vendorCheck, 'hsgq') || str_contains($vendorCheck, 'cdata') || str_contains($vendorCheck, 'fdd')
+        || str_contains($vendorCheck, 'vsol') || str_contains($vendorCheck, 'hioso')) {
+        $portId = $key;
+    } elseif (str_contains($vendorCheck, 'c600') || str_contains($vendorCheck, 'c620') || str_contains($vendorCheck, 'c650')) {
+        $portId = str_replace('/', '_', $key);
+    } else {
+        $portId = config('zteframeslotportid')[$key] ?? null;
+    }
+    if ($portId === null) {
+        return ['error', "Port ONU {$customer->id_onu} tidak dikenali untuk OLT {$olt->name}."];
+    }
+
+    // onudelete() mengembalikan redirect dengan flash success/error/warning — ambil dari session.
+    foreach (['success', 'error', 'warning'] as $k) {
+        session()->forget($k);
+    }
+    $this->onudelete($olt->id, $portId, $onuValue);
+    foreach (['error', 'warning', 'success'] as $k) {
+        if (session()->has($k)) {
+            $msg = trim((string) session($k));
+            session()->forget($k);
+            return [$k, $msg];
+        }
+    }
+    return ['warning', 'Perintah hapus ONU dikirim, hasil tidak diketahui.'];
+}
+
 public function onudelete($oltId, $oltPonIndex, $onuId)
 {
    // dd($request);

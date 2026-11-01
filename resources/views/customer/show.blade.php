@@ -398,7 +398,65 @@
         <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
       </div>
       <div class="modal-body" id="delete-modal-body">
-        <p>Memuat...</p>
+        <p>Apakah Anda yakin ingin menghapus customer <strong>{{ $customer->name }}</strong>?</p>
+        <div class="form-group">
+          <label for="deletion_type" class="mb-1">Pilihan Status <span class="text-danger">*</span></label>
+          <select id="deletion_type" name="deletion_type" class="form-control" form="form-delete-customer" required>
+            <option value="">-- Pilih --</option>
+            <option value="terminate">Berhenti Berlangganan</option>
+            <option value="cancel">Tidak Jadi Berlangganan</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="deletion_reason" class="mb-1">Alasan Hapus <span class="text-danger">*</span></label>
+          <textarea id="deletion_reason" name="deletion_reason" class="form-control" rows="3" minlength="5" maxlength="1000" form="form-delete-customer" required placeholder="Contoh: customer pindah lokasi, tidak jadi pasang, dll"></textarea>
+        </div>
+
+        @php $unpaidSums = $unpaidSuminvoices ?? collect(); @endphp
+        @if ($unpaidSums->isNotEmpty() || ($unpaidInvoiceCount ?? 0) > 0)
+          <div class="border border-warning rounded p-2 mb-3">
+            <div class="font-weight-bold text-warning mb-1"><i class="fas fa-file-invoice-dollar mr-1"></i> Tagihan belum dibayar</div>
+            @if ($unpaidSums->isNotEmpty())
+              <table class="table table-sm table-bordered mb-2">
+                <thead><tr><th>No. Invoice</th><th>Tanggal</th><th class="text-right">Total</th></tr></thead>
+                <tbody>
+                  @foreach ($unpaidSums as $sum)
+                    <tr><td>{{ $sum->number }}</td><td>{{ $sum->date }}</td><td class="text-right">{{ number_format((float) $sum->total_amount, 0, ',', '.') }}</td></tr>
+                  @endforeach
+                </tbody>
+                <tfoot><tr><th colspan="2">Total</th><th class="text-right">{{ number_format((float) $unpaidSums->sum('total_amount'), 0, ',', '.') }}</th></tr></tfoot>
+              </table>
+            @endif
+            @if (($unpaidInvoiceCount ?? 0) > 0)
+              <p class="small mb-2">{{ $unpaidInvoiceCount }} item tagihan belum dibuat invoice.</p>
+            @endif
+            <div class="custom-control custom-radio">
+              <input type="radio" id="unpaid_keep" name="unpaid_action" value="keep" class="custom-control-input" form="form-delete-customer" required>
+              <label class="custom-control-label" for="unpaid_keep">Biarkan tagihan (tetap tercatat sebagai piutang)</label>
+            </div>
+            <div class="custom-control custom-radio">
+              <input type="radio" id="unpaid_cancel" name="unpaid_action" value="cancel" class="custom-control-input" form="form-delete-customer" required>
+              <label class="custom-control-label" for="unpaid_cancel">Batalkan semua tagihan di atas (jurnal pembalik dibuat otomatis)</label>
+            </div>
+          </div>
+        @endif
+
+        @if (!empty($deleteOnuOlt))
+          <div class="border border-info rounded p-2 mb-3">
+            <div class="font-weight-bold text-info mb-1"><i class="fas fa-network-wired mr-1"></i> ONU terhubung</div>
+            <p class="small mb-2">{{ $deleteOnuOlt->name }} &mdash; ONU <strong>{{ $customer->id_onu }}</strong></p>
+            <div class="custom-control custom-radio">
+              <input type="radio" id="onu_keep" name="onu_action" value="keep" class="custom-control-input" form="form-delete-customer" required>
+              <label class="custom-control-label" for="onu_keep">Biarkan config ONU di OLT</label>
+            </div>
+            <div class="custom-control custom-radio">
+              <input type="radio" id="onu_delete" name="onu_action" value="delete" class="custom-control-input" form="form-delete-customer" required>
+              <label class="custom-control-label" for="onu_delete">Hapus config ONU dari OLT</label>
+            </div>
+          </div>
+        @endif
+
+        <p class="text-muted mb-0"><small>Tindakan ini tidak dapat dibatalkan.</small></p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
@@ -1969,41 +2027,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script>
 function confirmDeleteCustomer(customerId) {
-  var unpaidCount = {{ $unpaidInvoiceCount ?? 0 }};
-  var modalBody = document.getElementById('delete-modal-body');
-
-  if (unpaidCount > 0) {
-    modalBody.innerHTML =
-      '<div class="alert alert-danger mb-2">'+
-      '<i class="fas fa-exclamation-circle mr-2"></i>'+
-      '<strong>Tidak dapat menghapus customer!</strong>'+
-      '</div>'+
-      '<p>Terdapat <strong>' + unpaidCount + ' invoice yang belum dibayar</strong>. '+
-      'Harap <strong>lunasi</strong> atau <strong>batalkan</strong> invoice tersebut terlebih dahulu sebelum menghapus customer ini.</p>';
-    document.getElementById('btn-confirm-delete').disabled = true;
-    document.getElementById('btn-confirm-delete').classList.add('disabled');
-  } else {
-    modalBody.innerHTML =
-      '<p>Apakah Anda yakin ingin menghapus customer <strong>{{ addslashes($customer->name) }}</strong>?</p>'+
-      '<div class="form-group">'+
-      '  <label for="deletion_type" class="mb-1">Pilihan Status <span class="text-danger">*</span></label>'+
-      '  <select id="deletion_type" name="deletion_type" class="form-control" form="form-delete-customer" required>'+
-      '    <option value="">-- Pilih --</option>'+
-      '    <option value="terminate">Berhenti Berlangganan</option>'+
-      '    <option value="cancel">Tidak Jadi Berlangganan</option>'+
-      '  </select>'+
-      '</div>'+
-      '<div class="form-group mb-2">'+
-      '  <label for="deletion_reason" class="mb-1">Alasan Hapus <span class="text-danger">*</span></label>'+
-      '  <textarea id="deletion_reason" name="deletion_reason" class="form-control" rows="3" minlength="5" maxlength="1000" form="form-delete-customer" required placeholder="Contoh: customer pindah lokasi, tidak jadi pasang, dll"></textarea>'+
-      '</div>'+
-      '<p class="text-muted mb-0"><small>Tindakan ini tidak dapat dibatalkan.</small></p>';
-    document.getElementById('btn-confirm-delete').disabled = false;
-    document.getElementById('btn-confirm-delete').classList.remove('disabled');
-  }
-
   $('#modal-confirm-delete').modal('show');
 }
+
+// Proses hapus bisa lama (batal tagihan + telnet ke OLT) — cegah klik ganda.
+document.getElementById('form-delete-customer').addEventListener('submit', function () {
+  var btn = document.getElementById('btn-confirm-delete');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Memproses...';
+});
 </script>
 
   @endsection

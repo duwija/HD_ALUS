@@ -4206,11 +4206,33 @@ public function cancelInvoice(Request $request, $id)
 
     try {
         $suminvoice = Suminvoice::findOrFail($id);
-        $cancelDate = Carbon::parse($request->cancel_date ?? now());
+        $this->cancelSuminvoiceRecord(
+            $suminvoice,
+            $request->cancel_reason,
+            $request->updated_by,
+            $request->cancel_date,
+            $request->input('refund_account', config('akun.kas_bank'))
+        );
+
+        DB::commit();
+        return back()->with('success', 'Invoice berhasil dibatalkan dan jurnal sudah dibuat!');
+    } catch (\Throwable $e) {
+        DB::rollBack();
+        return back()->with('error', 'Gagal membatalkan invoice: '.$e->getMessage());
+    }
+}
+
+/**
+ * Batalkan satu suminvoice + jurnal pembaliknya. Tidak membuka transaksi sendiri —
+ * pemanggil wajib membungkus dengan DB::beginTransaction()/commit(). Dipakai oleh
+ * cancelInvoice() dan hapus customer (CustomerController@destroy).
+ */
+public function cancelSuminvoiceRecord(Suminvoice $suminvoice, $cancel_reason, $updatedBy, $cancelDate = null, $refundAccount = null): void
+{
+        $cancelDate = Carbon::parse($cancelDate ?? now());
         $code = substr(md5(uniqid('', true)), 0, 10);
         $contact_id = $suminvoice->id_customer;
-        $cancel_reason = $request->cancel_reason;
-        $refundAccount = $request->input('refund_account', config('akun.kas_bank'));
+        $refundAccount = $refundAccount ?? config('akun.kas_bank');
 
         // Simpan status awal (sebelum update)
         $isPaid = $suminvoice->payment_status == 1;
@@ -4230,7 +4252,7 @@ public function cancelInvoice(Request $request, $id)
         
         // Update status invoice
         $suminvoice->update([
-            'updated_by'    => $request->updated_by,
+            'updated_by'    => $updatedBy,
             'payment_status'=> 2, // cancelled
             'payment_date'  => null,
             'note'          => $cancel_reason,
@@ -4252,13 +4274,6 @@ public function cancelInvoice(Request $request, $id)
                 $this->createWriteOffJournal($jurnals, $cancelDate, $hasPPN, $ppnAmount, $code, $contact_id, $cancel_reason);
             }
         }
-
-        DB::commit();
-        return back()->with('success', 'Invoice berhasil dibatalkan dan jurnal sudah dibuat!');
-    } catch (\Throwable $e) {
-        DB::rollBack();
-        return back()->with('error', 'Gagal membatalkan invoice: '.$e->getMessage());
-    }
 }
 
 
