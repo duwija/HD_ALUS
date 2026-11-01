@@ -218,6 +218,20 @@ class PaymentGateway extends Model
                     'sandbox'       => 0,
                 ],
             ],
+            // Metode bayar custom: tidak membuat transaksi online, hanya menampilkan
+            // konten HTML yang didesain admin (mis. instruksi transfer manual / QRIS statis).
+            [
+                'provider'   => 'custom',
+                'label'      => 'Custom',
+                'icon'       => 'fas fa-pen-to-square',
+                'sort_order' => 8,
+                'enabled'    => 0,
+                'settings'   => [
+                    'subtitle'     => 'Tampilan HTML bebas (transfer manual, dll)',
+                    'custom_title' => 'Instruksi Pembayaran',
+                    'custom_html'  => '',
+                ],
+            ],
             // ─────────────────────────────────────────────────────────────────
         ];
     }

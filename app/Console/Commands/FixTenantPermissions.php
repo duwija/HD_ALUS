@@ -44,17 +44,20 @@ class FixTenantPermissions extends Command
                 "{$basePath}/storage/tenants/{$rescode}/logs",
                 "{$basePath}/storage/tenants/{$rescode}/app",
                 "{$basePath}/storage/tenants/{$rescode}/app/public",
+                "{$basePath}/storage/tenants/{$rescode}/app/backup",
                 "{$basePath}/public/tenants/{$rescode}",
                 "{$basePath}/public/tenants/{$rescode}/storage",
                 "{$basePath}/public/tenants/{$rescode}/upload",
-                "{$basePath}/public/tenants/{$rescode}/backup",
                 "{$basePath}/public/tenants/{$rescode}/users",
             ];
 
             foreach ($directories as $dir) {
+                // Dump database tenant: tidak untuk group/other (lihat TenantBackupStorage)
+                $mode = substr($dir, -strlen('/app/backup')) === '/app/backup' ? 0750 : 0775;
+
                 // Create if not exists
                 if (!is_dir($dir)) {
-                    if (mkdir($dir, 0775, true)) {
+                    if (mkdir($dir, $mode, true)) {
                         $this->line("  ✓ Created: {$dir}");
                     } else {
                         $this->error("  ✗ Failed to create: {$dir}");
@@ -63,7 +66,7 @@ class FixTenantPermissions extends Command
                 }
 
                 // Fix permissions
-                chmod($dir, 0775);
+                chmod($dir, $mode);
                 $this->line("  ✓ Permissions set: {$dir}");
             }
 

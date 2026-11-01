@@ -808,6 +808,17 @@
                             @endif
                         </button>
                     @break
+                    @case('custom')
+                        {{-- Metode custom: hanya menampilkan konten HTML yang didesain admin --}}
+                        <button type="button" class="gw-btn" onclick="showCustomPayment()">
+                            <div class="gw-icon"><i class="{{ $gw->icon }}"></i></div>
+                            <div class="gw-name">{{ $gw->settings['invoice_label'] ?? $gw->label }}</div>
+                            <div class="gw-sub">{{ $gw->settings['invoice_note'] ?? $gw->settings['subtitle'] ?? '' }}</div>
+                            @if($gw->fee_type !== 'none' && $gw->fee_amount > 0)
+                            <div class="gw-sub" style="color:#ef4444;margin-top:4px;">{{ $gw->feeDescription() }}</div>
+                            @endif
+                        </button>
+                    @break
                 @endswitch
                 @endforeach
             </div>
@@ -866,6 +877,24 @@
                 <p style="color:var(--gray-400);font-size:13px;text-align:center;padding:20px 0;">Belum ada payment point terdaftar.</p>
             @endforelse
         </div>
+
+        {{-- Metode custom: konten HTML dari pengaturan payment gateway --}}
+        @php $customGw = isset($gateways) ? $gateways->firstWhere('provider', 'custom') : null; @endphp
+        @if($customGw)
+        <div id="viewCustom" style="display:none;">
+            <button class="ch-back" onclick="showMainView()">
+                <i class="fas fa-arrow-left"></i> Kembali
+            </button>
+            <div class="modal-title">{{ $customGw->settings['custom_title'] ?? 'Instruksi Pembayaran' }}</div>
+            <div class="custom-pay-content" id="customPayContent" style="font-size:14px;line-height:1.5;overflow-x:auto;">
+                {!! str_replace(
+                    ['{customer_id}', '{customer_name}', '{total}'],
+                    [e($customer->customer_id), e($customer->name), '<span class="js-custom-total"></span>'],
+                    $customGw->settings['custom_html'] ?? ''
+                ) !!}
+            </div>
+        </div>
+        @endif
     </div>
 </div>
 
@@ -968,7 +997,7 @@
     }
     function closeModalOutside(e) { if (e.target === document.getElementById('payModal')) closeModal(); }
     function showOnlyView(id) {
-        ['viewMain', 'viewTripay', 'viewBumdes'].forEach(function (v) {
+        ['viewMain', 'viewTripay', 'viewBumdes', 'viewCustom'].forEach(function (v) {
             var el = document.getElementById(v);
             if (el) el.style.display = (v === id) ? '' : 'none';
         });
@@ -976,6 +1005,10 @@
     function showMainView()       { showOnlyView('viewMain'); }
     function showTripayChannels() { showOnlyView('viewTripay'); }
     function showBumdesPoints()   { showOnlyView('viewBumdes'); }
+    function showCustomPayment() {
+        document.querySelectorAll('.js-custom-total').forEach(el => el.textContent = fmt(getTotal()));
+        showOnlyView('viewCustom');
+    }
 
     function buildSummary() {
         const total = getTotal();

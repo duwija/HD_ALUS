@@ -19,3 +19,6 @@ pyhton/__pycache__/
 pyhton/logs/
 pyhton/*.pyc
 pyhton/*.bax_.py
+
+# Claude Code local settings
+.claude/settings.local.json

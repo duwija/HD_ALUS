@@ -89,8 +89,8 @@ class TenantCreate extends Command
             
             $this->line("");
             $this->comment("Next steps:");
-            $this->line("1. Create storage dirs: mkdir -p storage/tenants/{$tenant->rescode}/{logs,app/public}");
-            $this->line("2. Create public dirs: mkdir -p public/tenants/{$tenant->rescode}/{storage,upload,backup,users}");
+            $this->line("1. Create storage dirs: mkdir -p storage/tenants/{$tenant->rescode}/{logs,app/public,app/backup}");
+            $this->line("2. Create public dirs: mkdir -p public/tenants/{$tenant->rescode}/{storage,upload,users}");
             $this->line("3. Setup nginx config");
             $this->line("4. Setup SSL certificate");
             $this->line("5. Point DNS to server");

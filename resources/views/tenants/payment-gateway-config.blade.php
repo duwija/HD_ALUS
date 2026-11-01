@@ -20,7 +20,7 @@
                     </a>
                 </div>
 
-                <form method="POST" action="{{ route('admin.tenants.payment-gateway.update', $tenant->id) }}">
+                <form method="POST" action="{{ route('admin.tenants.payment-gateway.update', $tenant->id) }}" id="paymentGatewayForm">
                     @csrf
 
                     <div class="card-body">
@@ -92,7 +92,7 @@
 
                                 {{-- Settings row (api_key, merchant_code, dll) --}}
                                   @php $settings = json_decode($gw->settings ?? '{}', true) ?? []; @endphp
-                                                                    @if(in_array($provider, ['duitku', 'duitku2', 'winpay', 'winpay2']))
+                                                                    @if(in_array($provider, ['duitku', 'duitku2', 'winpay', 'winpay2', 'custom']))
                                 <div class="row mt-2" id="settingsRow_{{ $provider }}"
                                      style="{{ $gw->enabled ? '' : 'display:none;' }}">
                                                                         @if(in_array($provider, ['duitku', 'duitku2']))
@@ -171,6 +171,27 @@
                                             di Edit Tenant, nilainya akan disalin otomatis sekali ke settings Winpay saat halaman ini dibuka.
                                             Karena Winpay memakai <strong>checkout page</strong>, metode bayar akhir dipilih di sisi Winpay.
                                             @endif
+                                        </div>
+                                    </div>
+                                    @elseif($provider === 'custom')
+                                    <div class="col-md-12">
+                                        <label class="small text-muted mb-1">Judul Halaman</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               name="providers[custom][settings][custom_title]"
+                                               value="{{ $settings['custom_title'] ?? '' }}"
+                                               placeholder="Instruksi Pembayaran">
+                                    </div>
+                                    <div class="col-md-12 mt-2">
+                                        <label class="small text-muted mb-1">Tampilan (HTML)</label>
+                                        <textarea id="customHtmlEditor"
+                                                  name="providers[custom][settings][custom_html]">{{ $settings['custom_html'] ?? '' }}</textarea>
+                                    </div>
+                                    <div class="col-md-12 mt-2">
+                                        <div class="alert alert-info py-2 px-3 small mb-0">
+                                            <i class="fas fa-info-circle"></i>
+                                            Konten ini tampil saat pelanggan memilih metode ini di halaman tagihan. Tidak ada transaksi online yang dibuat.
+                                            Gunakan tombol <strong>&lt;/&gt;</strong> di toolbar untuk mengedit kode HTML langsung.
+                                            Placeholder: <code>{customer_id}</code>, <code>{customer_name}</code>, <code>{total}</code> (total tagihan yang dipilih).
                                         </div>
                                     </div>
                                     @endif
@@ -324,6 +345,7 @@
                         <li>Biaya <strong>Persen</strong>: % dari tagihan, misal <code>2.5</code> = 2,5%.</li>
                         <li><strong>Winpay 2</strong> dapat memakai merchant Winpay kedua dengan fee customer terpisah jika diperlukan.</li>
                         <li><strong>Duitku 2</strong> dapat memakai merchant Duitku kedua dengan fee customer terpisah jika diperlukan.</li>
+                        <li><strong>Custom</strong> menampilkan konten HTML buatan sendiri (mis. transfer manual), tanpa transaksi online.</li>
                         <li>Urutan mengatur tampilan pilihan gateway di invoice.</li>
                         <li>Perubahan langsung aktif, tidak perlu restart server.</li>
                     </ul>
@@ -342,6 +364,8 @@ function setSectionInputsDisabled(section, disabled) {
     if (!section) return;
     section.querySelectorAll('input, select, textarea').forEach(function (field) {
         if (field.type === 'hidden') return;
+        // Editor HTML (summernote) dibiarkan aktif; settings lama tetap aman karena di-merge saat simpan
+        if (field.id === 'customHtmlEditor' || field.closest('.note-editor')) return;
         field.disabled = disabled;
     });
 }
@@ -395,6 +419,41 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[id^="feeType_"]').forEach(function (select) {
         var provider = select.id.replace('feeType_', '');
         toggleFeeAmount(provider, select.value);
+    });
+});
+</script>
+@endsection
+
+@section('styles')
+<link rel="stylesheet" href="{{ url('dashboard/plugins/summernote/summernote-bs4.min.css') }}">
+@endsection
+
+@section('scripts')
+<script src="{{ url('dashboard/plugins/summernote/summernote-bs4.min.js') }}"></script>
+<script>
+$(function () {
+    var $editor = $('#customHtmlEditor');
+    if (!$editor.length) return;
+
+    $editor.summernote({
+        height: 280,
+        toolbar: [
+            ['style', ['style']],
+            ['font', ['bold', 'italic', 'underline', 'clear']],
+            ['color', ['color']],
+            ['para', ['ul', 'ol', 'paragraph']],
+            ['table', ['table']],
+            ['insert', ['link', 'picture', 'hr']],
+            ['view', ['codeview', 'fullscreen']]
+        ]
+    });
+
+    // Perubahan di mode kode (codeview) baru tersinkron ke textarea setelah keluar codeview
+    $('#paymentGatewayForm').on('submit', function () {
+        if ($editor.summernote('codeview.isActivated')) {
+            $editor.summernote('codeview.deactivate');
+        }
+        $editor.val($editor.summernote('code'));
     });
 });
 </script>
