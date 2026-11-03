@@ -3662,7 +3662,7 @@ if ($customers->id_status == 4 && $active_invoice <= 0) {
         ->first();
 
     // Periksa apakah invoice masih dalam batas waktu jatuh tempo
-        if ($active_invoice && Carbon::parse($active_invoice->due_date)->greaterThan(Carbon::today())) {
+        if ($active_invoice && Carbon::parse($active_invoice->due_date)->greaterThanOrEqualTo(Carbon::today())) {
             $distrouter = \App\Distrouter::withTrashed()->where('id', $customers->id_distrouter)->first();
 
             \App\Customer::where('id', $request->id_customer)->update(['id_status' => 2]);

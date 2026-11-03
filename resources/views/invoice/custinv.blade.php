@@ -1057,14 +1057,14 @@
     }
 
     // ── Pagination ──
-    const PER_PAGE = 5;
+    const PER_PAGE = 10;
     let currentPage = 1;
 
     function initPager() {
         const cards  = document.querySelectorAll('#invoiceList .inv-card');
         const total  = cards.length;
         const pages  = Math.ceil(total / PER_PAGE);
-        if (pages <= 1) return; // tidak perlu pager kalau ≤5
+        if (pages <= 1) return; // tidak perlu pager kalau ≤10
         goToPage(1);
     }
 

@@ -892,7 +892,6 @@ public function custinv($encrypted)
 
   try {
     $suminvoice = \App\Suminvoice::where('id_customer', $id)
-    ->limit(10)
     ->orderBy('id', 'DESC')
     ->get();
 

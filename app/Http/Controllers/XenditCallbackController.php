@@ -351,7 +351,7 @@ elseif ($customers->id_status == 4 && \App\Suminvoice::where('payment_status', 0
     ->first();
 
     // Periksa apakah invoice masih dalam batas waktu jatuh tempo
-    if ($active_invoice && Carbon::parse($active_invoice->due_date)->greaterThan(Carbon::today())) {
+    if ($active_invoice && Carbon::parse($active_invoice->due_date)->greaterThanOrEqualTo(Carbon::today())) {
         $distrouter = \App\Distrouter::withTrashed()->where('id', $customers->id_distrouter)->first();
 
         \App\Customer::where('id', $invoice->id_customer)->update(['id_status' => 2]);
@@ -762,7 +762,7 @@ elseif ($customers->id_status == 4 && \App\Suminvoice::where('payment_status', 0
     ->first();
 
     // Periksa apakah invoice masih dalam batas waktu jatuh tempo
-    if ($active_invoice && Carbon::parse($active_invoice->due_date)->greaterThan(Carbon::today())) {
+    if ($active_invoice && Carbon::parse($active_invoice->due_date)->greaterThanOrEqualTo(Carbon::today())) {
         $distrouter = \App\Distrouter::withTrashed()->where('id', $customers->id_distrouter)->first();
 
         \App\Customer::where('id', $invoice->id_customer)->update(['id_status' => 2]);
@@ -842,6 +842,20 @@ return("ACCEPTED");
 }
 }
 
+
+    /**
+     * Aturan aktif kembali setelah bayar — sama dengan pelunasan offline / Tripay / Winpay single:
+     * aktif jika tidak ada invoice unpaid, atau invoice unpaid dengan due_date terdekat belum jatuh tempo.
+     */
+    private function shouldReactivateAfterPayment($customerId): bool
+    {
+        $next = \App\Suminvoice::where('payment_status', 0)
+            ->where('id_customer', $customerId)
+            ->orderBy('due_date', 'asc')
+            ->first();
+
+        return !$next || Carbon::parse($next->due_date)->greaterThanOrEqualTo(Carbon::today());
+    }
 
     // ============================================================
     //  BUNDLE CALLBACK — dipakai oleh tripay, duitku, winpay
@@ -990,9 +1004,14 @@ return("ACCEPTED");
                 'updated_at'  => now(),
             ]);
 
-            // Re-aktifkan customer jika tidak ada unpaid invoice
-            if ($customer->id_status == 4 && \App\Suminvoice::where('payment_status', 0)->where('id_customer', $customer->id)->count() <= 0) {
+            // Re-aktifkan customer jika tidak ada unpaid invoice, atau unpaid berikutnya belum jatuh tempo
+            if ($customer->id_status == 4 && $this->shouldReactivateAfterPayment($customer->id)) {
                 \App\Customer::where('id', $customer->id)->update(['id_status' => 2]);
+                \App\Customerlog::create([
+                    'id_customer' => $customer->id, 'date' => now(),
+                    'updated_by' => $source . ' BUNDLE', 'topic' => 'payment',
+                    'updates' => json_encode(['Status' => ['old' => 'Block', 'new' => 'Active']]),
+                ]);
                 if ($distrouter = \App\Distrouter::withTrashed()->where('id', $customer->id_distrouter)->first()) {
                     try {
                         EnableMikrotikJob::dispatch($customer->id)->onQueue(app('tenant')['domain'] ?? 'default')->delay(now()->addSeconds(2));
@@ -1353,8 +1372,8 @@ return("ACCEPTED");
                 ]);
             }
 
-            // Re-aktifkan customer jika tidak ada unpaid invoice
-            if ($customers->id_status == 4 && \App\Suminvoice::where('payment_status', 0)->where('id_customer', $invoice->id_customer)->count() <= 0) {
+            // Re-aktifkan customer jika tidak ada unpaid invoice, atau unpaid berikutnya belum jatuh tempo
+            if ($customers->id_status == 4 && $this->shouldReactivateAfterPayment($invoice->id_customer)) {
                 \App\Customer::where('id', $invoice->id_customer)->update(['id_status' => 2]);
                 if ($distrouter = \App\Distrouter::withTrashed()->where('id', $customers->id_distrouter)->first()) {
                     try {
