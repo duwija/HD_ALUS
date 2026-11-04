@@ -1884,6 +1884,25 @@ $(document).ready(function() {
     </div>
   </div>
 </div>
+<script>
+// Combobox di modal Convert Lead pakai Select2 (ada pencarian). dropdownParent wajib
+// diarahkan ke modal, kalau tidak kotak search tidak bisa diketik (focus trap Bootstrap).
+$(function () {
+  var $modal = $('#modal-convert');
+  $modal.on('shown.bs.modal', function () {
+    $modal.find('#convert_id_plan, #convert_id_distrouter, #convert_isolir_date, #convert_id_olt, #convert_id_distpoint').each(function () {
+      var $sel = $(this);
+      if ($sel.hasClass('select2-hidden-accessible')) return;
+      $sel.select2({
+        dropdownParent: $modal,
+        width: '100%',
+        placeholder: $sel.find('option[value=""]').first().text(),
+        allowClear: !$sel.prop('required')
+      });
+    });
+  });
+});
+</script>
 @endif
 
 {{-- Modal: Tandai Lead Gagal --}}
