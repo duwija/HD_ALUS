@@ -608,8 +608,11 @@ return response()->json(['success' => true]);
                         return $rejected;
                     }
                 }
-                $noteStr = ($payload['channel'] ?? '') . ' | ' . ($payload['amount'] ?? '');
-                return $this->processBundleCallback($bundle, (float)($payload['amount'] ?? 0), 'WINPAY', $noteStr);
+                $noteStr = ($payload['channel'] ?? '') . ' | ' . ($payload['amount'] ?? '') . ' ( Fee ' . ($payload['fee'] ?? 0) . ')';
+                // Catat nominal bersih yang masuk ke saldo Winpay (seperti sistem lama), agar selisih
+                // biaya customer vs potongan Winpay terlihat. Fallback ke amount bila nett tidak dikirim.
+                $settled = $nett_amount > 0 ? $nett : null;
+                return $this->processBundleCallback($bundle, (float)($payload['amount'] ?? 0), 'WINPAY', $noteStr, $settled);
             }
             \Log::channel('payment')->error("Invoice tidak ditemukan: $number");
             return response()->json(['success' => false, 'message' => 'Invoice not found'], 404);
@@ -860,7 +863,9 @@ return("ACCEPTED");
     // ============================================================
     //  BUNDLE CALLBACK — dipakai oleh tripay, duitku, winpay
     // ============================================================
-    private function processBundleCallback($bundle, float $paidAmount, string $source, string $noteStr)
+    // $settledAmount: nominal bersih yang masuk ke saldo gateway (Winpay). Bila diisi, selisihnya terhadap
+    // total tagihan (lebih/kurang) dicatat di recieve_payment dan jurnal 6-60249, seperti sistem lama.
+    private function processBundleCallback($bundle, float $paidAmount, string $source, string $noteStr, ?float $settledAmount = null)
     {
         $date = now()->toDateTimeString();
         $code = substr(md5(uniqid('', true)), 0, 10);
@@ -918,7 +923,10 @@ return("ACCEPTED");
         DB::beginTransaction();
         try {
             $totalUnpaidAmount = (int) round((float) $unpaidInvoices->sum('total_amount'));
-            $allocatablePaidAmount = (int) min(max((float) $paidAmount, 0), max($totalUnpaidAmount, 0));
+            $allocatablePaidAmount = $settledAmount !== null
+                ? (int) round(max($settledAmount, 0))
+                : (int) min(max((float) $paidAmount, 0), max($totalUnpaidAmount, 0));
+            $capAtInvoice = $settledAmount === null;
             $remainingTotalAmount = $totalUnpaidAmount;
             $remainingPaidAmount = $allocatablePaidAmount;
             $invoiceRows = $unpaidInvoices->values();
@@ -932,13 +940,13 @@ return("ACCEPTED");
                 if ($totalUnpaidAmount <= 0 || $allocatablePaidAmount <= 0) {
                     $receivedAmount = 0;
                 } elseif ($isLast) {
-                    $receivedAmount = max(min($remainingPaidAmount, $invoiceTotal), 0);
+                    $receivedAmount = $capAtInvoice ? max(min($remainingPaidAmount, $invoiceTotal), 0) : max($remainingPaidAmount, 0);
                 } else {
                     if ($remainingTotalAmount <= 0 || $remainingPaidAmount <= 0) {
                         $receivedAmount = 0;
                     } else {
                         $receivedAmount = (int) floor(($invoiceTotal / $remainingTotalAmount) * $remainingPaidAmount);
-                        $receivedAmount = max(min($receivedAmount, $invoiceTotal), 0);
+                        $receivedAmount = $capAtInvoice ? max(min($receivedAmount, $invoiceTotal), 0) : max($receivedAmount, 0);
                     }
                 }
 
@@ -978,6 +986,19 @@ return("ACCEPTED");
                             'note'        => 'Selisih fee gateway bundle',
                             'id_akun'     => '6-60249',
                             'debet'       => ($invoiceTotal - $receivedAmount),
+                            'contact_id'  => $customer->id,
+                            'code'        => $code,
+                        ]);
+                    } elseif ($receivedAmount > $invoiceTotal) {
+                        // Biaya dari customer lebih besar dari potongan gateway
+                        \App\Jurnal::create([
+                            'date'        => $date,
+                            'reff'        => $reff,
+                            'type'        => 'jumum',
+                            'description' => 'Receive Payment #' . $invoice->number . ' | ' . $customer->name,
+                            'note'        => 'Selisih fee gateway bundle',
+                            'id_akun'     => '6-60249',
+                            'kredit'      => ($receivedAmount - $invoiceTotal),
                             'contact_id'  => $customer->id,
                             'code'        => $code,
                         ]);
