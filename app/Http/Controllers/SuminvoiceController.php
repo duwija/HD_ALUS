@@ -2403,26 +2403,18 @@ public function table_transaction_list(Request $request)
     $kasbank     = $request->kasbank;
     $id_plan     = $request->id_plan;
 
-    $gatewayDiffMap = DB::table('jurnals')
-    ->selectRaw("REPLACE(reff, 'receive', '') as tempcode_ref")
-    ->selectRaw("SUM(CASE WHEN id_akun = '6-60249' THEN (debet - kredit) ELSE 0 END) as gateway_diff")
-    ->where('reff', 'like', '%receive')
-    ->groupBy('tempcode_ref');
-
     /** ================= BASE QUERY ================= **/
+    // gateway_diff & periode dihitung per baris yang tampil saja (lihat addColumn), bukan lewat
+    // subquery atas seluruh jurnal/invoice — itu yang membuat halaman ini ±30 detik.
     $baseQuery = \App\Suminvoice::query()
     ->whereBetween('suminvoices.payment_date', [$dateStart, $dateEnd])
     ->where('suminvoices.payment_status', 1)
     ->leftJoin('customers', 'suminvoices.id_customer', '=', 'customers.id')
-    ->leftJoinSub($gatewayDiffMap, 'gateway_map', function ($join) {
-        $join->on('suminvoices.tempcode', '=', 'gateway_map.tempcode_ref');
-    })
     ->select(
         'suminvoices.*',
         'customers.name',
         'customers.customer_id',
-        'customers.id_merchant',
-        DB::raw('COALESCE(gateway_map.gateway_diff, 0) as gateway_diff')
+        'customers.id_merchant'
     )
     ->with([
         'customer.merchant_name',
@@ -2470,7 +2462,9 @@ public function table_transaction_list(Request $request)
         'suminvoices.updated_by',
         DB::raw('SUM(suminvoices.recieve_payment + COALESCE(suminvoices.merchant_fee, 0)) as total_payment'),
         DB::raw('SUM(suminvoices.total_amount) as total_amount'),
-        DB::raw('SUM(COALESCE(suminvoices.merchant_fee, 0)) as merchant_fee_total')
+        DB::raw('SUM(COALESCE(suminvoices.merchant_fee, 0)) as merchant_fee_total'),
+        // Selisih diterima vs tagihan (mis. biaya gateway Winpay: + QRIS, - VA)
+        DB::raw('SUM(COALESCE(suminvoices.recieve_payment, 0) - suminvoices.total_amount) as selisih')
     )
     ->groupBy('suminvoices.updated_by')
     ->get()
@@ -2514,10 +2508,6 @@ public function table_transaction_list(Request $request)
     ->get();
 
 
-    /** ================= LOAD INVOICE PERIOD (1x QUERY) ================= **/
-    $invoicePeriods = \App\Invoice::select('tempcode','periode','monthly_fee')
-    ->get()
-    ->groupBy('tempcode');
 
 
     /** ================= MERCHANT & KASBANK LIST ================= **/
@@ -2541,11 +2531,12 @@ public function table_transaction_list(Request $request)
         return '<a class="badge '.$badge.'" href="/customer/'.$s->customer->id.'">'.$s->customer->customer_id.'</a>';
     })
 
-    ->addColumn('period', function($s) use ($invoicePeriods) {
-        if (!isset($invoicePeriods[$s->tempcode])) return '-';
+    ->addColumn('period', function($s) {
+        $items = \App\Invoice::where('tempcode', $s->tempcode)->get(['periode', 'monthly_fee']);
+        if ($items->isEmpty()) return '-';
 
         $out = [];
-        foreach ($invoicePeriods[$s->tempcode] as $i) {
+        foreach ($items as $i) {
             $type = $i->monthly_fee ? 'M' : 'G';
             $out[] = $type.' '.$i->periode;
         }
@@ -2564,7 +2555,11 @@ public function table_transaction_list(Request $request)
 
     ->addColumn('payment_fee', fn($s)=> number_format((float) ($s->merchant_fee ?? 0), 2, '.', ','))
 
-    ->addColumn('gateway_diff', fn($s)=> number_format((float) ($s->gateway_diff ?? 0), 2, '.', ','))
+    ->addColumn('gateway_diff', function ($s) {
+        $diff = \App\Jurnal::where('reff', $s->tempcode . 'receive')->where('id_akun', '6-60249')
+            ->selectRaw('COALESCE(SUM(debet - kredit), 0) as d')->value('d');
+        return number_format((float) $diff, 2, '.', ',');
+    })
 
     ->addColumn('status', function($s){
         if ($s->payment_status == 1){ $badge="success"; $text="PAID"; }

@@ -49,6 +49,7 @@
       var groupedTransactionsTotal = 0;
       var groupedTransactionsTotalMerchant = 0;
       var groupedTransactionsFee = 0;
+      var groupedTransactionsSelisih = 0;
       var groupedTransactionsPayment = 0;
       var groupedTransactionsPaymentMerchant = 0;
       var groupedTransactionsPaymentKasbank = 0;
@@ -107,11 +108,14 @@
       groupedTransactionsFee += totalFee;
       var totalPayment = Number(groupedTransactionsUser[rowindex].total_payment) || 0;
       groupedTransactionsPayment += totalPayment;
+      var selisih = Math.round(Number(groupedTransactionsUser[rowindex].selisih) || 0);
+      groupedTransactionsSelisih += selisih;
       groupedTransactionsUserHTML += '<tr>' +
         '<td>' + (rowindex + 1) + '</td>' + // Nomor urut
         '<td>' + groupedTransactionsUser[rowindex].updated_by + '</td>' + // Nama client
         '<td class="text-right">' + (new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.groupedTransactionsUser[rowindex].total_amount)) + '</td>' + // Total amount
-        '<td class="text-right">' + (new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.groupedTransactionsUser[rowindex].payment_fee)) + '</td>' + // 
+        '<td class="text-right">' + (new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.groupedTransactionsUser[rowindex].payment_fee)) + '</td>' + //
+        '<td class="text-right' + (selisih < 0 ? ' text-danger' : '') + '">' + (new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(selisih)) + '</td>' + // Selisih diterima - tagihan
         '<td class="text-right"><strong>' + (new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(json.groupedTransactionsUser[rowindex].total_payment)) + '</strong></td>' + // Total amount
         '</tr>';
 
@@ -135,6 +139,8 @@
       $('#totalAmount').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsTotal));
       $('#totalPayment').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsPayment));
       $('#totalFee').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsFee));
+      $('#totalSelisih').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsSelisih))
+        .toggleClass('text-danger', groupedTransactionsSelisih < 0);
       $('#totalPaymentMerchant').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsPaymentMerchant));
       $('#totalPaymentKasbank').text(new Intl.NumberFormat('id-ID', { style: 'decimal', minimumFractionDigits: 0 }).format(groupedTransactionsPaymentKasbank));
 
@@ -208,7 +214,7 @@
     {data: 'period', name: 'period'},
     {data: 'total_amount', name: 'total_amount'},
     {data: 'payment_fee', name: 'payment_fee'},
-    {data: 'gateway_diff', name: 'gateway_diff'},
+    {data: 'gateway_diff', name: 'gateway_diff', orderable: false, searchable: false},
     {data: 'status', name: 'status'},
     {data: 'kasbank', name: 'kasbank'},
     {data: 'updated_by', name: 'updated_by'},

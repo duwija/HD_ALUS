@@ -192,6 +192,7 @@
                   <th>Received By</th>
                   <th class="text-right">Amount*</th>
                   <th class="text-right">Fee</th>
+                  <th class="text-right" title="Diterima - tagihan (mis. biaya gateway)">Selisih</th>
                   <th class="text-right">Payment</th>
                 </tr>
               </thead>
@@ -201,6 +202,7 @@
                   <th colspan="2" class="text-right">Total</th>
                   <th id="totalAmount" class="text-right">0</th>
                   <th id="totalFee" class="text-right">0</th>
+                  <th id="totalSelisih" class="text-right">0</th>
                   <th id="totalPayment" class="text-right">0</th>
                 </tr>
               </tfoot>
