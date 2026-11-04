@@ -831,10 +831,25 @@ public function subscribeform($id)
     
 }
 
+/**
+ * Samarkan nama: tiap kata sisakan 3 huruf pertama, sisanya '*'
+ * (kata <= 3 huruf: minimal 1 huruf tetap disamarkan). Contoh "Budi Santoso" -> "Bud* San****".
+ */
+private static function maskName(?string $name): string
+{
+    $words = preg_split('/\s+/u', trim((string) $name), -1, PREG_SPLIT_NO_EMPTY);
+    return implode(' ', array_map(function ($w) {
+        $len = mb_strlen($w);
+        $keep = max(1, min(3, $len - 1));
+        return mb_substr($w, 0, $keep) . str_repeat('*', max(1, $len - $keep));
+    }, $words));
+}
+
 public function table_customermerchant(Request $request)
 {
     // Start building the query
 $id_merchant = \Auth::user()->id_merchant; // Perbaiki nama variabel dari id_idmerchant ke id_merchant
+$maskNames = strtolower(trim((string) \Auth::user()->privilege)) === 'merchant';
 
 $customerQuery = \App\Customer::select('id', 'customer_id', 'name', 'address', 'id_merchant', 'billing_start', 'isolir_date', 'id_plan', 'id_status', 'id_sale');
 
@@ -865,6 +880,10 @@ return DataTables::of($customerQuery)
     return '<a>'.$customer->customer_id.'</a>';
 })
 
+// Nama pelanggan disamarkan hanya untuk akun merchant (mis. "Budi Santoso" -> "Bud* San****").
+->editColumn('name', function ($customer) use ($maskNames) {
+    return $maskNames ? self::maskName($customer->name) : $customer->name;
+})
 ->addIndexColumn()
 ->addColumn('select', function ($customer) {
     if (in_array($customer->status_name->name, ['Active', 'Block'])) {
