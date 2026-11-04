@@ -192,6 +192,7 @@
                                             Konten ini tampil saat pelanggan memilih metode ini di halaman tagihan. Tidak ada transaksi online yang dibuat.
                                             Gunakan tombol <strong>&lt;/&gt;</strong> di toolbar untuk mengedit kode HTML langsung.
                                             Placeholder: <code>{customer_id}</code>, <code>{customer_name}</code>, <code>{total}</code> (total tagihan yang dipilih).
+                                            <br>Admin tenant juga bisa mengedit konten ini di menu <strong>Admin &rarr; Settings</strong> (data yang sama, saling sinkron).
                                         </div>
                                     </div>
                                     @endif

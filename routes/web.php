@@ -328,6 +328,7 @@ Route::get('/settings/auto-isolir', 'AutoIsolirSettingController@index')->name('
 Route::post('/settings/auto-isolir', 'AutoIsolirSettingController@update')->name('settings.auto-isolir.update');
 Route::post('/settings/auto-isolir/reminder', 'AutoIsolirSettingController@updateReminder')->name('settings.auto-isolir.reminder');
 Route::post('/settings/auto-isolir/inv-note', 'AutoIsolirSettingController@updateInvNote')->name('settings.auto-isolir.inv-note');
+Route::post('/settings/auto-isolir/custom-payment', 'AutoIsolirSettingController@updateCustomPayment')->name('settings.auto-isolir.custom-payment');
 Route::post('/settings/auto-isolir/auto-invoice', 'AutoIsolirSettingController@updateAutoInvoice')->name('settings.auto-isolir.auto-invoice');
 Route::post('/settings/auto-isolir/isolir-method', 'AutoIsolirSettingController@updateIsolirMethod')->name('settings.auto-isolir.isolir-method');
 Route::get('/settings/auto-isolir/mikrotik-script', 'AutoIsolirSettingController@mikrotikScript')->name('settings.auto-isolir.mikrotik-script');

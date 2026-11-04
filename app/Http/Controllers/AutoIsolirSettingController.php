@@ -71,6 +71,7 @@ class AutoIsolirSettingController extends Controller
             // Key belum ada → aktif (sama dengan tenant_notify_enabled)
             'notifInvoiceCreate' => !array_key_exists('notif_invoice_create', $features) || (bool) $features['notif_invoice_create'],
             'notifPayment'       => !array_key_exists('notif_payment', $features) || (bool) $features['notif_payment'],
+            'customPay'          => $this->customPaymentRow(),
         ]);
     }
 
@@ -331,6 +332,87 @@ class AutoIsolirSettingController extends Controller
         ));
 
         return redirect('settings/auto-isolir')->with('success', 'Catatan invoice disimpan.');
+    }
+
+    /**
+     * Metode bayar "Custom" (konten HTML di halaman tagihan pelanggan).
+     * Baris yang sama (payment_gateways.provider = custom di DB tenant) dengan yang diedit
+     * super admin di Tenant Management → Payment Gateway, jadi kedua sisi selalu sinkron.
+     */
+    public function updateCustomPayment(Request $request)
+    {
+        $this->authorizeAdmin();
+
+        $request->validate([
+            'custom_enabled' => 'nullable|in:0,1',
+            'custom_title'   => 'nullable|string|max:150',
+            'custom_html'    => 'nullable|string|max:2000000', // gambar dari editor tersimpan base64
+        ]);
+
+        $row = $this->customPaymentRow(true);
+        if (!$row) {
+            return redirect('settings/auto-isolir')->with('error', 'Tabel payment gateway belum tersedia di tenant ini.');
+        }
+
+        $settings = json_decode($row->settings ?? '{}', true) ?: [];
+        $oldLen   = mb_strlen((string) ($settings['custom_html'] ?? ''));
+        $settings['custom_title'] = trim((string) $request->input('custom_title', '')) ?: 'Instruksi Pembayaran';
+        $settings['custom_html']  = self::sanitizeCustomHtml((string) $request->input('custom_html', ''));
+        $enabled = (int) $request->input('custom_enabled', 0) === 1 ? 1 : 0;
+
+        DB::table('payment_gateways')->where('provider', 'custom')->update([
+            'enabled'    => $enabled,
+            'settings'   => json_encode($settings),
+            'updated_at' => now(),
+        ]);
+
+        $user = Auth::user();
+        Log::channel('isolir')->info(sprintf(
+            '[TenantSetting] tenant=%s payment custom diubah (enabled=%d, html %d -> %d karakter) oleh user #%s (%s) ip=%s',
+            tenant('domain'), $enabled, $oldLen, mb_strlen($settings['custom_html']), $user->id, $user->name, $request->ip()
+        ));
+
+        return redirect('settings/auto-isolir')->with('success', 'Metode bayar Custom disimpan' . ($enabled ? ' dan aktif.' : ' (nonaktif).'));
+    }
+
+    /** Baris provider custom; $create = buat dari default bila belum ada. */
+    private function customPaymentRow(bool $create = false)
+    {
+        try {
+            if (!\Schema::hasTable('payment_gateways')) {
+                return null;
+            }
+            $row = DB::table('payment_gateways')->where('provider', 'custom')->first();
+            if (!$row && $create) {
+                $def = collect(\App\PaymentGateway::defaultProviders())->firstWhere('provider', 'custom');
+                DB::table('payment_gateways')->insert([
+                    'domain' => null, 'provider' => 'custom', 'label' => $def['label'], 'icon' => $def['icon'],
+                    'enabled' => 0, 'fee_type' => 'none', 'fee_amount' => 0, 'fee_label' => 'Biaya Transaksi',
+                    'sort_order' => $def['sort_order'], 'settings' => json_encode($def['settings']),
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+                $row = DB::table('payment_gateways')->where('provider', 'custom')->first();
+            }
+            if ($row) {
+                $row->settings_array = json_decode($row->settings ?? '{}', true) ?: [];
+            }
+            return $row;
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Konten tampil mentah di halaman tagihan pelanggan: buang script/iframe/object,
+     * atribut event (onclick=...) dan URL javascript: — format, gambar, tabel, link tetap.
+     */
+    private static function sanitizeCustomHtml(string $html): string
+    {
+        $html = preg_replace('#<(script|iframe|object|embed|style|form|meta|base)\b[^>]*>.*?</\1\s*>#is', '', $html);
+        $html = preg_replace('#<(script|iframe|object|embed|style|form|meta|base|link)\b[^>]*/?>#is', '', $html);
+        $html = preg_replace('#\s+on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#i', '', $html);
+        $html = preg_replace('#(href|src)\s*=\s*(["\']?)\s*(javascript|vbscript|data:text/html)[^"\'>\s]*\2#i', '$1="#"', $html);
+        return trim($html);
     }
 
     /**

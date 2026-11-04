@@ -336,6 +336,57 @@
         </div>
       </div>
     </div>
+
+    @if($customPay)
+    @php $cps = $customPay->settings_array; @endphp
+    <div class="row">
+      <div class="col-12">
+        <div class="card card-outline {{ $customPay->enabled ? 'card-success' : 'card-secondary' }}">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-pen-to-square mr-1"></i> Metode Bayar Custom</h3>
+            <div class="card-tools">
+              <span class="badge {{ $customPay->enabled ? 'badge-success' : 'badge-secondary' }}">{{ $customPay->enabled ? 'Aktif' : 'Nonaktif' }}</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <p class="mb-2">
+              Konten bebas (mis. instruksi transfer manual / QRIS statis) yang tampil saat pelanggan memilih metode
+              <strong>Custom</strong> di halaman tagihan. Tidak ada transaksi online yang dibuat.
+            </p>
+            <p class="mb-3 text-muted"><small>
+              Pengaturan ini sama dengan metode <strong>Custom</strong> di konfigurasi Payment Gateway super admin, perubahan dari salah satu sisi langsung terlihat di sisi lain.
+            </small></p>
+
+            <form method="POST" action="{{ url('settings/auto-isolir/custom-payment') }}" id="customPaymentForm">
+              @csrf
+              <div class="form-group">
+                <div class="custom-control custom-switch">
+                  <input type="hidden" name="custom_enabled" value="0">
+                  <input type="checkbox" class="custom-control-input" id="custom_enabled" name="custom_enabled" value="1" {{ $customPay->enabled ? 'checked' : '' }}>
+                  <label class="custom-control-label" for="custom_enabled"><strong>Tampilkan di halaman tagihan pelanggan</strong></label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="custom_title" class="mb-1">Judul Halaman</label>
+                <input type="text" id="custom_title" name="custom_title" maxlength="150" class="form-control @error('custom_title') is-invalid @enderror"
+                       value="{{ old('custom_title', $cps['custom_title'] ?? 'Instruksi Pembayaran') }}" placeholder="Instruksi Pembayaran">
+              </div>
+              <div class="form-group">
+                <label class="mb-1">Tampilan (HTML)</label>
+                <textarea id="customPayHtmlEditor" name="custom_html">{{ old('custom_html', $cps['custom_html'] ?? '') }}</textarea>
+                <small class="text-muted d-block mt-1">
+                  Tombol <strong>&lt;/&gt;</strong> di toolbar untuk mengedit kode HTML langsung.
+                  Placeholder: <code>{customer_id}</code>, <code>{customer_name}</code>, <code>{total}</code> (total tagihan yang dipilih).
+                  Demi keamanan, tag <code>&lt;script&gt;</code>/<code>&lt;iframe&gt;</code> dan atribut <code>on…=</code> dibuang saat disimpan.
+                </small>
+              </div>
+              <button type="submit" class="btn btn-primary"><i class="fas fa-save mr-1"></i> Simpan</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    @endif
   </div>
 </section>
 
@@ -348,3 +399,31 @@
   });
 </script>
 @endsection
+
+@push('summernote-script')
+<script src="{{ url('dashboard/plugins/summernote/summernote-bs4.min.js') }}"></script>
+<script>
+$(function () {
+  var $editor = $('#customPayHtmlEditor');
+  if (!$editor.length || !$.fn.summernote) return;
+  $editor.summernote({
+    height: 280,
+    dialogsInBody: true,
+    toolbar: [
+      ['style', ['style']],
+      ['font', ['bold', 'italic', 'underline', 'clear']],
+      ['color', ['color']],
+      ['para', ['ul', 'ol', 'paragraph']],
+      ['table', ['table']],
+      ['insert', ['link', 'picture', 'hr']],
+      ['view', ['codeview', 'fullscreen']]
+    ]
+  });
+  // Perubahan di mode kode baru tersinkron ke textarea setelah keluar dari codeview.
+  $('#customPaymentForm').on('submit', function () {
+    if ($editor.summernote('codeview.isActivated')) $editor.summernote('codeview.deactivate');
+    $editor.val($editor.summernote('code'));
+  });
+});
+</script>
+@endpush
