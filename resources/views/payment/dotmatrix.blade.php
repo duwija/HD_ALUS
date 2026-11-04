@@ -72,7 +72,7 @@
 </head>
 <body>
 
-  <div class="no-print"><button onclick="window.print()">Print Struk</button></div>
+  <div class="no-print"><button onclick="printStruk()">Print Struk</button></div>
 
   <div class="receipt">
     <div class="center">
@@ -146,8 +146,6 @@
     </div>
   </div>
 
-  <script>
-    window.addEventListener('load', function () { window.print(); });
-  </script>
+  @include('suminvoice._thermal_print_script', ['strukType' => 'payment'])
 </body>
 </html>

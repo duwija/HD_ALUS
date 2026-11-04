@@ -150,10 +150,8 @@
   </div>
 
   {{-- Tombol cetak (tidak ikut tercetak) --}}
-  <div class="no-print"><button onclick="window.print()">&#128424; Cetak</button></div>
+  <div class="no-print"><button onclick="printStruk()">&#128424; Cetak</button></div>
 
-  <script>
-    window.addEventListener('load', function () { window.print(); });
-  </script>
+  @include('suminvoice._thermal_print_script')
 </body>
 </html>

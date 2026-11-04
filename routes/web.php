@@ -567,6 +567,8 @@ Route::get('/suminvoice/{id}/pdf','SuminvoiceController@downloadPdf');
 
 Route::get('/suminvoice/{id}/viewinvoice','SuminvoiceController@print');
 Route::get('/suminvoice/{id}/dotmatrix','SuminvoiceController@dotmatrix');
+// Struk thermal via signed URL — dibuka di Chrome dari aplikasi Android (WebView tidak bisa print).
+Route::get('/struk/{type}/{id}', 'ThermalStrukController@show')->where('type', 'suminvoice|payment')->middleware('signed')->name('struk.thermal');
 Route::post('/suminvoice','SuminvoiceController@store');
 Route::post('/suminvoice/search','SuminvoiceController@search');
 Route::post('/suminvoice/find','SuminvoiceController@searchinv');
