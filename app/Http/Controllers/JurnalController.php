@@ -959,25 +959,40 @@ class JurnalController extends Controller
     $children = $allAkuns->whereNotNull('parent')->groupBy('parent');
     
     $hierarchy = [];
-    
-    foreach ($withoutParent as $akun) {
-      // Check if this account has children
-      $hasChildren = isset($children[$akun->akun_code]);
-      
-      if ($hasChildren) {
-        // This is a PARENT (Header) - has children, should be disabled, RATA KIRI
-        $hierarchy[$akun->akun_code] = $akun->akun_code . ' | ' . $akun->name . ' (Header)';
-        
-        // Add children under this parent with indentation (MENJOROK KANAN)
+
+    // Rekursif agar akun level 3+ (mis. Kas Tegal Mengkeb di bawah KAS BUMDES) ikut tampil
+    $addAkun = function ($akun, $depth) use (&$addAkun, &$hierarchy, $children) {
+      if (isset($hierarchy[$akun->akun_code])) {
+        return; // cegah loop bila data parent melingkar
+      }
+      $indent = str_repeat('     ', $depth);
+
+      if (isset($children[$akun->akun_code])) {
+        // This is a PARENT (Header) - has children, should be disabled
+        $prefix = $depth > 0 ? $indent . '↳ ' : '';
+        $hierarchy[$akun->akun_code] = $prefix . $akun->akun_code . ' | ' . $akun->name . ' (Header)';
+
         foreach ($children[$akun->akun_code] as $child) {
-          $hierarchy[$child->akun_code] = '     ↳ ' . $child->akun_code . ' | ' . $child->name;
+          $addAkun($child, $depth + 1);
         }
+      } elseif ($depth > 0) {
+        // Child - MENJOROK KANAN
+        $hierarchy[$akun->akun_code] = $indent . '↳ ' . $akun->akun_code . ' | ' . $akun->name;
       } else {
         // This is a STANDALONE account - MENJOROK KANAN seperti child
         $hierarchy[$akun->akun_code] = '     • ' . $akun->akun_code . ' | ' . $akun->name;
       }
+    };
+
+    foreach ($withoutParent as $akun) {
+      $addAkun($akun, 0);
     }
-    
+
+    // Akun yang parent-nya tidak ditemukan tetap ditampilkan sebagai standalone
+    foreach ($allAkuns as $akun) {
+      $addAkun($akun, 0);
+    }
+
     return $hierarchy;
   }
 
