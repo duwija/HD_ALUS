@@ -654,6 +654,17 @@ function initPppoeMap() {
             router_id: (m.id_distrouter || '')
           }).done(function(res) {
             secretTarget.html(renderSecretStatusBadge(res.secret_status || 'unknown'));
+            // Offline sejak = last-logged-out live dari secret MikroTik
+            var sinceTarget = $('#offlineSince-' + key);
+            if (res.source === 'router-live') {
+              if (res.secret_status === 'online') {
+                sinceTarget.hide();
+              } else if (res.last_logged_out) {
+                m.last_offline = res.last_logged_out;
+                sinceTarget.find('b').text(res.last_logged_out + (res.disconnect_reason ? ' (' + res.disconnect_reason + ')' : ''));
+                sinceTarget.show();
+              }
+            }
           }).fail(function() {
             secretTarget.html(renderSecretStatusBadge('unknown'));
           });
@@ -719,8 +730,8 @@ function initPppoeMap() {
           + (m.address ? '<div class="popup-row"><i class="fas fa-map-pin mr-1" style="width:14px"></i>' + m.address + '</div>' : '')
           + '<div class="popup-row"><i class="fas fa-server mr-1" style="width:14px"></i>' + m.router + '</div>'
           + '<div class="popup-row" id="secretStatus-' + statusKey + '">' + renderSecretStatusBadge(m.secret_status || 'unknown') + '</div>'
+          + '<div class="popup-row" id="offlineSince-' + statusKey + '" style="color:#f59e0b' + (m.last_offline ? '' : ';display:none') + '"><i class="fas fa-clock mr-1" style="width:14px"></i>Offline sejak: <b>' + (m.last_offline || '') + '</b></div>'
           + '<div class="popup-row" id="ontStatus-' + statusKey + '"><span style="color:var(--text-muted)">ONT: klik marker untuk cek</span></div>'
-          + (m.last_offline ? '<div class="popup-row" style="color:#f59e0b"><i class="fas fa-clock mr-1" style="width:14px"></i>Offline sejak: <b>' + m.last_offline + '</b></div>' : '')
           + '<span class="popup-badge"><i class="fas fa-exclamation-circle mr-1"></i>Offline</span>'
           + (m.id ? '<a href="/customer/' + m.id + '" target="_blank" class="popup-badge-link"><i class="fas fa-external-link-alt mr-1"></i>Lihat Pelanggan</a>' : '');
 

@@ -404,6 +404,35 @@ window.csrfToken = '{{ csrf_token() }}';
   .tk-popup .tk-members { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .tk-popup .tk-members span { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; background: #f1f3f5; border-radius: 12px; padding: 1px 8px 1px 1px; }
   .tk-popup .tk-members img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+
+  /* ── ODP: gaya seperti /pppoe-map ── */
+  .odp-map-dot {
+    width:14px;height:14px;background:#f59e0b;border:2px solid #fff;
+    border-radius:3px;box-shadow:0 0 0 2px rgba(245,158,11,.4);
+  }
+  .odp-map-parent-dot {
+    width:16px;height:16px;background:#3b82f6;border:2px solid #fff;
+    border-radius:3px;box-shadow:0 0 0 2px rgba(59,130,246,.4);
+  }
+  /* Garis parent→child: diam saat zoom jauh, mengalir saat zoom dekat (class di-set dari JS) */
+  path.odp-flow-line { stroke-linecap: round; }
+  @keyframes odpDashFlow { from { stroke-dashoffset: 20; } to { stroke-dashoffset: 0; } }
+  .odp-flow-animate path.odp-flow-line { animation: odpDashFlow 1.2s linear infinite; }
+  .odp-popup .leaflet-popup-content-wrapper {
+    background: var(--bg-surface, #fff);
+    color: var(--text-primary, #212529);
+    border: 1px solid var(--border, #dee2e6);
+    box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  }
+  .odp-popup .leaflet-popup-tip { background: var(--bg-surface, #fff); }
+  .odp-popup .popup-title { font-weight:700; font-size:13px; margin-bottom:4px; }
+  .odp-popup .popup-row   { font-size:12px; color:var(--text-secondary, #6c757d); margin:2px 0; }
+  .odp-popup .popup-badge-link {
+    display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px;
+    font-weight:600; background:rgba(59,130,246,.15); color:#3b82f6;
+    border:1px solid rgba(59,130,246,.3); margin-top:4px; text-decoration:none;
+  }
+  .odp-popup .popup-badge-link:hover { background:rgba(59,130,246,.28); color:#2563eb; text-decoration:none; }
 </style>
 
 <div class="card">
@@ -3495,7 +3524,19 @@ window.csrfToken = '{{ csrf_token() }}';
   layerControl.addTo(map);
 
 // === Marker Groups ===
-  const markers = L.markerClusterGroup();
+  // Gaya ODP disamakan dengan /pppoe-map: kotak oranye (ODP), biru (parent), cluster oranye
+  const odpIcon = L.divIcon({ className: '', html: '<div class="odp-map-dot"></div>', iconSize: [14, 14], iconAnchor: [7, 7], popupAnchor: [0, -10] });
+  const odpParentIcon = L.divIcon({ className: '', html: '<div class="odp-map-parent-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8], popupAnchor: [0, -10] });
+  // Tanpa grouping/cluster: semua ODP tampil. Animasi garis hanya aktif saat zoom dekat (lihat ODP_FLOW_ANIM_ZOOM).
+  const markers = L.layerGroup();
+  const ODP_FLOW_ANIM_ZOOM = 15;
+  // Peta memakai Canvas renderer (preferCanvas); garis aliran ODP butuh SVG agar class/animasi CSS berlaku
+  const odpLineRenderer = L.svg({ padding: 0.5 });
+  function updateOdpFlowAnimation() {
+    map.getContainer().classList.toggle('odp-flow-animate', map.getZoom() >= ODP_FLOW_ANIM_ZOOM);
+  }
+  map.on('zoomend', updateOdpFlowAnimation);
+  updateOdpFlowAnimation();
   const odpMarkers = {};
   const odpPolylines = [];
   let odpData = {};
@@ -3515,20 +3556,18 @@ window.csrfToken = '{{ csrf_token() }}';
         odp.lat &&
         odp.lng
         ) {
-        const childMarker = odpMarkers[odp.id];
-
-      // Cek apakah child terlihat, tidak peduli parent
-      const childVisible = markers.getVisibleParent(childMarker) === childMarker;
-
-      if (childVisible) {
+      if (document.getElementById('show-odp') ? document.getElementById('show-odp').checked : true) {
         const childCoord = [odp.lat, odp.lng];
         const parentCoord = [odp.parent_lat, odp.parent_lng];
 
-        const line = L.polyline([childCoord, parentCoord], {
-          color: 'blue',
-          weight: 2,
-          opacity: 0.6,
-          dashArray: '5, 10'
+        // parent → child, supaya animasi dash mengalir dari parent ke child
+        const line = L.polyline([parentCoord, childCoord], {
+          color: '#60a5fa',
+          weight: 2.5,
+          opacity: 0.9,
+          dashArray: '12,8',
+          className: 'odp-flow-line',
+          renderer: odpLineRenderer
         }).addTo(map);
 
         odpPolylines.push(line);
@@ -3546,16 +3585,18 @@ window.csrfToken = '{{ csrf_token() }}';
   .then(data => {
     odpData = data;
     Object.values(data).forEach(odp => {
-      const marker = L.marker([odp.lat, odp.lng], { title: odp.name })
+      const escO = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const marker = L.marker([odp.lat, odp.lng], { title: odp.name, icon: odp.is_parent ? odpParentIcon : odpIcon })
 
-      .bindPopup(`
-        <a href="${odp.button_link}"  target="_blank">
-        <strong>${odp.name}</strong>
-        </a><br>
-        Port: ${odp.Capacity}<br>
-        Parent: ${odp.parent_name ?? 'Tidak ditemukan'}<br>
-        ${odp.description}<br>
-        `);
+      .bindPopup(
+        '<div class="popup-title"><i class="fas fa-project-diagram mr-1"></i>' + escO(odp.name) + '</div>'
+        + '<div class="popup-row"><i class="fas fa-plug mr-1" style="width:14px"></i>Port: <strong>' + escO(odp.Capacity) + '</strong></div>'
+        + '<div class="popup-row"><i class="fas fa-users mr-1" style="width:14px"></i>Pelanggan: <strong>' + escO(odp.customers ?? 0) + '</strong></div>'
+        + '<div class="popup-row"><i class="fas fa-level-up-alt mr-1" style="width:14px"></i>Parent: ' + escO(odp.parent_name ?? 'Tidak ada') + '</div>'
+        + (odp.description ? '<div class="popup-row"><i class="fas fa-info-circle mr-1" style="width:14px"></i>' + escO(odp.description) + '</div>' : '')
+        + '<a href="' + escO(odp.button_link) + '" target="_blank" class="popup-badge-link"><i class="fas fa-external-link-alt mr-1"></i>Lihat ODP</a>',
+        { maxWidth: 260, className: 'odp-popup' }
+      );
       markers.addLayer(marker);
       odpMarkers[odp.id] = marker;
     });
@@ -3589,8 +3630,6 @@ window.csrfToken = '{{ csrf_token() }}';
     }, 100);
   });
 
-  map.on('zoomend', drawPolylines);
-  markers.on('animationend', drawPolylines);
 
 // === Data Tiket ===
   fetch('/ticket/datamap')

@@ -257,8 +257,9 @@ class DistrouterController extends Controller
                     }
 
                     foreach ($secrets as $s) {
-                        if (!empty($s['last-logged-out']) && $s['last-logged-out'] !== 'never') {
-                            $routerDataCache[$router->id]['lastLoggedOut'][$s['name']] = $s['last-logged-out'];
+                        $lastOut = \App\Services\RouterOsTime::parse($s['last-logged-out'] ?? null);
+                        if ($lastOut && !empty($s['name'])) {
+                            $routerDataCache[$router->id]['lastLoggedOut'][$s['name']] = $lastOut;
                         }
                     }
 
@@ -558,12 +559,18 @@ class DistrouterController extends Controller
                 ]);
             }
 
+            // Offline sejak: last-logged-out langsung dari secret MikroTik
+            $lastLoggedOut    = \App\Services\RouterOsTime::parse($secret['last-logged-out'] ?? null);
+            $disconnectReason = trim((string) ($secret['last-disconnect-reason'] ?? '')) ?: null;
+
             $isDisabled = isset($secret['disabled']) && $secret['disabled'] === 'true';
             if ($isDisabled) {
                 return response()->json([
                     'success'       => true,
                     'secret_status' => 'disabled',
                     'router'        => $router->name,
+                    'last_logged_out'   => $lastLoggedOut,
+                    'disconnect_reason' => $disconnectReason,
                     'source'        => 'router-live',
                 ]);
             }
@@ -576,6 +583,8 @@ class DistrouterController extends Controller
                 'success'       => true,
                 'secret_status' => $isOnline ? 'online' : 'enable',
                 'router'        => $router->name,
+                'last_logged_out'   => $lastLoggedOut,
+                'disconnect_reason' => $disconnectReason,
                 'source'        => 'router-live',
             ]);
         } catch (\Exception $e) {

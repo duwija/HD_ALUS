@@ -9,6 +9,7 @@ use RouterOS\Client;
 use RouterOS\Query;
 use App\Distrouter;
 use Carbon\Carbon;
+use App\Services\RouterOsTime;
 
 class SyncPppoeSessions extends Command
 {
@@ -86,11 +87,30 @@ class SyncPppoeSessions extends Command
 
         // ── Pass 2: upsert pppoe_sessions using global online index ──────────
         $upserted = 0;
+        $onlineKeyIndex = [];
+        foreach (array_keys($globalOnlineIndex) as $onlineName) {
+            $onlineKeyIndex[self::nameKey((string) $onlineName)] = true;
+        }
 
         foreach ($routerDataCache as $routerId => $data) {
             $router  = $data['router'];
             $secrets = $data['secrets'];
 
+            // Waktu offline yang sudah tercatat — dipakai bila router tidak memberi last-logged-out
+            $existingOffline = [];
+            foreach (DB::table('pppoe_sessions')
+                ->where('distrouter_id', $routerId)
+                ->where('is_online', 0)
+                ->whereNotNull('last_offline_at')
+                ->pluck('last_offline_at', 'pppoe_name') as $n => $at) {
+                $existingOffline[self::nameKey($n)] = $at;
+            }
+
+            // Kolom pppoe_name memakai collation case-insensitive, jadi secret yang namanya
+            // hanya beda huruf besar/kecil/spasi akhir (mis. "free_gor_x" & "Free_Gor_x") jatuh
+            // ke baris yang sama. Gabungkan dulu: online bila salah satu online, offline sejak =
+            // last-logged-out terbaru — supaya yang satu tidak menimpa yang lain.
+            $merged = [];
             foreach ($secrets as $secret) {
                 $name     = $secret['name'] ?? null;
                 if (!$name) continue;
@@ -99,15 +119,39 @@ class SyncPppoeSessions extends Command
                 $isDisabled = isset($secret['disabled']) && $secret['disabled'] === 'true';
                 if ($isDisabled) continue;
 
+                $key = self::nameKey($name);
                 // A PPPoE is online if it appears in ANY router's active sessions
-                $isOnline = isset($globalOnlineIndex[$name]);
+                $isOnline  = isset($globalOnlineIndex[$name]) || isset($onlineKeyIndex[$key]);
+                $loggedOut = RouterOsTime::parse($secret['last-logged-out'] ?? null);
+
+                if (!isset($merged[$key])) {
+                    $merged[$key] = ['name' => $name, 'online' => $isOnline, 'logged_out' => $loggedOut];
+                    continue;
+                }
+                if ($isOnline && !$merged[$key]['online']) {
+                    $merged[$key]['name'] = $name;
+                }
+                $merged[$key]['online'] = $merged[$key]['online'] || $isOnline;
+                if ($loggedOut && (!$merged[$key]['logged_out'] || $loggedOut > $merged[$key]['logged_out'])) {
+                    $merged[$key]['logged_out'] = $loggedOut;
+                }
+            }
+
+            foreach ($merged as $key => $row) {
+                // Offline sejak = last-logged-out dari secret MikroTik (bukan waktu sync)
+                $lastOfflineAt = null;
+                if (!$row['online']) {
+                    $lastOfflineAt = $row['logged_out']
+                        ?? ($existingOffline[$key] ?? null)
+                        ?? $now->toDateTimeString();
+                }
 
                 DB::table('pppoe_sessions')->upsert(
                     [
                         'distrouter_id'  => $routerId,
-                        'pppoe_name'     => $name,
-                        'is_online'      => $isOnline ? 1 : 0,
-                        'last_offline_at'=> $isOnline ? null : $now->toDateTimeString(),
+                        'pppoe_name'     => $row['name'],
+                        'is_online'      => $row['online'] ? 1 : 0,
+                        'last_offline_at'=> $lastOfflineAt,
                         'synced_at'      => $now->toDateTimeString(),
                         'created_at'     => $now->toDateTimeString(),
                         'updated_at'     => $now->toDateTimeString(),
@@ -124,5 +168,11 @@ class SyncPppoeSessions extends Command
 
         $this->info("Sync done — {$upserted} PPPoE records upserted at {$now}");
         return 0;
+    }
+
+    /** Kunci nama PPPoE sesuai collation DB (case-insensitive, abaikan spasi akhir). */
+    private static function nameKey(string $name): string
+    {
+        return mb_strtolower(rtrim($name));
     }
 }

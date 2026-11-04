@@ -1407,6 +1407,8 @@ public function kaskeluar()
         public function kasmasuktransaction(Request $request)
         {
           $request->validate([
+            'attachments'   => 'nullable|array',
+            'attachments.*' => 'file|mimes:' . \App\JurnalAttachment::MIMES . '|max:' . \App\JurnalAttachment::MAX_KB,
            'name' => 'required',
            'akundebet'    => 'required',
            'type' => 'required|string',
@@ -1420,7 +1422,7 @@ public function kaskeluar()
            'kredit'       => 'required|array',
            'kredit.*'     => 'required|numeric|min:0',
            'debet'        => 'required|numeric|min:0',
-         ]);
+         ], $this->attachmentValidationMessages());
           $code = substr(md5(uniqid('', true)), 0, 10);
           $totalKredit = array_sum($request->kredit);
           if ($totalKredit != $request->debet) {
@@ -1430,6 +1432,7 @@ public function kaskeluar()
           $tempcode = sha1(time() . rand());
           $note = $request->type . ' | ' . $request->name;
 
+          $writtenFiles = [];
           DB::beginTransaction();
           try {
             foreach ($request->akunkredit as $index => $akun_kredit) {
@@ -1469,10 +1472,13 @@ public function kaskeluar()
               'contact_id' => $request->contact_id,
             ]);
 
+            $writtenFiles = $this->storeJurnalAttachments($request, $code);
+
             DB::commit();
             return redirect()->back()->with('success', 'Transaction created successfully!');
           } catch (\Exception $e) {
             DB::rollBack();
+            foreach ($writtenFiles as $f) { @unlink($f); }
             return back()->withErrors(['msg' => 'Transaction failed: ' . $e->getMessage()])->withInput();
           }
         }
@@ -1482,6 +1488,8 @@ public function kaskeluar()
         {
         // dd($request);
           $request->validate([
+            'attachments'   => 'nullable|array',
+            'attachments.*' => 'file|mimes:' . \App\JurnalAttachment::MIMES . '|max:' . \App\JurnalAttachment::MAX_KB,
            'name' => 'required',
            'akunkredit'   => 'required',
            'type' => 'required|string',
@@ -1495,7 +1503,7 @@ public function kaskeluar()
            'debet'       => 'required|array',
            'debet.*'     => 'required|numeric|min:0',
            'kredit'        => 'required|numeric|min:0',
-         ]);
+         ], $this->attachmentValidationMessages());
           $code = substr(md5(uniqid('', true)), 0, 10);
           $totalDebet = array_sum($request->debet);
           if ($totalDebet != $request->kredit) {
@@ -1505,6 +1513,7 @@ public function kaskeluar()
           $tempcode = sha1(time() . rand());
           $note = $request->type . ' | ' . $request->name;
 
+          $writtenFiles = [];
           DB::beginTransaction();
           try {
             foreach ($request->akundebet as $index => $akun_debet) {
@@ -1545,10 +1554,13 @@ public function kaskeluar()
               'code' => $code,
             ]);
 
+            $writtenFiles = $this->storeJurnalAttachments($request, $code);
+
             DB::commit();
             return redirect()->back()->with('success', 'Transaction created successfully!');
           } catch (\Exception $e) {
             DB::rollBack();
+            foreach ($writtenFiles as $f) { @unlink($f); }
             return back()->withErrors(['msg' => 'Transaction failed: ' . $e->getMessage()])->withInput();
           }
         }
@@ -1557,6 +1569,8 @@ public function kaskeluar()
         {
 
           $request->validate([
+            'attachments'   => 'nullable|array',
+            'attachments.*' => 'file|mimes:' . \App\JurnalAttachment::MIMES . '|max:' . \App\JurnalAttachment::MAX_KB,
             'akunkredit'   => 'required',
             'type' => 'required|string',
             'date' => 'required|date',
@@ -1569,7 +1583,7 @@ public function kaskeluar()
                'amount'       => 'required|numeric',
                'memo'         => 'nullable|string'
 
-             ]);
+             ], $this->attachmentValidationMessages());
          // Ambil akun debet dan kredit dari database
           $akundebet = \App\Akun::where('akun_code', $request->akundebet)->first();
           $akunkredit = \App\Akun::where('akun_code', $request->akunkredit)->first();
@@ -1580,6 +1594,7 @@ public function kaskeluar()
           $note = 'Transfer kasbank '.$akunkredit->name.' to '. $akundebet->name;
           $tempcode = sha1(time() . rand());
 
+          $writtenFiles = [];
           DB::beginTransaction();
           try {
 
@@ -1620,10 +1635,13 @@ public function kaskeluar()
              'contact_id' => '0000000001',
            ]);
 
+            $writtenFiles = $this->storeJurnalAttachments($request, $code);
+
             DB::commit();
             return redirect()->back()->with('success', 'Transaction created successfully!');
           } catch (\Exception $e) {
             DB::rollBack();
+            foreach ($writtenFiles as $f) { @unlink($f); }
             return back()->withErrors(['msg' => 'Transaction failed: ' . $e->getMessage()])->withInput();
           }
 
@@ -1634,6 +1652,8 @@ public function kaskeluar()
         {
 
          $request->validate([
+            'attachments'   => 'nullable|array',
+            'attachments.*' => 'file|mimes:' . \App\JurnalAttachment::MIMES . '|max:' . \App\JurnalAttachment::MAX_KB,
           'name' => 'required',
           'date' => 'required|date',
           'akun'   => 'required|array',
@@ -1646,13 +1666,14 @@ public function kaskeluar()
           'kredit.*'        => 'required|numeric|min:0',
           'memo'         => 'nullable|string'
 
-        ]);
+        ], $this->attachmentValidationMessages());
          $code = substr(md5(uniqid('', true)), 0, 10);
          $type ='general';
          $tempcode = sha1(time() . rand());
          $note = $type . ' TRansaction | ' . $request->name;
 
-         DB::beginTransaction();
+         $writtenFiles = [];
+          DB::beginTransaction();
          try {
            foreach ($request->akun as $index => $akun_g) {
             \App\Jurnal::create([
@@ -1677,10 +1698,13 @@ public function kaskeluar()
 
 
 
-          DB::commit();
+          $writtenFiles = $this->storeJurnalAttachments($request, $code);
+
+            DB::commit();
           return redirect()->back()->with('success', 'Transaction created successfully!');
         } catch (\Exception $e) {
           DB::rollBack();
+            foreach ($writtenFiles as $f) { @unlink($f); }
           return back()->withErrors(['msg' => 'Transaction failed: ' . $e->getMessage()])->withInput();
         }
       }
@@ -3076,6 +3100,143 @@ return redirect ('/jurnal/trxcreate')->with('success','Item created successfully
   }
 
 }
+  // ============================================================
+  //  LAMPIRAN / BUKTI TRANSAKSI (storage/tenants/{RESCODE}/app/jurnal)
+  // ============================================================
+
+  /**
+   * Simpan file dari input attachments[] untuk transaksi $code.
+   * Return daftar path absolut yang ditulis (untuk dibersihkan bila transaksi gagal).
+   */
+  private function storeJurnalAttachments(Request $request, string $code): array
+  {
+    $written = [];
+    $files = $request->file('attachments', []);
+    if (empty($files)) {
+      return $written;
+    }
+    if (!\App\JurnalAttachment::available()) {
+      throw new \RuntimeException('Fitur bukti transaksi belum aktif (tabel jurnal_attachments belum dibuat).');
+    }
+    if (!is_array($files)) {
+      $files = [$files];
+    }
+
+    try {
+      foreach ($files as $file) {
+        if (!$file || !$file->isValid()) {
+          continue;
+        }
+        $rel = 'jurnal/' . date('Y/m');
+        $dir = \App\JurnalAttachment::baseDir() . '/' . $rel;
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+          throw new \RuntimeException('Folder lampiran tidak bisa dibuat.');
+        }
+
+        $ext  = strtolower($file->getClientOriginalExtension() ?: ($file->guessExtension() ?: 'bin'));
+        $ext  = preg_replace('/[^a-z0-9]/', '', $ext) ?: 'bin';
+        $name = preg_replace('/[^A-Za-z0-9]/', '', $code) . '_' . \Illuminate\Support\Str::random(16) . '.' . $ext;
+        $mime = $file->getMimeType();
+        $size = $file->getSize();
+        $original = mb_substr($file->getClientOriginalName(), 0, 191);
+
+        $file->move($dir, $name);
+        $written[] = $dir . '/' . $name;
+
+        \App\JurnalAttachment::create([
+          'code'          => $code,
+          'original_name' => $original,
+          'path'          => $rel . '/' . $name,
+          'mime'          => $mime,
+          'size'          => $size,
+          'uploaded_by'   => \Auth::id(),
+        ]);
+      }
+    } catch (\Throwable $e) {
+      foreach ($written as $f) { @unlink($f); }
+      throw $e;
+    }
+
+    return $written;
+  }
+
+  private function attachmentValidationMessages(): array
+  {
+    $max = \App\JurnalAttachment::MAX_KB / 1024;
+
+    return [
+      'attachments.required' => 'Pilih minimal satu file bukti.',
+      'attachments.*.file'   => 'Bukti transaksi harus berupa file.',
+      'attachments.*.mimes'  => 'Format bukti tidak didukung. Gunakan gambar, PDF, Word, Excel, CSV, atau TXT.',
+      'attachments.*.max'    => "Ukuran bukti maksimal {$max} MB per file.",
+      'attachments.*.uploaded' => "File gagal diunggah (maksimal {$max} MB per file).",
+    ];
+  }
+
+  /** Tambah lampiran ke transaksi yang sudah ada (dari halaman detail jurnal). */
+  public function uploadAttachments(Request $request, $code)
+  {
+    $request->validate([
+      'attachments'   => 'required|array|min:1',
+      'attachments.*' => 'file|mimes:' . \App\JurnalAttachment::MIMES . '|max:' . \App\JurnalAttachment::MAX_KB,
+    ], $this->attachmentValidationMessages());
+
+    if (!\App\Jurnal::where('code', $code)->exists()) {
+      return $request->expectsJson()
+        ? response()->json(['success' => false, 'message' => 'Transaksi tidak ditemukan.'], 404)
+        : back()->with('error', 'Transaksi tidak ditemukan.');
+    }
+
+    DB::beginTransaction();
+    try {
+      $this->storeJurnalAttachments($request, $code);
+      DB::commit();
+      return $request->expectsJson()
+        ? response()->json(['success' => true])
+        : back()->with('success', 'Bukti transaksi berhasil diunggah.');
+    } catch (\Throwable $e) {
+      DB::rollBack();
+      \Log::error('[JURNAL ATTACHMENT] upload gagal code ' . $code . ': ' . $e->getMessage());
+      return $request->expectsJson()
+        ? response()->json(['success' => false, 'message' => 'Gagal mengunggah bukti: ' . $e->getMessage()], 500)
+        : back()->with('error', 'Gagal mengunggah bukti: ' . $e->getMessage());
+    }
+  }
+
+  /** Tampilkan / unduh lampiran (?download=1 untuk unduh). */
+  public function viewAttachment(Request $request, $id)
+  {
+    $att  = \App\JurnalAttachment::findOrFail($id);
+    $path = $att->fullPath();
+    if (!is_file($path)) {
+      abort(404, 'File tidak ditemukan.');
+    }
+
+    if ($request->boolean('download') || !($att->isImage() || $att->isPdf())) {
+      return response()->download($path, $att->original_name);
+    }
+
+    return response()->file($path, [
+      'Content-Type'        => $att->mime ?: 'application/octet-stream',
+      'Content-Disposition' => 'inline; filename="' . addslashes($att->original_name) . '"',
+      'X-Content-Type-Options' => 'nosniff',
+    ]);
+  }
+
+  public function deleteAttachment(Request $request, $id)
+  {
+    $att  = \App\JurnalAttachment::findOrFail($id);
+    $path = $att->fullPath();
+    $att->delete();
+    if (is_file($path)) {
+      @unlink($path);
+    }
+
+    return $request->expectsJson()
+      ? response()->json(['success' => true])
+      : back()->with('success', 'Bukti transaksi dihapus.');
+  }
+
 public function show($code)
 {
   $jurnals = \App\Jurnal::with('akun')
@@ -3104,6 +3265,9 @@ public function show($code)
    'totalKredit'   => $totalKredit,
    'akunList'      => $akunList,
    'createdByName' => $createdByName,
+   'attachments'   => \App\JurnalAttachment::available()
+                        ? \App\JurnalAttachment::where('code', $code)->orderBy('id')->get()
+                        : collect(),
  ]);
 }
 

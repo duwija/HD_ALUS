@@ -828,6 +828,9 @@ Route::get('jurnal/transferkas', 'JurnalController@transferkas');
 Route::get('jurnal/laporanneraca', 'JurnalController@laporanNeraca');
 Route::get('/jurnal/show/{code}', 'JurnalController@show');
 Route::post('/jurnal/updatebycode/{code}', 'JurnalController@updateByCode');
+Route::post('/jurnal/attachments/{code}', 'JurnalController@uploadAttachments');
+Route::get('/jurnal/attachment/{id}', 'JurnalController@viewAttachment')->where('id', '[0-9]+');
+Route::delete('/jurnal/attachment/{id}', 'JurnalController@deleteAttachment')->where('id', '[0-9]+');
 Route::get('/jurnal/arus-kas', 'JurnalController@laporanArusKas');
 
 Route::get('/jurnal/arus-kas/pdf', 'JurnalController@exportArusKasPdf');

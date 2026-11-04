@@ -25,7 +25,7 @@
     </div>
   </div>
   <div class="card-body">
-    <form id="transaksiForm" method="POST" action="/jurnal/transferkastransaction" class="d-inline ">
+    <form id="transaksiForm" method="POST" action="/jurnal/transferkastransaction" enctype="multipart/form-data" class="d-inline ">
       @csrf
       <input type="hidden" name="type" class="form-control" value="transferkas">
       <div class="row mb-3">
@@ -80,6 +80,7 @@
         <div class="col-md-12">
           <label for="memo" class="form-label">Memo</label>
           <textarea class="form-control" name="memo" id="memo" rows="3"></textarea>
+          @include('jurnal._attachment_input')
         </div>
       </div>
 

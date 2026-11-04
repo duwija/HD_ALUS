@@ -63,6 +63,55 @@
       @endif
     </div>
 
+    {{-- ======== BUKTI TRANSAKSI ======== --}}
+    @if(\App\JurnalAttachment::available())
+    <div class="card card-outline card-secondary mt-3 mb-3" id="jurnal-attachments">
+      <div class="card-header py-2">
+        <strong><i class="fas fa-paperclip mr-1"></i> Bukti Transaksi</strong>
+        <span class="badge badge-secondary ml-1">{{ $attachments->count() }}</span>
+      </div>
+      <div class="card-body py-2">
+        <div id="att-alert"></div>
+        @if($attachments->isEmpty())
+          <div class="text-muted small mb-2">Belum ada bukti transaksi.</div>
+        @else
+          <ul class="list-unstyled mb-2">
+            @foreach($attachments as $att)
+            <li class="d-flex align-items-center border-bottom py-1">
+              @if($att->isImage())
+                <a href="/jurnal/attachment/{{ $att->id }}" target="_blank" class="mr-2">
+                  <img src="/jurnal/attachment/{{ $att->id }}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
+                </a>
+              @else
+                <i class="fas {{ $att->isPdf() ? 'fa-file-pdf text-danger' : 'fa-file-alt text-secondary' }} fa-2x mr-2" style="width:48px;text-align:center;"></i>
+              @endif
+              <div class="flex-grow-1" style="min-width:0;">
+                <a href="/jurnal/attachment/{{ $att->id }}" target="_blank" class="d-block text-truncate">{{ $att->original_name }}</a>
+                <small class="text-muted">
+                  {{ number_format(($att->size ?? 0) / 1024, 0, ',', '.') }} KB
+                  &middot; {{ optional($att->created_at)->format('d/m/Y H:i') }}
+                  @if($att->uploaded_by) &middot; {{ optional(\App\User::find($att->uploaded_by))->name }} @endif
+                </small>
+              </div>
+              <a href="/jurnal/attachment/{{ $att->id }}?download=1" class="btn btn-sm btn-outline-primary ml-2" title="Unduh"><i class="fas fa-download"></i></a>
+              <button type="button" class="btn btn-sm btn-outline-danger ml-1 btn-att-delete" data-id="{{ $att->id }}" data-name="{{ $att->original_name }}" title="Hapus"><i class="fas fa-trash"></i></button>
+            </li>
+            @endforeach
+          </ul>
+        @endif
+
+        @if($jurnals->isNotEmpty())
+        <form id="form-att-upload" class="form-inline" enctype="multipart/form-data">
+          <input type="file" name="attachments[]" multiple class="form-control-file mr-2 mb-1" style="max-width:320px;"
+                 accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" required>
+          <button type="submit" class="btn btn-sm btn-primary mb-1" id="btn-att-upload"><i class="fas fa-upload mr-1"></i> Unggah</button>
+          <small class="form-text text-muted w-100">Maks {{ \App\JurnalAttachment::MAX_KB / 1024 }} MB per file. Gambar, PDF, Word, Excel, CSV, TXT.</small>
+        </form>
+        @endif
+      </div>
+    </div>
+    @endif
+
     {{-- ======== EDIT MODE ======== --}}
     <div id="edit-mode" style="display:none;">
       <div id="edit-alert"></div>
@@ -170,6 +219,59 @@
         || document.getElementById('modal-jurnal-content')
         || document.querySelector('.modal-body');
   }
+
+  // ── Bukti transaksi: unggah / hapus lalu muat ulang isi modal ──
+  function reloadJurnalModal() {
+    $.get('/jurnal/show/{{ $code }}', function(html) { $(getModalContainer()).html(html); });
+  }
+  function attError(xhr, fallback) {
+    var msg = fallback;
+    if (xhr.responseJSON) {
+      if (xhr.responseJSON.errors) {
+        msg = Object.values(xhr.responseJSON.errors).map(function(v) { return v[0]; }).join('<br>');
+      } else if (xhr.responseJSON.message) {
+        msg = xhr.responseJSON.message;
+      }
+    }
+    document.getElementById('att-alert').innerHTML =
+      '<div class="alert alert-danger py-1 small"><i class="fas fa-exclamation-circle mr-1"></i>' + msg + '</div>';
+  }
+  var attForm = document.getElementById('form-att-upload');
+  if (attForm) {
+    attForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('btn-att-upload');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> Mengunggah...';
+      $.ajax({
+        url: '/jurnal/attachments/{{ $code }}',
+        type: 'POST',
+        data: new FormData(attForm),
+        processData: false,
+        contentType: false,
+        headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'), 'Accept': 'application/json' },
+        success: reloadJurnalModal,
+        error: function(xhr) {
+          attError(xhr, 'Gagal mengunggah bukti.');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-upload mr-1"></i> Unggah';
+        }
+      });
+    });
+  }
+  document.querySelectorAll('#jurnal-attachments .btn-att-delete').forEach(function(b) {
+    b.addEventListener('click', function() {
+      if (!confirm('Hapus bukti "' + b.dataset.name + '"?')) return;
+      b.disabled = true;
+      $.ajax({
+        url: '/jurnal/attachment/' + b.dataset.id,
+        type: 'DELETE',
+        headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'), 'Accept': 'application/json' },
+        success: reloadJurnalModal,
+        error: function(xhr) { attError(xhr, 'Gagal menghapus bukti.'); b.disabled = false; }
+      });
+    });
+  });
 
   // Toggle view/edit mode
   document.getElementById('btn-toggle-edit').addEventListener('click', function() {

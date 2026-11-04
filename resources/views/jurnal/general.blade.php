@@ -26,7 +26,7 @@
     </div>
 
     <div class="card-body">
-      <form id="transaksiForm" method="POST" action="/jurnal/generaltransaction">
+      <form id="transaksiForm" method="POST" action="/jurnal/generaltransaction" enctype="multipart/form-data">
         @csrf
         
         <!-- Info Transaksi Section -->
@@ -137,6 +137,7 @@
         <div class="form-section">
           <h5 class="form-section-title"><i class="fas fa-sticky-note mr-2"></i>Memo</h5>
           <textarea class="form-control" name="memo" id="memo" rows="3" placeholder="Catatan tambahan (opsional)"></textarea>
+          @include('jurnal._attachment_input')
         </div>
 
         <!-- Action Buttons -->

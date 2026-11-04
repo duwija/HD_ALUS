@@ -27,7 +27,7 @@
     </div>
 
     <div class="card-body">
-    <form id="transaksiForm" method="POST" action="/jurnal/kaskeluartransaction">
+    <form id="transaksiForm" method="POST" action="/jurnal/kaskeluartransaction" enctype="multipart/form-data">
       @csrf
       <input type="hidden" name="type" class="form-control" value="kaskeluar">
       <div class="row mb-3">
@@ -125,6 +125,7 @@
       <div class="col-md-12">
         <label for="memo" class="form-label">Memo</label>
         <textarea class="form-control" name="memo" id="memo" rows="3"></textarea>
+        @include('jurnal._attachment_input')
       </div>
     </div>
 

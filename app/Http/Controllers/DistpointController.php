@@ -523,9 +523,17 @@ public function getODPData()
     ->select('id', 'name', 'coordinate', 'ip', 'parrent','description')
     ->get();
 
-    $odp = $data->map(function ($item) {
-        $coordinate = explode(',', $item->coordinate);
-        $parentCoordinate = explode(',', optional($item->parentDistPoint)->coordinate);
+    // Untuk tampilan marker: jumlah pelanggan per ODP & ODP mana yang punya anak (parent)
+    $custCounts = \App\Customer::whereNotNull('id_distpoint')
+        ->selectRaw('id_distpoint, count(*) as n')
+        ->groupBy('id_distpoint')
+        ->pluck('n', 'id_distpoint');
+    $parentIds = $data->pluck('parrent')->filter()->flip();
+
+    $odp = $data->map(function ($item) use ($custCounts, $parentIds) {
+        $coordinate = explode(',', (string) $item->coordinate);
+        $parentRaw = (string) optional($item->parentDistPoint)->coordinate;
+        $parentCoordinate = $parentRaw !== '' ? explode(',', $parentRaw) : [];
 
         if (count($coordinate) !== 2) {
             return null;
@@ -540,9 +548,11 @@ public function getODPData()
             'parent_name' => $parentName,
             'lat' => (float) trim($coordinate[0]),
             'lng' => (float) trim($coordinate[1]),
-            'parent_lat' => isset($parentCoordinate[0]) ? (float) trim($parentCoordinate[0]) : null,
-            'parent_lng' => isset($parentCoordinate[1]) ? (float) trim($parentCoordinate[1]) : null,
-            'button_link' => url("/distpoint/{$item->id}")
+            'parent_lat' => count($parentCoordinate) === 2 ? (float) trim($parentCoordinate[0]) : null,
+            'parent_lng' => count($parentCoordinate) === 2 ? (float) trim($parentCoordinate[1]) : null,
+            'button_link' => url("/distpoint/{$item->id}"),
+            'customers' => (int) ($custCounts[$item->id] ?? 0),
+            'is_parent' => isset($parentIds[$item->id]),
         ];
     })->filter();
 
