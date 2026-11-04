@@ -226,18 +226,46 @@ class SuminvoiceController extends Controller
 
 
 
+    /**
+     * Invoice belum bayar milik customer yang sama yang lebih lama dari $suminvoice
+     * (urut date, id — sama dengan halaman print). Null bila $suminvoice yang terlama.
+     * Dipakai endpoint bayar per-invoice agar tidak bisa melompati invoice lama lewat POST langsung.
+     */
+    private function olderUnpaidInvoice($suminvoice)
+    {
+        return \App\Suminvoice::where('id_customer', $suminvoice->id_customer)
+            ->where('payment_status', 0)
+            ->where('id', '!=', $suminvoice->id)
+            ->where(function ($q) use ($suminvoice) {
+                $q->where('date', '<', $suminvoice->date)
+                    ->orWhere(function ($q2) use ($suminvoice) {
+                        $q2->where('date', $suminvoice->date)->where('id', '<', $suminvoice->id);
+                    });
+            })
+            ->orderBy('date', 'asc')
+            ->orderBy('id', 'asc')
+            ->first();
+    }
+
     public function tripay(Request $request)
     {
-
+        $suminvoice = \App\Suminvoice::where('number', $request->number)->first();
+        if (!$suminvoice || (int) $suminvoice->payment_status !== 0) {
+            return redirect()->back()->with('error', 'Tagihan tidak valid atau sudah lunas.');
+        }
+        if ($older = $this->olderUnpaidInvoice($suminvoice)) {
+            return redirect()->back()->with('error', 'Bayar invoice terlama terlebih dahulu: #' . $older->number);
+        }
 
 
         $endpoint     = tenant_config('tripay_endpoint', env("TRIPAY_ENDPOINT"));
         $apiKey       = tenant_config('tripay_apikey', env("TRIPAY_APIKEY"));
         $privateKey   = tenant_config('tripay_privatekey', env("TRIPAY_PRIVATEKEY"));
         $merchantCode = tenant_config('tripay_merchantcode', env("TRIPAY_MERCHANTCODE"));
-        $merchantRef  = $request->number;
-        $amount       = round($request->amount);
-        $tempcode       = $request->tempcode;
+        $merchantRef  = $suminvoice->number;
+        // Nominal & tempcode dari DB, bukan dari form (amount di form bisa diubah customer)
+        $amount       = round($suminvoice->total_amount);
+        $tempcode       = $suminvoice->tempcode;
         $return_url = url('suminvoice/' . $tempcode . '/print');
         $hash = (hash_hmac('sha256', $merchantCode.$merchantRef.$amount, $privateKey));
         $email = $request->email;
@@ -494,6 +522,12 @@ public function winpay()
             }
 
             $suminvoice = \App\Suminvoice::findOrFail($request->id);
+            if ((int) $suminvoice->payment_status !== 0) {
+                return redirect()->back()->with('error', 'Tagihan sudah lunas atau dibatalkan.');
+            }
+            if ($older = $this->olderUnpaidInvoice($suminvoice)) {
+                return redirect()->back()->with('error', 'Bayar invoice terlama terlebih dahulu: #' . $older->number);
+            }
             $customer   = \App\Customer::findOrFail($suminvoice->id_customer);
 
             // Baca konfigurasi dari settings kolom payment_gateways atau fallback ke .env
@@ -834,35 +868,46 @@ public function winpay()
                 ->unique()
                 ->values();
 
-            $eligibleUnpaidIds = \App\Suminvoice::where('id_customer', $customerId)
+            // Semua invoice belum bayar (termasuk yang sedang menunggu Duitku/Winpay/bundle),
+            // agar invoice terlama yang pembayarannya masih menunggu tidak bisa dilompati.
+            $unpaidInvoices = \App\Suminvoice::where('id_customer', $customerId)
                 ->where('payment_status', 0)
-                ->where(function ($q) {
-                    $q->whereNull('payment_id')
-                        ->orWhere('payment_id', '')
-                        ->orWhere(function ($q2) {
-                            $q2->where('payment_id', 'not like', 'duitku:%')
-                                ->where('payment_id', 'not like', 'winpay:%');
-                        });
-                })
-                ->when($pendingBundleInvoiceIds->count() > 0, function ($q) use ($pendingBundleInvoiceIds) {
-                    $q->whereNotIn('id', $pendingBundleInvoiceIds->all());
-                })
                 ->orderBy('date', 'asc')
                 ->orderBy('id', 'asc')
-                ->pluck('id')
+                ->get(['id', 'number', 'payment_id']);
+
+            $isPendingPayment = function ($inv) use ($pendingBundleInvoiceIds) {
+                return str_starts_with($inv->payment_id ?? '', 'duitku:')
+                    || str_starts_with($inv->payment_id ?? '', 'winpay:')
+                    || $pendingBundleInvoiceIds->contains((int) $inv->id);
+            };
+
+            // Invoice yang dipilih tidak boleh sedang menunggu pembayaran lain
+            if ($pendingSelected = $unpaidInvoices->first(fn ($inv) => $selectedIds->contains((int) $inv->id) && $isPendingPayment($inv))) {
+                return redirect()->back()->with(
+                    'error',
+                    'Tagihan #' . $pendingSelected->number . ' sedang menunggu pembayaran. Selesaikan atau ganti metode bayar terlebih dahulu.'
+                );
+            }
+
+            $eligibleUnpaidIds = $unpaidInvoices->pluck('id')
                 ->map(fn ($id) => (int) $id)
                 ->values();
 
             $requiredPrefixIds = $eligibleUnpaidIds->take($selectedIds->count())->sort()->values();
             $selectedSortedIds = $selectedIds->sort()->values();
             if ($selectedSortedIds->all() !== $requiredPrefixIds->all()) {
-                $oldestRequiredId = $eligibleUnpaidIds->first();
-                $oldestRequiredNo = $oldestRequiredId
-                    ? (\App\Suminvoice::find($oldestRequiredId)->number ?? $oldestRequiredId)
-                    : null;
+                // Invoice terlama yang terlewat; bila sedang menunggu pembayaran, minta diselesaikan dulu
+                $skipped = $unpaidInvoices->first(fn ($inv) => !$selectedIds->contains((int) $inv->id));
+                if ($skipped && $isPendingPayment($skipped)) {
+                    return redirect()->back()->with(
+                        'error',
+                        'Selesaikan atau ganti metode bayar tagihan #' . $skipped->number . ' terlebih dahulu.'
+                    );
+                }
                 return redirect()->back()->with(
                     'error',
-                    'Centang dan bayar harus berurutan dari invoice terlama' . ($oldestRequiredNo ? ': #' . $oldestRequiredNo : '.')
+                    'Centang dan bayar harus berurutan dari invoice terlama' . ($skipped ? ': #' . $skipped->number : '.')
                 );
             }
 
@@ -1155,7 +1200,12 @@ public function createWinpayVA(Request $request)
         $secretKey = $winpayConfig['secret_key'];
 
         $suminvoice = \App\Suminvoice::findOrFail($request->id);
-
+        if ((int) $suminvoice->payment_status !== 0) {
+            return redirect()->back()->with('error', 'Tagihan sudah lunas atau dibatalkan.');
+        }
+        if ($older = $this->olderUnpaidInvoice($suminvoice)) {
+            return redirect()->back()->with('error', 'Bayar invoice terlama terlebih dahulu: #' . $older->number);
+        }
 
         $customer = \App\Customer::findOrFail($suminvoice->id_customer);
         // Timestamp format ISO8601 (Asia/Jakarta)

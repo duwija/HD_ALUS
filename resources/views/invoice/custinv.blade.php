@@ -508,43 +508,29 @@
     {{-- Invoice section --}}
     @php
         $unpaidCount     = $suminvoice->where('payment_status', 0)->count();
-        $selectableCount = $suminvoice->where('payment_status', 0)->filter(function($inv) use ($pendingBundleByInvoice) {
-            if (str_starts_with($inv->payment_id ?? '', 'duitku:')) return false;
-            if (str_starts_with($inv->payment_id ?? '', 'winpay:')) return false;
-            if ($pendingBundleByInvoice->has($inv->id)) return false;
-            return true;
-        })->count();
 
-        $earliestSelectableInvoiceId = $suminvoice
+        // Yang bisa dipilih hanya invoice belum bayar terlama SEBELUM invoice pertama yang
+        // sedang menunggu pembayaran (Duitku/Winpay/bundle). Invoice yang lebih baru baru bisa
+        // dibayar setelah pembayaran yang menunggu itu lunas atau diganti metodenya.
+        $selectableIds = $suminvoice
             ->where('payment_status', 0)
-            ->filter(function($inv) use ($pendingBundleByInvoice) {
+            ->sortBy([
+                ['date', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->takeWhile(function($inv) use ($pendingBundleByInvoice) {
                 if (str_starts_with($inv->payment_id ?? '', 'duitku:')) return false;
                 if (str_starts_with($inv->payment_id ?? '', 'winpay:')) return false;
                 if ($pendingBundleByInvoice->has($inv->id)) return false;
                 return true;
             })
-            ->sortBy([
-                ['date', 'asc'],
-                ['id', 'asc'],
-            ])
             ->pluck('id')
-            ->first();
+            ->map(fn ($id) => (int) $id)
+            ->values();
 
-        $selectableOrderMap = $suminvoice
-            ->where('payment_status', 0)
-            ->filter(function($inv) use ($pendingBundleByInvoice) {
-                if (str_starts_with($inv->payment_id ?? '', 'duitku:')) return false;
-                if (str_starts_with($inv->payment_id ?? '', 'winpay:')) return false;
-                if ($pendingBundleByInvoice->has($inv->id)) return false;
-                return true;
-            })
-            ->sortBy([
-                ['date', 'asc'],
-                ['id', 'asc'],
-            ])
-            ->pluck('id')
-            ->values()
-            ->flip();
+        $selectableCount             = $selectableIds->count();
+        $earliestSelectableInvoiceId = $selectableIds->first();
+        $selectableOrderMap          = $selectableIds->flip();
     @endphp
 
     <div class="section-title">
@@ -591,7 +577,8 @@
                 $wpUrl   = $wpParts[1] ?? '';
             }
             $bundlePending = $pendingBundleByInvoice->get($inv->id);
-            $isSelectable  = $isUnpaid && !$dkpPending && !$wpPending && ($bundlePending === null);
+            $isSelectable  = $isUnpaid && !$dkpPending && !$wpPending && ($bundlePending === null)
+                && $selectableOrderMap->has((int) $inv->id);
             $isEarliestSelectable = $isSelectable && ((int) $inv->id === (int) $earliestSelectableInvoiceId);
             $sc = match((int)$inv->payment_status) { 1=>'paid', 2=>'cancel', default=>'unpaid' };
             $bc = match((int)$inv->payment_status) { 1=>'badge-paid', 2=>'badge-cancel', default=>'badge-unpaid' };
