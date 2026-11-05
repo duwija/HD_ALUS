@@ -119,6 +119,15 @@
                   @endforeach
                 </select>
               </div>
+              <div class="form-group">
+                <label class="font-weight-bold small">Tanggal Isolir</label>
+                <select name="isolir_date_unpaid" id="isolir_date_unpaid" class="form-control form-control-sm select2" onchange="getSelectedunpaidnotif()">
+                  <option value="">Semua Tanggal</option>
+                  @for ($i = 1; $i <= 29; $i++)
+                    <option value="{{ $i }}">{{ sprintf('%02d', $i) }}</option>
+                  @endfor
+                </select>
+              </div>
               <div class="text-right">
                 <button type="submit" class="btn btn-warning btn-sm">
                   <i class="fas fa-paper-plane mr-1"></i>Kirim
@@ -185,6 +194,15 @@
                   @foreach ($merchant as $id => $name)
                     <option value="{{ $id }}">{{ $name }}</option>
                   @endforeach
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="font-weight-bold small">Tanggal Isolir</label>
+                <select name="isolir_date_inv" id="isolir_date_inv" class="form-control form-control-sm select2" onchange="getSelectedcustomermerchant()">
+                  <option value="">Semua Tanggal</option>
+                  @for ($i = 1; $i <= 29; $i++)
+                    <option value="{{ $i }}">{{ sprintf('%02d', $i) }}</option>
+                  @endfor
                 </select>
               </div>
               <div class="text-right">
@@ -333,7 +351,7 @@
     $.ajax({
       url: '/jobs/getSelectedcustomermerchant',
       type: 'POST',
-      data: { id_merchant: $('#id_merchant').val(), inv_date: $('#inv_date').val() },
+      data: { id_merchant: $('#id_merchant').val(), inv_date: $('#inv_date').val(), isolir_date_inv: $('#isolir_date_inv').val() },
       dataType: 'json',
       headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
       success: function(response) {
@@ -358,7 +376,7 @@
     $.ajax({
       url: '/jobs/getSelectedunpaidnotif',
       type: 'GET',
-      data: { id_merchant_unpaid: $('#id_merchant_unpaid').val() },
+      data: { id_merchant_unpaid: $('#id_merchant_unpaid').val(), isolir_date_unpaid: $('#isolir_date_unpaid').val() },
       success: function(response) {
         $('#customercountunpaid').html(response.customercount);
       }

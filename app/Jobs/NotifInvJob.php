@@ -40,14 +40,21 @@ class NotifInvJob implements ShouldQueue
     protected $encryptedurl;
     protected $tenantDomain;
 
+    const TYPE_REMINDER = 'reminder'; // pengingat tagihan (default)
+    const TYPE_BLOCKED  = 'blocked';  // pelanggan sudah diisolir/diblokir
 
-    public function __construct($phone, $name, $cid, $encryptedurl)
+    // Default di deklarasi properti: job lama di antrean (tanpa properti ini) tetap dianggap reminder.
+    protected $type = self::TYPE_REMINDER;
+
+
+    public function __construct($phone, $name, $cid, $encryptedurl, $type = self::TYPE_REMINDER)
     {
         //
         $this->phone = $phone;
         $this->name = $name;
         $this->cid = $cid;
         $this->encryptedurl = $encryptedurl;
+        $this->type = $type === self::TYPE_BLOCKED ? self::TYPE_BLOCKED : self::TYPE_REMINDER;
 
         // Simpan tenant domain saat job dibuat (HTTP context — tenant sudah di-resolve middleware)
         $tenant = app('tenant');
@@ -73,16 +80,16 @@ class NotifInvJob implements ShouldQueue
         return;
     }
 
+    $isBlocked = $this->type === self::TYPE_BLOCKED;
+
     if ($customer->notification == 1) {
 
         // Kirim via WA — provider dipilih otomatis dari tenant ENV: WA_PROVIDER
         // Pilihan: gateway (default) | qontak | fonnte | wablas
-        $response = WaService::sendReminder(
-            $customer->phone,
-            $customer->name,
-            $this->cid,
-            $this->encryptedurl
-        );
+        // Blocked: pesan isolir untuk gateway/fonnte/wablas; qontak/titiwa tetap template reminder.
+        $response = $isBlocked
+            ? WaService::sendBlockedNotice($customer->phone, $customer->name, $this->cid, $this->encryptedurl)
+            : WaService::sendReminder($customer->phone, $customer->name, $this->cid, $this->encryptedurl);
 
     } elseif ($customer->notification == 2) {
         // Email Notification
@@ -92,6 +99,7 @@ class NotifInvJob implements ShouldQueue
                 'name'  => $this->name,
                 'cid'   => $this->cid,
                 'url'   => $this->encryptedurl,
+                'type'  => $this->type,
             ];
 
             try {
@@ -110,8 +118,13 @@ class NotifInvJob implements ShouldQueue
             Log::channel('notif')->warning("[FCM] CID {$this->cid} | {$this->name} — fcm_token kosong, skip push.");
             $response = 'FCM skipped: no token';
         } else {
-            $fcmTitle = '🔔 Pengingat Tagihan';
-            $fcmBody  = 'Halo ' . $customer->name . ', Anda masih memiliki tagihan yang belum dibayar. Segera selesaikan pembayaran agar layanan tetap dapat berjalan.';
+            if ($isBlocked) {
+                $fcmTitle = '⛔ Layanan Diisolir';
+                $fcmBody  = 'Halo ' . $customer->name . ', layanan internet Anda saat ini diisolir karena masih ada tagihan yang belum dibayar. Segera lakukan pembayaran agar layanan aktif kembali.';
+            } else {
+                $fcmTitle = '🔔 Pengingat Tagihan';
+                $fcmBody  = 'Halo ' . $customer->name . ', Anda masih memiliki tagihan yang belum dibayar. Segera selesaikan pembayaran agar layanan tetap dapat berjalan.';
+            }
             try {
                 \App\Services\FcmService::send(
                     $customer->fcm_token,
@@ -153,7 +166,7 @@ class NotifInvJob implements ShouldQueue
         return;
     }
 
-\Log::channel('notif')->info('Sent Remainder message to  CID '.$this->cid. ' | ' .$this->name . ' | '. $response); 
+\Log::channel('notif')->info('Sent ' . ($isBlocked ? 'Blocked' : 'Remainder') . ' message to  CID '.$this->cid. ' | ' .$this->name . ' | '. $response); 
 
 }
 

@@ -54,8 +54,13 @@
 
         <p>Terima kasih telah menggunakan layanan <strong>{{ config('app.name') }}</strong>.</p>
 
+        @if (($data['type'] ?? '') === 'blocked')
+        <p>Layanan internet Anda saat ini <strong>diisolir</strong> karena masih ada tagihan yang belum dibayar.</p>
+        <p>Segera lakukan pembayaran agar layanan aktif kembali secara otomatis.</p>
+        @else
         <p>Kami ingin mengingatkan bahwa tagihan Anda sudah tersedia</p>
         <p>Agar tetap bisa menikmati layanan kami, mohon untuk menyelesaikan pembayaran tepat waktu </p>
+        @endif
 
 
         <p>Silakan klik tombol di bawah ini untuk melihat detail tagihan dan melakukan pembayaran melalui portal billing kami:</p>

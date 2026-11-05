@@ -29,6 +29,7 @@ trait SendsCustomerNotification
      * @param  Carbon         $start            Base waktu start (Carbon — dimutasi setiap panggilan agar delay kumulatif)
      * @param  int            $index            Index loop (untuk pola delay)
      * @param  int            $longPauseEvery   Long pause setiap N pesan
+     * @param  string         $type             'reminder' (pengingat tagihan) | 'blocked' (pelanggan diisolir)
      * @return void
      */
     public function dispatchCustomerNotif(
@@ -36,7 +37,8 @@ trait SendsCustomerNotification
         string $encryptedurl,
         Carbon $start,
         int $index,
-        int $longPauseEvery
+        int $longPauseEvery,
+        string $type = NotifInvJob::TYPE_REMINDER
     ): void {
         // Skip jika pelanggan tidak mau menerima notifikasi
         if ((int) $customer->notification === 0) {
@@ -53,11 +55,12 @@ trait SendsCustomerNotification
             $customer->phone,
             $customer->name,
             $customer->customer_id,
-            $encryptedurl
+            $encryptedurl,
+            $type
         )->onQueue($tenantQueue)->delay($start->addSeconds($delay));
 
         Log::channel('notif')->info(
-            "Queued [{$notifType}] CID {$customer->customer_id} | {$customer->name} | delay +{$delay}s"
+            "Queued [{$notifType}:{$type}] CID {$customer->customer_id} | {$customer->name} | delay +{$delay}s"
         );
     }
 

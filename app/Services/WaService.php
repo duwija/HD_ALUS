@@ -65,6 +65,57 @@ class WaService
     }
 
     /**
+     * Notifikasi pelanggan diblokir/diisolir.
+     * Qontak/Titiwa hanya mendukung template terdaftar → tetap pakai template reminder (WA_TAMPLATE_ID_4).
+     * Provider teks bebas (gateway/fonnte/wablas) memakai pesan isolir dari buildBlockedMessage().
+     */
+    public static function sendBlockedNotice(string $phone, string $name, string $cid, string $encryptedurl): string
+    {
+        $provider = static::resolveReminderProvider('WA_TAMPLATE_ID_4');
+
+        if (in_array($provider, ['qontak', 'titiwa'], true)) {
+            return static::sendReminder($phone, $name, $cid, $encryptedurl);
+        }
+
+        Log::channel('notif')->info("[WA:{$provider}] Kirim notif isolir CID {$cid} | {$name} → {$phone}");
+
+        try {
+            $message = static::buildBlockedMessage($name, $cid, $encryptedurl);
+            return match ($provider) {
+                'fonnte' => static::sendViaFonnte($phone, $message),
+                'wablas' => static::sendViaWablas($phone, $message),
+                default  => static::sendViaGateway($phone, $message),
+            };
+        } catch (\Throwable $e) {
+            Log::channel('notif')->error("[WA:{$provider}] Error notif isolir CID {$cid}: " . $e->getMessage());
+            return 'Error: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Pesan teks pelanggan diisolir (non-template).
+     */
+    public static function buildBlockedMessage(string $name, string $cid, string $encryptedurl): string
+    {
+        $domain    = tenant_config('domain_name',  env('DOMAIN_NAME',  ''));
+        $paymentWa = tenant_config('payment_wa',   env('PAYMENT_WA',   ''));
+        $signature = tenant_config('signature',    env('SIGNATURE',    ''));
+
+        $link = static::maybeShortenUrlForGateway("https://{$domain}{$encryptedurl}");
+
+        $msg  = "*[Layanan Internet Diisolir]*\n\n";
+        $msg .= "Yth. {$name} (CID: {$cid}),\n";
+        $msg .= "Layanan internet Anda saat ini *diisolir* karena masih ada tagihan yang belum dibayar.\n\n";
+        $msg .= "Segera lakukan pembayaran agar layanan aktif kembali secara otomatis:\n";
+        $msg .= "{$link}\n\n";
+        $msg .= "Jika sudah melakukan pembayaran, abaikan pesan ini.\n";
+        $msg .= "Bantuan CS: {$paymentWa}\n\n";
+        $msg .= "{$signature}";
+
+        return $msg;
+    }
+
+    /**
      * Kirim pesan teks bebas ke nomor tertentu menggunakan provider aktif.
      * Cocok untuk notifikasi custom (ticket, promo, dll).
      *

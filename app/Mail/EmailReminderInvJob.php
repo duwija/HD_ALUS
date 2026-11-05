@@ -30,7 +30,11 @@ class EmailReminderInvJob extends Mailable
      */
     public function build()
     {
-     return $this->subject('Pengingat Tagihan ' . config('app.name'))
+     $subject = (($this->data['type'] ?? '') === 'blocked')
+        ? 'Layanan Internet Diisolir - ' . config('app.name')
+        : 'Pengingat Tagihan ' . config('app.name');
+
+     return $this->subject($subject)
      ->view('email/reminderinvjob')
      ->with('data', $this->data);
  }

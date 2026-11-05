@@ -190,6 +190,7 @@ class SuminvoiceController extends Controller
     {
         $inv_date = $request->inv_date;
         $id_merchant = $request->id_merchant;
+        $isolir_date = (int) $request->isolir_date_inv; // 0 = semua tanggal
 
     // Query pelanggan dengan status 2 atau 4
         $customer = \App\Customer::where(function ($query) {
@@ -200,6 +201,11 @@ class SuminvoiceController extends Controller
     // Jika id_merchant diberikan, tambahkan filter
         if (!empty($id_merchant)) {
             $customer->where('id_merchant', $id_merchant);
+        }
+
+    // Filter berdasarkan tanggal isolir jika dipilih
+        if ($isolir_date > 0) {
+            $customer->where('isolir_date', $isolir_date);
         }
 
     // Eksekusi query untuk mendapatkan data pelanggan
@@ -777,14 +783,23 @@ public function winpay()
     // Batas panjang merchant ref bundle: ref yang sama dipakai sebagai merchantOrderId Duitku (maks. 50).
     const BUNDLE_REF_MAX = 50;
 
+    // Winpay: /api/create menerima ref panjang, tapi halaman checkout gagal ("Gagal memproses
+    // permintaan #CP...") untuk ref >= 43 karakter. Ref Winpay terpanjang yang pernah lunas = 32.
+    const BUNDLE_REF_MAX_WINPAY = 32;
+
     /**
      * Merchant ref bundle: MULTI-{customer_id}-{number1}-{number2}... (nomor invoice diurutkan).
      * Ref yang pernah dipakai diberi nomor percobaan -2, -3, ... (gateway menolak ref ganda,
-     * dan invoice yang sama sering dibundel ulang). Jika lebih dari BUNDLE_REF_MAX karakter,
-     * kembali ke format MULTI-{customer_id}-{8 hex acak}; daftar invoice tetap ada di payment_bundle_items.
+     * dan invoice yang sama sering dibundel ulang). Jika lebih dari batas gateway (BUNDLE_REF_MAX,
+     * atau BUNDLE_REF_MAX_WINPAY untuk winpay/winpay2), kembali ke format MULTI-{customer_id}-{8 hex acak},
+     * lalu MULTI-{16 hex acak} bila masih terlalu panjang; daftar invoice tetap ada di payment_bundle_items.
      */
-    private function makeBundleRef($customer, $invoices): string
+    private function makeBundleRef($customer, $invoices, string $gateway = ''): string
     {
+        $max = in_array(strtolower($gateway), ['winpay', 'winpay2'], true)
+            ? self::BUNDLE_REF_MAX_WINPAY
+            : self::BUNDLE_REF_MAX;
+
         $base = 'MULTI-' . $customer->customer_id . '-' . $invoices->pluck('number')->sort()->implode('-');
 
         $used = \DB::table('payment_bundles')
@@ -796,9 +811,16 @@ public function winpay()
             $ref = $base . '-' . $n;
         }
 
-        return strlen($ref) <= self::BUNDLE_REF_MAX
-            ? $ref
-            : 'MULTI-' . $customer->customer_id . '-' . substr(md5(uniqid('', true)), 0, 8);
+        if (strlen($ref) <= $max) {
+            return $ref;
+        }
+
+        $ref = 'MULTI-' . $customer->customer_id . '-' . bin2hex(random_bytes(4));
+        if (strlen($ref) <= $max) {
+            return $ref;
+        }
+
+        return 'MULTI-' . bin2hex(random_bytes(8));
     }
 
     private function storeBundle(string $bundleRef, $gateway, $customer, $totalAmount, $invoices, $tripayMethod): void
@@ -926,7 +948,7 @@ public function winpay()
             // Simpan bundle ke DB (atomic). bundle_ref unik: kalau request lain sempat memakai
             // ref yang sama (race), buat ulang ref dengan nomor percobaan berikutnya.
             for ($try = 1; ; $try++) {
-                $bundleRef = $this->makeBundleRef($customer, $invoices);
+                $bundleRef = $this->makeBundleRef($customer, $invoices, (string) $gateway);
                 try {
                     $this->storeBundle($bundleRef, $gateway, $customer, $totalAmount, $invoices, $tripayMethod);
                     break;
@@ -1498,7 +1520,7 @@ public function customerblockednotifJob()
         $encryptedurl = '/invoice/cst/' . Crypt::encryptString($customer->id);
         $index++;
         $count++;
-        $this->dispatchCustomerNotif($customer, $encryptedurl, $start, $index, $longPauseEvery);
+        $this->dispatchCustomerNotif($customer, $encryptedurl, $start, $index, $longPauseEvery, \App\Jobs\NotifInvJob::TYPE_BLOCKED);
     }
 
     // Simpan total blast ke cache untuk tracking progress
@@ -1550,6 +1572,7 @@ public function getSelectedcustomermerchant(Request $request)
     // Ambil parameter 'id_merchant' dan 'inv_date' dari request
     $id_merchant = $request->id_merchant;
     $inv_date = $request->inv_date; // Format: YYYY-MM-DD
+    $isolir_date = (int) $request->isolir_date_inv; // 0 = semua tanggal
 
     // Konversi $inv_date ke format bulantahun (MMYYYY)
     $periode = Carbon::parse($inv_date)->format('mY'); 
@@ -1559,6 +1582,9 @@ public function getSelectedcustomermerchant(Request $request)
     
     if (!empty($id_merchant)) {
         $query->where('id_merchant',$id_merchant);
+    }
+    if ($isolir_date > 0) {
+        $query->where('isolir_date', $isolir_date);
     }
 
     $customers = $query->get(['id']); // Ambil hanya kolom id
@@ -1622,12 +1648,16 @@ public function getSelectedunpaidnotif(Request $request)
 {
     // Ambil parameter 'id_merchant'
     $id_merchant = $request->id_merchant_unpaid;
+    $isolir_date = (int) $request->isolir_date_unpaid; // 0 = semua tanggal
 
     // Query semua customers (tanpa filter status)
     $query_all = \App\Customer::query();
 
     if (!empty($id_merchant)) {
         $query_all->where('id_merchant', $id_merchant);
+    }
+    if ($isolir_date > 0) {
+        $query_all->where('isolir_date', $isolir_date);
     }
 
     $customer_count_all = $query_all->count(); // Hitung total pelanggan
@@ -1648,6 +1678,9 @@ public function getSelectedunpaidnotif(Request $request)
 
     if (!empty($id_merchant)) {
         $custactiveinv->where('customers.id_merchant', $id_merchant);
+    }
+    if ($isolir_date > 0) {
+        $custactiveinv->where('customers.isolir_date', $isolir_date);
     }
 
     $custactiveinv_count = $custactiveinv->groupBy('customers.id')->get()->count();
@@ -1735,6 +1768,7 @@ public function notifinvJob(Request $request)
 {
 
 $id_merchant = $request->id_merchant_unpaid; // Ambil ID Merchant dari request
+$isolir_date = (int) $request->isolir_date_unpaid; // Tanggal isolir (0 = semua)
 
 \Log::channel('notif')->info('==== START Notification to customers who still have invoice. ==='); 
 
@@ -1755,6 +1789,10 @@ $customers = \App\Customer::select(
 // Tambahkan filter berdasarkan ID Merchant jika ada
 if (!empty($id_merchant)) {
     $customers->where('customers.id_merchant', $id_merchant);
+}
+// Filter berdasarkan tanggal isolir jika dipilih
+if ($isolir_date > 0) {
+    $customers->where('customers.isolir_date', $isolir_date);
 }
 $customers->where('customers.notification', '!=', 0);
 $customers = $customers->groupBy('customers.id')->get();
