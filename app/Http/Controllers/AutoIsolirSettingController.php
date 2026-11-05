@@ -65,6 +65,9 @@ class AutoIsolirSettingController extends Controller
             'autoInvoiceDay'    => InvoiceAuto::normalizeDay($features['auto_invoice_day'] ?? null),
             'autoInvoicePeriod' => ($features['auto_invoice_period'] ?? 'current') === 'next' ? 'next' : 'current',
             'autoInvoiceLast'   => $features['auto_invoice_last'] ?? null,
+            'autoInvoiceMode'   => InvoiceAuto::normalizeMode($features['auto_invoice_mode'] ?? null),
+            'autoInvoiceBeforeIsolir' => InvoiceAuto::normalizeBeforeIsolir($features['auto_invoice_before_isolir'] ?? null),
+            'autoInvoiceSummary' => self::autoInvoiceSummary($features),
             'dailyReportEmails' => DailyReport::normalizeEmails($features['daily_report_emails'] ?? []),
             'isolirMethod'  => \App\Distrouter::isolirSetting()[0],
             'isolirProfile' => \App\Distrouter::isolirSetting()[1],
@@ -252,48 +255,77 @@ class AutoIsolirSettingController extends Controller
 
     /**
      * Simpan jadwal invoice otomatis (command invoice:auto, jam 06:00).
-     * auto_invoice_day: 1..28 / "last" / kosong (mati); auto_invoice_period: current / next.
+     * Mode "date": auto_invoice_day 1..28 / "last" + auto_invoice_period current / next.
+     * Mode "isolir": auto_invoice_before_isolir 1..28 (H-x sebelum tanggal isolir tiap pelanggan).
      */
     public function updateAutoInvoice(Request $request)
     {
         $this->authorizeAdmin();
 
         $request->validate([
-            'auto_invoice_day'    => ['nullable', 'regex:/^([1-9]|1[0-9]|2[0-8]|last)$/'],
-            'auto_invoice_period' => 'required|in:current,next',
+            'auto_invoice_mode'          => 'required|in:off,date,isolir',
+            'auto_invoice_day'           => ['nullable', 'regex:/^([1-9]|1[0-9]|2[0-8]|last)$/', 'required_if:auto_invoice_mode,date'],
+            'auto_invoice_period'        => 'nullable|in:current,next|required_if:auto_invoice_mode,date',
+            'auto_invoice_before_isolir' => 'nullable|integer|between:1,28|required_if:auto_invoice_mode,isolir',
+        ], [
+            'auto_invoice_day.required_if'           => 'Pilih tanggal eksekusi.',
+            'auto_invoice_before_isolir.required_if' => 'Pilih H-berapa sebelum tanggal isolir.',
+            'auto_invoice_before_isolir.between'     => 'H-x harus antara 1 dan 28.',
         ]);
 
-        $day    = InvoiceAuto::normalizeDay($request->input('auto_invoice_day'));
-        $period = $request->input('auto_invoice_period');
+        $choice = $request->input('auto_invoice_mode');
+        $mode   = $choice === 'isolir' ? 'isolir' : 'date';
+        // Mode "date" dengan day null = mati (perilaku lama). Mode isolir: day dikosongkan supaya jelas tidak jalan.
+        $day    = $choice === 'date' ? InvoiceAuto::normalizeDay($request->input('auto_invoice_day')) : null;
+        $before = $choice === 'isolir' ? InvoiceAuto::normalizeBeforeIsolir($request->input('auto_invoice_before_isolir')) : null;
+        $tenant   = $this->currentTenantRow();
+        $features = $this->decodeJsonColumn($tenant->features);
+        $old      = self::autoInvoiceSummary($features);
+        // Periode hanya dikirim di mode "date"; mode lain mempertahankan nilai lama.
+        $period = $request->input('auto_invoice_period')
+            ?? ((($features['auto_invoice_period'] ?? 'current') === 'next') ? 'next' : 'current');
 
-        $tenant = $this->currentTenantRow();
-        $before = $this->decodeJsonColumn($tenant->features);
-        $oldDay = InvoiceAuto::normalizeDay($before['auto_invoice_day'] ?? null);
-        $oldPeriod = $before['auto_invoice_period'] ?? 'current';
-
-        // $day sudah tervalidasi (int 1..28 / 'last' / null), $period dari daftar tetap.
-        $dayJson = $day === null ? 'NULL' : ($day === 'last' ? "'last'" : (string) $day);
+        // Semua nilai sudah tervalidasi/ternormalisasi (int / 'last' / null / daftar tetap).
+        $dayJson    = $day === null ? 'NULL' : ($day === 'last' ? "'last'" : (string) $day);
+        $beforeJson = $before === null ? 'NULL' : (string) $before;
         DB::connection('isp_master')->table('tenants')
             ->where('id', $tenant->id)
             ->update([
-                'features'   => DB::raw("JSON_SET(COALESCE(NULLIF(features, ''), '{}'), '$.auto_invoice_day', {$dayJson}, '$.auto_invoice_period', '{$period}')"),
+                'features'   => DB::raw("JSON_SET(COALESCE(NULLIF(features, ''), '{}'), '$.auto_invoice_day', {$dayJson}, '$.auto_invoice_period', '{$period}', '$.auto_invoice_mode', '{$mode}', '$.auto_invoice_before_isolir', {$beforeJson})"),
                 'updated_at' => now(),
             ]);
 
+        $new = self::autoInvoiceSummary([
+            'auto_invoice_mode' => $mode, 'auto_invoice_day' => $day,
+            'auto_invoice_period' => $period, 'auto_invoice_before_isolir' => $before,
+        ]);
+
         $user = Auth::user();
         Log::channel('invoice')->info(sprintf(
-            '[TenantSetting] tenant=%s auto_invoice %s/%s -> %s/%s oleh user #%s (%s) ip=%s',
-            $tenant->domain,
-            $oldDay ?? 'off', $oldPeriod,
-            $day ?? 'off', $period,
-            $user->id,
-            $user->name,
-            $request->ip()
+            '[TenantSetting] tenant=%s auto_invoice "%s" -> "%s" oleh user #%s (%s) ip=%s',
+            $tenant->domain, $old, $new, $user->id, $user->name, $request->ip()
         ));
 
-        return redirect('settings/auto-isolir')->with('success', $day === null
+        return redirect('settings/auto-isolir')->with('success', $new === 'mati'
             ? 'Invoice otomatis dimatikan.'
-            : 'Invoice otomatis disimpan: setiap ' . self::autoInvoiceDayLabel($day) . ' jam 06:00, periode ' . ($period === 'next' ? 'bulan berikutnya' : 'bulan berjalan') . '.');
+            : 'Invoice otomatis disimpan: ' . $new . '.');
+    }
+
+    /** Ringkasan pengaturan invoice otomatis untuk badge, pesan & log. */
+    public static function autoInvoiceSummary(array $features): string
+    {
+        if (InvoiceAuto::normalizeMode($features['auto_invoice_mode'] ?? null) === 'isolir') {
+            $before = InvoiceAuto::normalizeBeforeIsolir($features['auto_invoice_before_isolir'] ?? null);
+            return $before === null ? 'mati' : "H-{$before} sebelum tanggal isolir tiap pelanggan, jam 06:00";
+        }
+
+        $day = InvoiceAuto::normalizeDay($features['auto_invoice_day'] ?? null);
+        if ($day === null) {
+            return 'mati';
+        }
+
+        return 'setiap ' . self::autoInvoiceDayLabel($day) . ' jam 06:00, periode '
+            . (($features['auto_invoice_period'] ?? 'current') === 'next' ? 'bulan berikutnya' : 'bulan berjalan');
     }
 
     public static function autoInvoiceDayLabel($day): string

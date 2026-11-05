@@ -10,7 +10,15 @@
 
 <section class="content">
   <div class="container-fluid">
-    <div class="row">
+    <ul class="nav nav-tabs mb-3" id="settingsTabs" role="tablist">
+      <li class="nav-item"><a class="nav-link active" id="tab-isolir-link" data-toggle="tab" href="#tab-isolir" role="tab" aria-controls="tab-isolir" aria-selected="true"><i class="fas fa-user-lock mr-1"></i> Isolir</a></li>
+      <li class="nav-item"><a class="nav-link" id="tab-invoice-link" data-toggle="tab" href="#tab-invoice" role="tab" aria-controls="tab-invoice" aria-selected="false"><i class="fas fa-file-invoice-dollar mr-1"></i> Invoice</a></li>
+      <li class="nav-item"><a class="nav-link" id="tab-notifikasi-link" data-toggle="tab" href="#tab-notifikasi" role="tab" aria-controls="tab-notifikasi" aria-selected="false"><i class="fas fa-bell mr-1"></i> Notifikasi &amp; Laporan</a></li>
+      <li class="nav-item"><a class="nav-link" id="tab-pembayaran-link" data-toggle="tab" href="#tab-pembayaran" role="tab" aria-controls="tab-pembayaran" aria-selected="false"><i class="fas fa-wallet mr-1"></i> Pembayaran</a></li>
+    </ul>
+    <div class="tab-content" id="settingsTabsContent">
+      <div class="tab-pane fade show active" id="tab-isolir" role="tabpanel" aria-labelledby="tab-isolir-link">
+      <div class="row">
       <div class="col-lg-6">
         <div class="card card-outline {{ $enabled ? 'card-success' : 'card-secondary' }}">
           <div class="card-header">
@@ -64,9 +72,8 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="row">
+      </div>
+      <div class="row">
       <div class="col-lg-6">
         <div class="card card-outline card-danger">
           <div class="card-header">
@@ -163,6 +170,99 @@
           </div>
         </div>
       </div>
+      </div>
+      </div>
+      <div class="tab-pane fade" id="tab-invoice" role="tabpanel" aria-labelledby="tab-invoice-link">
+      <div class="row">
+      <div class="col-lg-6">
+        <div class="card card-outline card-teal">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-file-invoice-dollar mr-1"></i> Invoice Otomatis</h3>
+          </div>
+          <div class="card-body">
+            <p class="mb-2">
+              Cadangan kalau lupa membuat invoice lewat menu <em>Jobs</em>. Dijalankan setiap hari jam <strong>06:00</strong>
+              untuk pelanggan <strong>Aktif</strong> dan <strong>Blokir</strong> (sama seperti tombol Buat Invoice di menu Jobs, tanpa filter merchant).
+              Tanggal invoice selalu tanggal 1 bulan tagihan.
+            </p>
+            <p class="mb-3 text-muted"><small>
+              Aman walau invoice sudah dibuat manual: pelanggan yang sudah punya invoice bulanan untuk periode itu dilewati.
+              Notifikasi tagihan ikut terkirim ke pelanggan seperti biasa.
+            </small></p>
+
+            @php
+              $aiChoice = old('auto_invoice_mode', $autoInvoiceMode === 'isolir'
+                  ? ($autoInvoiceBeforeIsolir ? 'isolir' : 'off')
+                  : ($autoInvoiceDay === null ? 'off' : 'date'));
+            @endphp
+            <form method="POST" action="{{ url('settings/auto-isolir/auto-invoice') }}" id="autoInvoiceForm">
+              @csrf
+              <div class="form-group">
+                <label for="auto_invoice_mode">Jadwal</label>
+                <select name="auto_invoice_mode" id="auto_invoice_mode" class="form-control">
+                  <option value="off" {{ $aiChoice === 'off' ? 'selected' : '' }}>Mati</option>
+                  <option value="date" {{ $aiChoice === 'date' ? 'selected' : '' }}>Tanggal tetap — semua pelanggan sekaligus</option>
+                  <option value="isolir" {{ $aiChoice === 'isolir' ? 'selected' : '' }}>H-x sebelum tanggal isolir — per pelanggan</option>
+                </select>
+              </div>
+
+              <div class="form-row ai-mode ai-mode-date">
+                <div class="form-group col-sm-6">
+                  <label for="auto_invoice_day">Tanggal eksekusi</label>
+                  <select name="auto_invoice_day" id="auto_invoice_day" class="form-control @error('auto_invoice_day') is-invalid @enderror">
+                    @for ($d = 1; $d <= 28; $d++)
+                      <option value="{{ $d }}" {{ (string) old('auto_invoice_day', $autoInvoiceDay ?? 1) === (string) $d ? 'selected' : '' }}>Tanggal {{ $d }}</option>
+                    @endfor
+                    <option value="last" {{ old('auto_invoice_day', $autoInvoiceDay) === 'last' ? 'selected' : '' }}>Akhir bulan</option>
+                  </select>
+                </div>
+                <div class="form-group col-sm-6">
+                  <label for="auto_invoice_period">Periode invoice</label>
+                  <select name="auto_invoice_period" id="auto_invoice_period" class="form-control">
+                    <option value="current" {{ $autoInvoicePeriod === 'current' ? 'selected' : '' }}>Bulan berjalan</option>
+                    <option value="next" {{ $autoInvoicePeriod === 'next' ? 'selected' : '' }}>Bulan berikutnya</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="ai-mode ai-mode-isolir">
+                <div class="form-group">
+                  <label for="auto_invoice_before_isolir">Terbitkan invoice</label>
+                  <select name="auto_invoice_before_isolir" id="auto_invoice_before_isolir" class="form-control @error('auto_invoice_before_isolir') is-invalid @enderror">
+                    @for ($d = 1; $d <= 28; $d++)
+                      <option value="{{ $d }}" {{ (int) old('auto_invoice_before_isolir', $autoInvoiceBeforeIsolir ?? 7) === $d ? 'selected' : '' }}>H-{{ $d }} sebelum tanggal isolir</option>
+                    @endfor
+                  </select>
+                  @error('auto_invoice_before_isolir')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                </div>
+                <div class="alert alert-light border small mb-3">
+                  Tiap pelanggan dihitung dari <strong>tanggal isolir</strong>-nya sendiri. Contoh H-7: pelanggan isolir tanggal 20 dibuatkan
+                  invoice tanggal 13 untuk periode bulan itu (batas bayar tanggal 19); pelanggan isolir tanggal 5 dibuatkan invoice
+                  tanggal 26–28 bulan sebelumnya untuk periode bulan isolirnya.
+                  Kalau suatu hari terlewat, pelanggan yang isolirnya ≤ H-x dan belum punya invoice ikut dibuatkan keesokan harinya.
+                  Pelanggan dengan tanggal isolir 0 / kosong dilewati.
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-info">
+                <i class="fas fa-save mr-1"></i> Simpan Invoice Otomatis
+              </button>
+              <span class="ml-2">
+                Status:
+                @if ($autoInvoiceSummary === 'mati')
+                  <span class="badge badge-secondary">Mati</span>
+                @else
+                  <span class="badge badge-info" style="white-space:normal">{{ $autoInvoiceSummary }}</span>
+                @endif
+              </span>
+              @if ($autoInvoiceLast && $autoInvoiceMode === 'date')
+                <p class="mt-2 mb-0 text-muted"><small>Terakhir dijalankan untuk periode
+                  <strong>{{ \Carbon\Carbon::createFromFormat('Y-m-d', $autoInvoiceLast . '-01')->translatedFormat('F Y') }}</strong>.</small></p>
+              @endif
+            </form>
+          </div>
+        </div>
+      </div>
 
       <div class="col-lg-6">
         <div class="card card-outline card-primary">
@@ -190,106 +290,10 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="row">
-      <div class="col-lg-6">
-        <div class="card card-outline card-teal">
-          <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-file-invoice-dollar mr-1"></i> Invoice Otomatis</h3>
-          </div>
-          <div class="card-body">
-            <p class="mb-2">
-              Cadangan kalau lupa membuat invoice lewat menu <em>Jobs</em>. Pada tanggal yang dipilih, jam <strong>06:00</strong>,
-              sistem membuat invoice bulanan untuk semua pelanggan <strong>Aktif</strong> dan <strong>Blokir</strong>
-              (sama seperti tombol Buat Invoice di menu Jobs, tanpa filter merchant). Tanggal invoice selalu tanggal 1 bulan tagihan.
-            </p>
-            <p class="mb-3 text-muted"><small>
-              Aman walau invoice sudah dibuat manual: pelanggan yang sudah punya invoice bulanan untuk periode itu dilewati.
-              Notifikasi tagihan ikut terkirim ke pelanggan seperti biasa.
-            </small></p>
-
-            <form method="POST" action="{{ url('settings/auto-isolir/auto-invoice') }}">
-              @csrf
-              <div class="form-row">
-                <div class="form-group col-sm-6">
-                  <label for="auto_invoice_day">Tanggal eksekusi</label>
-                  <select name="auto_invoice_day" id="auto_invoice_day" class="form-control">
-                    <option value="" {{ $autoInvoiceDay === null ? 'selected' : '' }}>Mati</option>
-                    @for ($d = 1; $d <= 28; $d++)
-                      <option value="{{ $d }}" {{ $autoInvoiceDay === $d ? 'selected' : '' }}>Tanggal {{ $d }}</option>
-                    @endfor
-                    <option value="last" {{ $autoInvoiceDay === 'last' ? 'selected' : '' }}>Akhir bulan</option>
-                  </select>
-                </div>
-                <div class="form-group col-sm-6">
-                  <label for="auto_invoice_period">Periode invoice</label>
-                  <select name="auto_invoice_period" id="auto_invoice_period" class="form-control">
-                    <option value="current" {{ $autoInvoicePeriod === 'current' ? 'selected' : '' }}>Bulan berjalan</option>
-                    <option value="next" {{ $autoInvoicePeriod === 'next' ? 'selected' : '' }}>Bulan berikutnya</option>
-                  </select>
-                </div>
-              </div>
-              <button type="submit" class="btn btn-info">
-                <i class="fas fa-save mr-1"></i> Simpan Invoice Otomatis
-              </button>
-              <span class="ml-2">
-                Status:
-                @if ($autoInvoiceDay === null)
-                  <span class="badge badge-secondary">Mati</span>
-                @else
-                  <span class="badge badge-info">
-                    {{ \App\Http\Controllers\AutoIsolirSettingController::autoInvoiceDayLabel($autoInvoiceDay) }},
-                    {{ $autoInvoicePeriod === 'next' ? 'bulan berikutnya' : 'bulan berjalan' }}
-                  </span>
-                @endif
-              </span>
-              @if ($autoInvoiceLast)
-                <p class="mt-2 mb-0 text-muted"><small>Terakhir dijalankan untuk periode
-                  <strong>{{ \Carbon\Carbon::createFromFormat('Y-m-d', $autoInvoiceLast . '-01')->translatedFormat('F Y') }}</strong>.</small></p>
-              @endif
-            </form>
-          </div>
-        </div>
       </div>
-
-      <div class="col-lg-6">
-        <div class="card card-outline card-purple">
-          <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-envelope-open-text mr-1"></i> Laporan Harian</h3>
-          </div>
-          <div class="card-body">
-            <p class="mb-2">
-              Setiap hari jam <strong>07:00</strong> sistem mengirim email laporan <strong>hari sebelumnya</strong>:
-              pembayaran (per akun &amp; metode), invoice terbit/batal, langganan baru, terminate, isolir, dan calon pelanggan baru.
-              Daftar lengkapnya dilampirkan dalam file Excel.
-            </p>
-            <p class="mb-3 text-muted"><small>Kosongkan daftar email untuk mematikan laporan.</small></p>
-
-            <form method="POST" action="{{ url('settings/auto-isolir/daily-report') }}">
-              @csrf
-              <div class="form-group">
-                <label for="daily_report_emails">Email penerima</label>
-                <textarea name="daily_report_emails" id="daily_report_emails" rows="3"
-                          class="form-control @error('daily_report_emails') is-invalid @enderror"
-                          placeholder="owner@contoh.com, keuangan@contoh.com">{{ old('daily_report_emails', implode(', ', $dailyReportEmails)) }}</textarea>
-                @error('daily_report_emails')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                <small class="text-muted">Pisahkan dengan koma atau baris baru. Maksimal 10 email.</small>
-              </div>
-              <button type="submit" class="btn btn-primary"><i class="fas fa-save mr-1"></i> Simpan Penerima</button>
-            </form>
-
-            @if (!empty($dailyReportEmails))
-              <form method="POST" action="{{ url('settings/auto-isolir/daily-report/send') }}" class="mt-2"
-                    onsubmit="return confirm('Kirim laporan kemarin sekarang ke {{ implode(', ', $dailyReportEmails) }}?');">
-                @csrf
-                <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="fas fa-paper-plane mr-1"></i> Kirim laporan kemarin sekarang</button>
-              </form>
-            @endif
-          </div>
-        </div>
       </div>
-
+      <div class="tab-pane fade" id="tab-notifikasi" role="tabpanel" aria-labelledby="tab-notifikasi-link">
+      <div class="row">
       <div class="col-lg-6">
         <div class="card card-outline card-success">
           <div class="card-header">
@@ -335,8 +339,46 @@
           </div>
         </div>
       </div>
-    </div>
 
+      <div class="col-lg-6">
+        <div class="card card-outline card-purple">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-envelope-open-text mr-1"></i> Laporan Harian</h3>
+          </div>
+          <div class="card-body">
+            <p class="mb-2">
+              Setiap hari jam <strong>07:00</strong> sistem mengirim email laporan <strong>hari sebelumnya</strong>:
+              pembayaran (per akun &amp; metode), invoice terbit/batal, langganan baru, terminate, isolir, dan calon pelanggan baru.
+              Daftar lengkapnya dilampirkan dalam file Excel.
+            </p>
+            <p class="mb-3 text-muted"><small>Kosongkan daftar email untuk mematikan laporan.</small></p>
+
+            <form method="POST" action="{{ url('settings/auto-isolir/daily-report') }}">
+              @csrf
+              <div class="form-group">
+                <label for="daily_report_emails">Email penerima</label>
+                <textarea name="daily_report_emails" id="daily_report_emails" rows="3"
+                          class="form-control @error('daily_report_emails') is-invalid @enderror"
+                          placeholder="owner@contoh.com, keuangan@contoh.com">{{ old('daily_report_emails', implode(', ', $dailyReportEmails)) }}</textarea>
+                @error('daily_report_emails')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                <small class="text-muted">Pisahkan dengan koma atau baris baru. Maksimal 10 email.</small>
+              </div>
+              <button type="submit" class="btn btn-primary"><i class="fas fa-save mr-1"></i> Simpan Penerima</button>
+            </form>
+
+            @if (!empty($dailyReportEmails))
+              <form method="POST" action="{{ url('settings/auto-isolir/daily-report/send') }}" class="mt-2"
+                    onsubmit="return confirm('Kirim laporan kemarin sekarang ke {{ implode(', ', $dailyReportEmails) }}?');">
+                @csrf
+                <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="fas fa-paper-plane mr-1"></i> Kirim laporan kemarin sekarang</button>
+              </form>
+            @endif
+          </div>
+        </div>
+      </div>
+      </div>
+      </div>
+      <div class="tab-pane fade" id="tab-pembayaran" role="tabpanel" aria-labelledby="tab-pembayaran-link">
     @if($customPay)
     @php $cps = $customPay->settings_array; @endphp
     <div class="row">
@@ -387,8 +429,45 @@
       </div>
     </div>
     @endif
+      </div>
+    </div>
   </div>
 </section>
+
+<script>
+  // Tab Settings: ingat tab terakhir (setelah simpan, halaman redirect kembali ke tab yang sama).
+  // Kalau ada error validasi, buka tab yang berisi field error.
+  $(function () {
+    var KEY = 'settingsActiveTab';
+    var $links = $('#settingsTabs a[data-toggle="tab"]');
+    var target = window.location.hash && $links.filter('[href="' + window.location.hash + '"]').length ? window.location.hash : null;
+    var $err = $('#settingsTabsContent .is-invalid').first().closest('.tab-pane');
+    if ($err.length) target = '#' + $err.attr('id');
+    if (!target) { try { target = sessionStorage.getItem(KEY); } catch (e) {} }
+    if (target && $links.filter('[href="' + target + '"]').length) $links.filter('[href="' + target + '"]').tab('show');
+    $links.on('shown.bs.tab', function (e) {
+      var h = $(e.target).attr('href');
+      try { sessionStorage.setItem(KEY, h); } catch (err) {}
+      if (history.replaceState) history.replaceState(null, '', h);
+    });
+  });
+</script>
+
+<script>
+  (function () {
+    var sel = document.getElementById('auto_invoice_mode');
+    if (!sel) return;
+    function sync() {
+      document.querySelectorAll('#autoInvoiceForm .ai-mode').forEach(function (el) {
+        var on = el.classList.contains('ai-mode-' + sel.value);
+        el.style.display = on ? '' : 'none';
+        el.querySelectorAll('select').forEach(function (f) { f.disabled = !on; });
+      });
+    }
+    sel.addEventListener('change', sync);
+    sync();
+  })();
+</script>
 
 <script>
   document.getElementById('autoIsolirForm').addEventListener('submit', function (e) {
